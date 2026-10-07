@@ -58,8 +58,54 @@
   ```sh
   python3 -m venv .venv
   .venv/bin/python -m pip install -r requirements.txt
-  .venv/bin/python test_env_host.py
+  .venv/bin/python -m fck_rkn
   ```
+
+## Python Project Structure
+
+- Keep application code in a `src`-layout Python package named `fck_rkn`.
+  Do not add new application modules at the repository root.
+- Organize modules by responsibility: configuration loading and validation
+  belong in `config.py`, cloud-provider operations belong in the relevant
+  provider package (for example, `gcp/compute.py`), and environment workflows
+  belong in `orchestration/`.
+- Keep the package entry point in `fck_rkn/__main__.py`, so the preferred
+  invocation is `.venv/bin/python -m fck_rkn`.
+- If compatibility with an existing root-level script is needed, keep it as a
+  thin launcher that delegates to the package; do not duplicate application
+  logic there.
+- Keep configuration templates and local runtime configuration in the
+  repository-root `config/` directory, subject to the rules above.
+- Put automated tests under `tests/`, separating fast unit tests from
+  integration tests where appropriate. Integration tests that use GCP must
+  target only the isolated `fck-rkn-test` environment.
+- Define package metadata and dependencies in `pyproject.toml`. Keep
+  `requirements.txt` only as a supported installation input if the project
+  continues to use it; avoid maintaining conflicting dependency lists.
+
+The target layout is:
+
+```text
+config/
+  test.env.example
+pyproject.toml
+requirements.txt
+test_env_host.py               # optional compatibility launcher
+src/
+  fck_rkn/
+    __init__.py
+    __main__.py
+    config.py
+    gcp/
+      __init__.py
+      compute.py
+    orchestration/
+      __init__.py
+      test_environment.py
+tests/
+  unit/
+  integration/
+```
 
 ## GCP Authorization with `gcloud`
 
@@ -145,7 +191,7 @@ repository.
    `config/test.env` from the example and setting its real project ID:
 
    ```sh
-   .venv/bin/python test_env_host.py
+   .venv/bin/python -m fck_rkn
    ```
 
 - Do not use `GOOGLE_APPLICATION_CREDENTIALS` with a downloaded
