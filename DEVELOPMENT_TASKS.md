@@ -33,9 +33,8 @@ behavior that requires them.
 ### 1. Add test environment configuration
 
 - **Change:** Add the tracked template `config/test.env.example` with
-  placeholder values for the GCP project ID and environment name
-  `fck-rkn-test`. The local `config/test.env` is runtime configuration and
-  must remain untracked.
+  a placeholder for the GCP project ID used by `fck-rkn-test`. The local
+  `config/test.env` is runtime configuration and must remain untracked.
 
 ### 2. Test test environment configuration
 

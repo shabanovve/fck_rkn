@@ -211,8 +211,7 @@ Resolve these before implementing the affected provisioning or network
 milestones:
 
 1. What globally unique GCP project ID should be used for the
-   `fck-rkn-test` test environment? Its project ID may differ from its
-   human-readable environment name.
+   `fck-rkn-test` test environment?
 2. Which GCP organization/account, billing account, region, and zone should
    host the test environment?
 3. What is the acceptable monthly or per-run cost limit, and what does
