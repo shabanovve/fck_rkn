@@ -3,7 +3,7 @@
 ## Goal
 
 Build a repeatable test environment for an EU server, an RU server, and a test
-client. The test environment is named `fck_rkn_test` and uses GCP. The
+client. The test environment is named `fck-rkn-test` and uses GCP. The
 production environment is named `fck_rkn` and may run on any infrastructure
 provider. `test_env_host` is the central orchestrator: it creates and prepares
 the virtual environment (GCP VMs), invokes deployment agents to configure
@@ -38,7 +38,7 @@ all part of the orchestrated workflow.
 
 ### 1. Create the GCP test project
 
-- Create or select a GCP project for the `fck_rkn_test` test environment.
+- Create or select a GCP project for the `fck-rkn-test` test environment.
 - Enable only the APIs needed for VM provisioning and access.
 - Configure billing, IAM, and a dedicated test network before creating VMs.
 - Record the project ID, region/zone, network, firewall policy, and resource
@@ -211,7 +211,7 @@ Resolve these before implementing the affected provisioning or network
 milestones:
 
 1. What globally unique GCP project ID should be used for the
-   `fck_rkn_test` test environment? Its project ID may differ from its
+   `fck-rkn-test` test environment? Its project ID may differ from its
    human-readable environment name.
 2. Which GCP organization/account, billing account, region, and zone should
    host the test environment?

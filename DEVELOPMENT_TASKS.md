@@ -16,7 +16,7 @@ behavior that requires them.
 
 - Write all project files and tests in English.
 - Run automated tests inside Docker on Ubuntu VMs in the isolated
-  `fck_rkn_test` environment. Network tests must use Docker networks and
+  `fck-rkn-test` environment. Network tests must use Docker networks and
   verify actual allowed and denied traffic.
 - Never target production `fck_rkn` from test code or `test_env_host`.
 - Enforce required firewall rules inside each Ubuntu VM. GCP firewall rules
@@ -28,13 +28,13 @@ behavior that requires them.
 - Stop at unresolved decisions listed at the end. Do not silently choose
   provider, security, network, cost, or service behavior.
 
-## Prepare `fck_rkn_test` and create `eu-server`
+## Prepare `fck-rkn-test` and create `eu-server`
 
 ### 1. Add test environment configuration
 
 - **Change:** Add the tracked template `config/test.env.example` with
   placeholder values for the GCP project ID and environment name
-  `fck_rkn_test`. The local `config/test.env` is runtime configuration and
+  `fck-rkn-test`. The local `config/test.env` is runtime configuration and
   must remain untracked.
 
 ### 2. Test test environment configuration
@@ -258,7 +258,7 @@ behavior that requires them.
 ### 55. Add `test-client` lookup
 
 - **Change:** Make `test_env_host` look up `test-client` in the isolated
-  `fck_rkn_test` project.
+  `fck-rkn-test` project.
 
 ### 56. Test `test-client` lookup
 

@@ -13,7 +13,7 @@
 
 ## Environments
 
-- Name the test environment `fck_rkn_test`.
+- Name the test environment `fck-rkn-test`.
 - Name the production environment `fck_rkn`.
 - Keep test and production resources, credentials, and configuration
   separated.
