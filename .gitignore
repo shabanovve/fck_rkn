@@ -1,2 +1,5 @@
 /config/**
 !/config/test.env.example
+__pycache__/
+*.py[cod]
+.venv/

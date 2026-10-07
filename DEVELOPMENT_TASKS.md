@@ -36,10 +36,12 @@ behavior that requires them.
   a placeholder for the GCP project ID used by `fck-rkn-test`. The local
   `config/test.env` is runtime configuration and must remain untracked.
 
-### 2. Test test environment configuration
+### 2. [x] Test test environment configuration
 
-- **Test:** On every `test_env_host` invocation, validate `config/test.env`
-  before making any GCP API call. 
+- **Test:** On every `test_env_host` invocation, use `pydantic-settings` to
+  validate `config/test.env`, then use Application Default Credentials to
+  call Compute Engine API and verify access to the configured project before
+  any VM operation.
 
 ### 3. Find or create `eu-server`
 
