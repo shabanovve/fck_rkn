@@ -17,6 +17,11 @@
 - Name the production environment `fck_rkn`.
 - Keep test and production resources, credentials, and configuration
   separated.
+- The repository's `config/` directory may contain only the tracked
+  `config/test.env.example` template. Local configuration files, generated
+  files, credentials, and any other files under `config/` must not be added
+  to the repository.
+- Keep real environment values out of the example; use placeholders there.
 
 ## VPN User Provisioning
 

@@ -32,14 +32,15 @@ behavior that requires them.
 
 ### 1. Add test environment configuration
 
-- **Change:** Add `config/test.env` with the GCP project ID and environment
-  name configuration for `fck_rkn_test`.
+- **Change:** Add the tracked template `config/test.env.example` with
+  placeholder values for the GCP project ID and environment name
+  `fck_rkn_test`. The local `config/test.env` is runtime configuration and
+  must remain untracked.
 
 ### 2. Test test environment configuration
 
 - **Test:** On every `test_env_host` invocation, validate `config/test.env`
-  before making any GCP API call. Verify in Docker that valid test settings
-  are accepted and empty or production environment targets are rejected.
+  before making any GCP API call. 
 
 ### 3. Find or create `eu-server`
 
