@@ -1,625 +1,432 @@
 # Small-Step Development Tasks
 
-This list follows `DEVELOPMENT_PLAN.md` and requirements in `README.md` and
-`DEVELOPMENT.md`. Each numbered task must make exactly one small change:
-either add one piece of functionality or add/run the automated test for the
-previous piece. Do not combine multiple features into one task.
+This task list follows `DEVELOPMENT_PLAN.md` and requirements in
+`README.md` and `DEVELOPMENT.md`. For each deployable behavior, use this
+three-task cycle:
+
+1. Add one small piece of functionality to the relevant deployment agent.
+2. Add a test for that behavior to the relevant test agent.
+3. Make `test_env_host` deploy the agent change and run that test-agent check.
+
+Do not create standalone tasks just to test that SSH connects or ping works.
+SSH and ping success are checked as part of the test-agent cycle for the
+behavior that requires them.
 
 ## Rules for every task
 
-- Write project files and tests in English.
+- Write all project files and tests in English.
 - Run automated tests inside Docker on Ubuntu VMs in the isolated
   `fck_rkn_test` environment. Network tests must use Docker networks and
-  assert actual allowed and denied paths.
+  verify actual allowed and denied traffic.
 - Never target production `fck_rkn` from test code or `test_env_host`.
-- Configure required firewall rules inside each Ubuntu VM. GCP firewall
-  rules may supplement, but must not replace, guest firewall enforcement.
-- A deployment is not verified until the appropriate test agent has run and
-  passed.
+- Enforce required firewall rules inside each Ubuntu VM. GCP firewall rules
+  may supplement, but must not replace, guest firewall enforcement.
+- A deployment is not verified until `test_env_host` has run the matching
+  test-agent check and it passed.
+- Firewall setup, firewall-policy testing, and firewall-list updates are
+  deferred to a later phase and are not implementation tasks in this list.
 - Stop at unresolved decisions listed at the end. Do not silently choose
   provider, security, network, cost, or service behavior.
 
-## Create `eu-server` and verify it
+## Prepare `fck_rkn_test` and create `eu-server`
 
-### 1. Add test project configuration
+### 1. Add test environment configuration
 
-- **Change:** Add configuration for the GCP project ID used by
-  `fck_rkn_test`; keep it distinct from the environment's display name.
+- **Change:** Add `config/test.env` with the GCP project ID and environment
+  name configuration for `fck_rkn_test`.
 
-### 2. Test test-project configuration
+### 2. Test test environment configuration
 
-- **Test:** In Docker, verify a valid test project ID loads and empty or
-  production targets are rejected.
+- **Test:** On every `test_env_host` invocation, validate `config/test.env`
+  before making any GCP API call. Verify in Docker that valid test settings
+  are accepted and empty or production environment targets are rejected.
 
-### 3. Add lookup for `eu-server`
+### 3. Find or create `eu-server`
 
-- **Change:** Make `test_env_host` look up `eu-server` in the configured test
-  project and zone.
+- **Change:** Make `test_env_host` look up an instance named `eu-server` in
+  the configured GCP test project and zone. If it is absent, create an Ubuntu
+  VM with that name in the configured test network, then wait until it is
+  running and SSH-ready.
 
-### 4. Test `eu-server` lookup
 
-- **Test:** In Docker, verify existing and missing VMs are distinguished and
-  a VM from another project or zone is rejected.
+## First `eu-server-agent` behavior: successful ping over SSH
 
-### 5. Add creation of `eu-server`
+### 11. Add ping to `eu-server-agent`
 
-- **Change:** When lookup finds no instance, make `test_env_host` create an
-  Ubuntu VM named `eu-server` in the configured test network.
+- **Change:** Add one action to `eu-server-agent` that connects to
+  `eu-server` over SSH and runs `ping youtube.com`; return success only when
+  ping succeeds.
 
-### 6. Test `eu-server` creation
+### 13. Deploy and run the ping check
 
-- **Test:** In Docker, verify the GCP create request uses the expected name,
-  Ubuntu image, project, zone, network, and test label.
+- **Orchestration:** Make `test_env_host` deploy/invoke the updated
+  `eu-server-agent`, the workflow passes
+  only if SSH execution and ping both succeed.
 
-### 7. Add `eu-server` readiness check
+## Squid on `eu-server`
 
-- **Change:** Make `test_env_host` wait until GCP reports `eu-server` as
-  running and then wait for the approved SSH endpoint to become available.
+### 14. Add Squid deployment to `eu-server-agent`
 
-### 8. Test `eu-server` readiness
-
-- **Test:** In Docker, cover running/SSH-ready, provisioning error, and
-  readiness timeout; errors must produce a nonzero result.
-
-### 9. Add idempotent `eu-server` reuse
-
-- **Change:** Make `test_env_host` reuse an existing `eu-server`
-  instead of creating a duplicate.
-
-### 10. Test `eu-server` reuse
-
-- **Test:** In Docker, provision twice and verify only one VM is created;
-  verify the second run reuses the existing VM.
-
-## Create, run, and test `eu-server-agent`
-
-### 11. Add the `eu-server-agent` script
-
-- **Change:** Create the Python entry point with a minimal CLI for selecting
-  the target server and action.
-
-### 12. Test the `eu-server-agent` CLI
-
-- **Test:** In Docker, verify help output, valid arguments, and nonzero exit
-  for missing or invalid arguments.
-
-### 13. Add remote SSH command execution
-
-- **Change:** Add the SSH execution path that `test_env_host` uses to run an
-  agent command on `eu-server`.
-
-### 14. Test SSH command execution
-
-- **Test:** In the isolated `fck_rkn_test` environment, run the
-  `eu-server-agent` command on the created `eu-server` over SSH and verify
-  that stdout, stderr, and the exit status are returned to the orchestrator.
-
-### 15. Add ping action to `eu-server-agent`
-
-- **Change:** Make `eu-server-agent` run `ping youtube.com` on `eu-server` and
-  return success only when ping succeeds.
-
-### 21. Run `eu-server-agent` over SSH
-
-- **Change:** Make `test_env_host` invoke `eu-server-agent` on the ready
-  `eu-server` over SSH.
-
-## Add Squid and test it on `eu-server`
-
-### 23. Add Squid container deployment
-
-- **Change:** Extend `eu-server-agent` to start Squid in Docker on
+- **Change:** Add one deployment action that starts Squid in Docker on
   `eu-server`, listening on TCP port 3128.
 
-### 24. Test Squid container startup
+### 15. Add Squid startup test to `eu-server-test-agent`
 
-- **Test:** In Docker, verify the Squid container starts, becomes healthy,
-  and listens on TCP/3128.
+- **Test:** Add a check for Squid health and TCP port 3128 on `eu-server`.
 
-### 25. Add the Squid guest-firewall rule
+### 16. Deploy and test Squid startup
 
-- **Change:** Configure the Ubuntu guest firewall to permit TCP/3128 only
-  from approved test sources.
+- **Orchestration:** Make `test_env_host` deploy the Squid action and then
+  run the new `eu-server-test-agent` check.
 
-### 26. Test the Squid guest-firewall rule
+### 17. Add Squid HTTP request test
 
-- **Test:** In Docker networks, verify an approved source can connect and an
-  unapproved source cannot; do not rely solely on GCP firewall behavior.
+- **Test:** Extend `eu-server-test-agent` to send an HTTP request to
+  `youtube.com` through Squid and verify the agreed success result.
 
-### 27. Add TCP/3128 probe to `eu-server-test-agent`
+### 18. Run the Squid HTTP request test
 
-- **Change:** Make `eu-server-test-agent` check TCP port 3128 and report the
-  result independently from an HTTP proxy request.
+- **Orchestration:** Make `test_env_host` run the HTTP-through-Squid test
+  after Squid deployment and startup verification.
 
-### 28. Test the TCP/3128 probe
+## Outline Server on `eu-server`
 
-- **Test:** In Docker, verify open port, closed port, timeout, and denied
-  source behavior.
+### 22. Add EU Outline Server deployment
 
-### 29. Add HTTP-through-Squid probe
+- **Change:** Add an action to `eu-server-agent` that starts the approved
+  Outline Server container on `eu-server`.
 
-- **Change:** Make `eu-server-test-agent` request `youtube.com` through
-  Squid and report the HTTP result.
+### 23. Add EU Outline health test
 
-### 30. Test HTTP-through-Squid behavior
+- **Test:** Add an `eu-server-test-agent` check for Outline Server health and
+  authorized endpoint availability.
 
-- **Test:** In Docker, verify successful proxy handling and failure on
-  connection errors or HTTP results outside the owner-approved condition.
+### 24. Deploy and test EU Outline health
 
-### 31. Run Squid deployment from `test_env_host`
+- **Orchestration:** Make `test_env_host` deploy Outline and run the new
+  health test.
 
-- **Change:** Make `test_env_host` invoke the Squid deployment action in
-  `eu-server-agent`.
+### 25. Add EU VPN-user creation script
 
-### 32. Run the Squid test agent from `test_env_host`
-
-- **Test:** Verify in Docker that `test_env_host` runs
-  `eu-server-test-agent` only after deployment and fails if either step fails.
-
-## Add Outline and a VPN user on `eu-server`
-
-### 33. Add EU Outline Server deployment
-
-- **Change:** Extend `eu-server-agent` to deploy the approved Outline Server
-  container on `eu-server`.
-
-### 34. Test EU Outline Server startup
-
-- **Test:** In Docker, verify container health and endpoint reachability only
-  from the authorized test network.
-
-### 35. Add EU VPN-user creation script
-
-- **Change:** Create a script that adds a VPN user/access key to the EU
+- **Change:** Add a script that creates a VPN user/access key for the EU
   Outline Server.
 
-### 36. Test EU VPN-user creation
+### 26. Add EU VPN-user creation test
 
-- **Test:** In Docker, verify key creation and rejection when the server is
-  not ready.
+- **Test:** Add an `eu-server-test-agent` check that verifies a test user/key
+  was created and can be used.
 
-### 37. Invoke EU VPN-user script from `eu-server-agent`
+### 27. Run EU VPN-user creation and test
 
-- **Change:** Make `eu-server-agent` invoke the script after the EU Outline
-  Server has passed its health check.
+- **Orchestration:** Make `test_env_host` run `eu-server-agent` after Outline
+  is healthy, then run the user/key test. Keep the key out of logs and source
+  control.
 
-### 38. Test EU deployment/user-creation order
+## Create `ru-server`
 
-- **Test:** In Docker, verify server deployment and health precede key
-  creation and that earlier failures prevent key creation.
+### 28. Add `ru-server` lookup to `test_env_host`
 
-### 39. Add protected EU access-key handoff
+- **Change:** Make `test_env_host` look up `ru-server` in the configured test
+  project, zone, and network.
 
-- **Change:** Pass the generated non-production key from `eu-server-agent`
-  to the EU test agent through the approved protected mechanism.
+### 29. Test `ru-server` lookup
 
-### 40. Test EU access-key secrecy
+- **Test:** In Docker, verify present and absent instance responses.
 
-- **Test:** In Docker, assert the test agent receives the key and command
-  output, logs, and errors do not contain it.
-
-### 41. Add EU Outline connection check
-
-- **Change:** Extend `eu-server-test-agent` to connect with the generated EU
-  test key.
-
-### 42. Test EU Outline client access
-
-- **Test:** In Docker with the approved Outline client/server, verify the
-  valid key connects and an invalid or revoked key is rejected.
-
-### 43. Run the EU Outline workflow
-
-- **Change:** Make `test_env_host` run EU deployment, user creation, and the
-  EU Outline test agent in that order.
-
-### 44. Test the EU Outline workflow
-
-- **Test:** In Docker, verify exact invocation order and failure propagation
-  for each step.
-
-## Create `ru-server` and test Outline feasibility
-
-### 45. Add lookup for `ru-server`
-
-- **Change:** Make `test_env_host` look up `ru-server` in the same isolated
-  test project, zone, and network.
-
-### 46. Test `ru-server` lookup
-
-- **Test:** In Docker, verify a correct test VM is found and a VM from
-  another environment is rejected.
-
-### 47. Add creation of `ru-server`
+### 30. Add `ru-server` creation
 
 - **Change:** When absent, make `test_env_host` create an Ubuntu VM named
-  `ru-server` in the approved test network.
+  `ru-server` in the test network.
 
-### 48. Test `ru-server` creation
+### 31. Test `ru-server` creation
 
-- **Test:** In Docker, verify the create request's project, Ubuntu image,
-  zone, network, name, and test label.
+- **Test:** In Docker, verify the configured name, project, zone, Ubuntu
+  image, and network are passed to GCP.
 
-### 49. Add `ru-server` readiness check
+### 32. Add `ru-server` readiness wait
 
-- **Change:** Make `test_env_host` wait for `ru-server` to be running and
-  SSH-ready.
+- **Change:** Make `test_env_host` wait until `ru-server` is running and
+  reachable over SSH.
 
-### 50. Test `ru-server` readiness
+### 33. Test `ru-server` readiness wait
 
-- **Test:** In Docker, verify ready, create failure, and timeout behavior.
+- **Test:** In Docker, verify ready, provisioning failure, and timeout
+  outcomes.
 
-### 51. Add Outline-to-Squid feasibility test
+## RU Outline client path to EU Squid
 
-- **Change:** Add the smallest test harness using the intended Outline
-  client/server to check reachability from the RU side to EU Squid.
+### 34. Add Outline feasibility probe to `ru-server-agent`
 
-### 52. Run the Outline-to-Squid feasibility test
+- **Change:** Add the smallest action that uses the intended Outline client
+  to try reaching the EU Squid endpoint from `ru-server`.
 
-- **Test:** In Docker on isolated Ubuntu VMs, exercise the real Outline
-  components and verify the actual path to EU TCP/3128; a simulated route
-  does not pass.
-- **Blocked by:** Approved Outline versions and a concrete forwarding design.
-  Outline/Shadowsocks does not inherently provide layer-3 routing.
+### 35. Add feasibility test to `ru-server-test-agent`
 
-## Add the RU-to-EU Squid path and test it
+- **Test:** Add a test-agent check for the actual route to EU TCP/3128 using
+  the real Outline client/server, not a simulated route.
 
-### 53. Add Outline client deployment to `ru-server-agent`
+### 36. Run the Outline feasibility test
 
-- **Change:** Make `ru-server-agent` run the approved Outline client in
-  Docker on `ru-server`, using a protected EU test key.
+- **Orchestration:** Make `test_env_host` invoke the RU probe and its
+  test-agent check on isolated Ubuntu VMs. Do not proceed with forwarding
+  unless the real path works.
+- **Blocked by:** Approved Outline versions and an explicitly approved
+  forwarding design. Outline/Shadowsocks alone does not provide general
+  layer-3 routing.
 
-### 54. Test RU Outline client deployment
+### 37. Add Outline client deployment to `ru-server-agent`
 
-- **Test:** In Docker, verify client startup, authenticated connection, and
-  credential secrecy.
-- **Dependency:** Task 52.
+- **Change:** Add an action that deploys the approved Outline client in
+  Docker on `ru-server` and connects to EU Outline using a protected test key.
 
-### 55. Add forwarding to EU TCP/3128
+### 38. Add RU Outline client test
 
-- **Change:** Configure the approved forwarding mechanism to expose the EU
-  Squid service through the intended RU localhost endpoint.
+- **Test:** Add a `ru-server-test-agent` check that verifies the client is
+  connected using the test key.
 
-### 56. Test forwarding to EU TCP/3128
+### 39. Deploy and test the RU Outline client
 
-- **Test:** In Docker networks, inspect routes/listeners and verify an HTTP
-  request reaches the real EU Squid container.
-- **Dependency:** Task 52.
+- **Orchestration:** Make `test_env_host` run the client deployment and then
+  the RU client test.
+- **Dependency:** Task 36 must pass.
 
-### 57. Add RU guest-firewall egress restriction
+### 40. Add forwarding from RU to EU TCP/3128
 
-- **Change:** Configure the Ubuntu guest firewall to permit only the
-  approved tunnel and proxy flows and deny direct fallback.
+- **Change:** Add the approved forwarding action to `ru-server-agent` so
+  the EU Squid endpoint is available at the intended RU localhost port.
 
-### 58. Test RU guest-firewall egress restriction
+### 41. Add RU-to-EU forwarding test
 
-- **Test:** In Docker networks, verify the approved service route works and
-  arbitrary IPv4/IPv6 egress is denied.
+- **Test:** Add a `ru-server-test-agent` check that verifies TCP/3128
+  forwards to the real EU Squid service and carries an HTTP request.
 
-### 59. Add tunnel-loss retry and fail-closed behavior
+### 42. Deploy and test RU-to-EU forwarding
 
-- **Change:** Make `ru-server-agent` retry the Outline connection while
-  keeping client egress blocked after tunnel loss.
+- **Orchestration:** Make `test_env_host` deploy forwarding and run the
+  forwarding test.
+- **Dependency:** Task 36 must pass.
 
-### 60. Test tunnel loss and recovery
+### 46. Add tunnel-loss recovery to `ru-server-agent`
 
-- **Test:** In Docker, drop and restore the tunnel; verify no direct fallback
-  during loss and successful recovery over the approved route.
+- **Change:** Add retry behavior after Outline connection loss while keeping
+  client traffic blocked; do not fall back to direct Internet access.
 
-### 61. Add localhost port check to `ru-server-test-agent`
+### 47. Add tunnel-loss test to `ru-server-test-agent`
 
-- **Change:** Create `ru-server-test-agent` functionality to check TCP/3128
-  on `ru-server` localhost.
+- **Test:** Add a test that verifies traffic is blocked during tunnel loss
+  and resumes only after the approved tunnel reconnects.
 
-### 62. Test the RU localhost port check
+### 48. Deploy and test tunnel-loss recovery
 
-- **Test:** In Docker, verify open, closed, and timed-out port cases.
+- **Orchestration:** Make `test_env_host` trigger tunnel loss, run the
+  test-agent check, restore the tunnel, and verify recovery.
 
-### 63. Add HTTP-through-RU-path check
+## Outline Server on `ru-server`
 
-- **Change:** Make `ru-server-test-agent` request `youtube.com` through the
-  local endpoint forwarded to EU Squid.
+### 49. Add RU Outline Server deployment
 
-### 64. Test the HTTP-through-RU-path check
+- **Change:** Add an action to `ru-server-agent` that starts the approved
+  Outline Server container on RU.
 
-- **Test:** In Docker networks, verify successful proxy traffic and failure
-  when the listener, tunnel, or EU proxy is unavailable.
+### 50. Add RU Outline health test
 
-### 65. Run RU-to-EU deployment from `test_env_host`
+- **Test:** Add a `ru-server-test-agent` check for Outline health and
+  authorized client endpoint access.
 
-- **Change:** Make `test_env_host` run `ru-server-agent` to establish the
-  approved Outline client and Squid forwarding path.
+### 51. Deploy and test RU Outline health
 
-### 66. Run `ru-server-test-agent`
+- **Orchestration:** Make `test_env_host` deploy RU Outline and run the new
+  health test.
 
-- **Test:** Verify in Docker that `test_env_host` runs the test agent after
-  deployment and fails on any failed network check.
+### 52. Add RU VPN-user creation script
 
-## Add Outline and a VPN user on `ru-server`
+- **Change:** Add a script that creates a VPN user/access key for RU Outline.
 
-### 67. Add RU Outline Server deployment
+### 53. Add RU VPN-user creation test
 
-- **Change:** Extend `ru-server-agent` to deploy the approved Outline Server
-  container on RU.
+- **Test:** Add a `ru-server-test-agent` check for successful user/key
+  creation and authorized use.
 
-### 68. Test RU Outline Server startup
+### 54. Run RU VPN-user creation and test
 
-- **Test:** In Docker, verify health and access only from authorized test
-  sources.
+- **Orchestration:** Make `test_env_host` invoke user creation only after
+  RU Outline is healthy, then run the RU test-agent check.
 
-### 69. Add RU VPN-user creation script
+## Create and test `test-client`
 
-- **Change:** Create a script that adds a VPN user/access key to the RU
-  Outline Server.
-
-### 70. Test RU VPN-user creation
-
-- **Test:** In Docker, verify successful key creation and failure when the
-  RU Outline Server is not ready.
-
-### 71. Invoke RU VPN-user script from `ru-server-agent`
-
-- **Change:** Make `ru-server-agent` invoke the script after RU Outline
-  Server passes its health check.
-
-### 72. Test RU deployment/user-creation order
-
-- **Test:** In Docker, verify Outline health precedes user creation and the
-  generated key is not logged.
-
-### 73. Add RU Outline connection check
-
-- **Change:** Extend `ru-server-test-agent` to connect to RU Outline with the
-  generated test key.
-
-### 74. Test RU Outline client access
-
-- **Test:** In Docker with the approved Outline client/server, verify
-  authorized connection and invalid/revoked key rejection.
-
-### 75. Run the RU Outline workflow
-
-- **Change:** Make `test_env_host` run RU deployment, user creation, then
-  `ru-server-test-agent`.
-
-### 76. Test the RU Outline workflow
-
-- **Test:** In Docker, verify invocation order and fail-fast behavior.
-
-## Create `test-client` and verify the full path
-
-### 77. Add lookup for `test-client`
+### 55. Add `test-client` lookup
 
 - **Change:** Make `test_env_host` look up `test-client` in the isolated
-  `fck_rkn_test` project and network.
+  `fck_rkn_test` project.
 
-### 78. Test `test-client` lookup
+### 56. Test `test-client` lookup
 
-- **Test:** In Docker, verify the test VM is found and production targets
-  are rejected.
+- **Test:** In Docker, verify present and absent VM results.
 
-### 79. Add creation of `test-client`
+### 57. Add `test-client` creation
 
 - **Change:** When absent, make `test_env_host` create an Ubuntu VM named
-  `test-client` with the approved test settings.
+  `test-client` in the isolated test network.
 
-### 80. Test `test-client` creation
+### 58. Test `test-client` creation
 
-- **Test:** In Docker, verify create parameters, test labels, and rejection
-  of a production target.
+- **Test:** In Docker, verify the expected VM name, project, zone, Ubuntu
+  image, and network.
 
-### 81. Add `test-client` readiness check
+### 59. Add `test-client` readiness wait
 
-- **Change:** Make `test_env_host` wait until `test-client` is running and
+- **Change:** Make `test_env_host` wait until the test client is running and
   SSH-ready.
 
-### 82. Test `test-client` readiness
+### 60. Test `test-client` readiness wait
 
-- **Test:** In Docker, verify success, provisioning failure, and timeout.
+- **Test:** In Docker, verify ready, provisioning failure, and timeout.
 
-### 83. Add Outline connection to `test-client-agent`
+### 61. Add Outline connection to `test-client-agent`
 
-- **Change:** Make `test-client-agent` connect to RU Outline using the
-  protected RU test key.
+- **Change:** Add an action to connect from `test-client` to RU Outline using
+  the protected RU test key.
 
-### 84. Test the client Outline connection
+### 62. Add test-client Outline connection test
 
-- **Test:** In Docker, verify valid key, invalid key, unavailable RU server,
-  and secret redaction.
+- **Test:** Add a `test-client-agent` check for the authenticated RU Outline
+  connection.
 
-### 85. Add the confirmed proxy address to client configuration
+### 63. Connect and test `test-client`
 
-- **Change:** Configure `test-client-agent` to use the explicitly approved
-  endpoint; do not assume Outline creates a router or layer-3 gateway.
+- **Orchestration:** Make `test_env_host` deploy/invoke the connection action
+  and run its test-agent check.
 
-### 86. Test the proxy address and route
+### 64. Add the approved proxy address to `test-client-agent`
 
-- **Test:** In Docker, inspect interfaces, routes, listeners, and network
-  namespaces to prove the configured endpoint is the intended path.
-- **Blocked by:** Outline feasibility and the owner's definition of "router
-  IP".
+- **Change:** Configure `test-client-agent` to use the confirmed service
+  address/listener. Do not assume Outline provides a router or layer-3
+  gateway.
 
-### 87. Add TCP/3128 check to `test-client-agent`
+### 65. Add TCP/3128 check to `test-client-agent`
 
-- **Change:** Make the client test agent check TCP/3128 at the confirmed
-  endpoint.
+- **Test:** Add a check for TCP/3128 at the approved endpoint.
 
-### 88. Test the client TCP/3128 check
+### 66. Deploy and test client TCP/3128 access
 
-- **Test:** In Docker, verify permitted connection and closed-port,
-  wrong-address, and unauthorized-path failures.
+- **Orchestration:** Make `test_env_host` invoke the client check and verify
+  that the path reaches EU Squid through RU.
 
-### 89. Add HTTP request to `test-client-agent`
+### 67. Add HTTP request to `test-client-agent`
 
-- **Change:** Make the client test agent request `youtube.com` through the
-  client-to-RU-to-EU proxy path.
+- **Change:** Add an HTTP request to `youtube.com` through the intended
+  client-to-RU-to-EU Squid path.
 
-### 90. Test the complete client HTTP path
+### 68. Add HTTP result assertion to `test-client-agent`
 
-- **Test:** In Docker on isolated VMs, verify the agreed HTTP success
-  condition and deny direct Internet fallback and unrelated egress.
+- **Test:** Verify the request satisfies the owner-approved HTTP success
+  condition and fails when the proxy path is unavailable.
 
-### 91. Run the full test-client workflow
+### 69. Run the full client request test
 
-- **Change:** Make `test_env_host` provision the client and invoke
-  `test-client-agent` after RU Outline is ready.
+- **Orchestration:** Make `test_env_host` run `test-client-agent` after
+  deployment and require successful proxy handling with no direct fallback.
 
-### 92. Test full workflow ordering and failure handling
+## Other README requirements
 
-- **Test:** In Docker, verify provisioning, connection, port check, and HTTP
-  check order; any failed stage must make the workflow fail.
+### 70. Add MTProxy deployment to `eu-server-agent`
 
-## Add remaining project requirements
+- **Change:** Add one action to deploy the approved MTProxy Docker service
+  on EU with its secret supplied securely.
 
-### 93. Correct README environment and security statements
+### 71. Add MTProxy test to `eu-server-test-agent`
 
-- **Change:** Align `README.md` with environment names, GCP test-only use,
-  provider-independent production, Ubuntu, guest firewall enforcement, and
-  services actually planned; remove unsupported detection-resistance claims.
+- **Test:** Add a health/connectivity check for MTProxy and assert its secret
+  does not appear in output.
 
-### 94. Test README requirements
+### 72. Deploy and test MTProxy
 
-- **Test:** In Docker, check required statements and reject contradictions
-  or unsupported claims.
+- **Orchestration:** Make `test_env_host` deploy MTProxy and run the EU
+  test-agent check.
 
-### 95. Add EU MTProxy deployment
+### 73. Add MTProxy forwarding to `ru-server-agent`
 
-- **Change:** Add the approved MTProxy container to EU deployment with
-  protected secret configuration.
+- **Change:** Add the approved RU-to-EU forwarding path for MTProxy.
 
-### 96. Test EU MTProxy deployment
+### 74. Add RU MTProxy path test
 
-- **Test:** In Docker, verify health, authorized network access, denied
-  unauthorized access, and absence of secrets in logs.
+- **Test:** Add a `ru-server-test-agent` check that proves MTProxy traffic
+  reaches EU only through the approved Outline path.
 
-### 97. Add MTProxy path check
+### 75. Deploy and test RU MTProxy forwarding
 
-- **Change:** Add a test-agent action that checks Telegram MTProxy
-  connectivity through the approved EU/RU path.
+- **Orchestration:** Make `test_env_host` deploy and test the RU MTProxy
+  forwarding path, including denial during tunnel loss.
 
-### 98. Test the MTProxy path check
+### 89. Add service and tunnel metrics
 
-- **Test:** In Docker networks, verify allowed MTProxy traffic, unauthorized
-  access denial, and fail-closed behavior when the tunnel is lost.
+- **Change:** Add Prometheus metrics for service health, host resources, and
+  tunnel state without credentials or unnecessary per-user details.
 
-### 99. Add guest-firewall default-deny policy
+### 90. Add metrics tests to test agents
 
-- **Change:** Add approved ingress/egress default-deny rules inside both
-  Ubuntu server VMs.
+- **Test:** Verify required metrics exist and sentinel secrets are absent.
 
-### 100. Test guest-firewall default-deny policy
+### 91. Deploy and test Prometheus metrics
 
-- **Test:** In Docker networks, verify allowed and denied IPv4/IPv6 service,
-  management, DNS, and tunnel traffic.
-- **Blocked by:** Approved ports, address sets, DNS behavior, and operational
-  exceptions.
+- **Orchestration:** Make `test_env_host` deploy metrics collection and run
+  the metric checks against test VMs.
 
-### 101. Add ingress blacklist parser
+### 92. Add Grafana dashboards
 
-- **Change:** Add parsing for the owner-approved IPv4/IPv6 artifact from
-  `C24Be/AS_Network_List`.
+- **Change:** Add dashboards for host resources and service health.
 
-### 102. Test ingress blacklist parsing
+### 93. Add dashboard provisioning tests
 
-- **Test:** In Docker, test valid input and malformed, stale, wrong-family,
-  and oversized fixture data.
-- **Blocked by:** Selection of the exact upstream artifact and freshness
-  policy.
+- **Test:** Verify dashboards and data sources load and required panels exist.
 
-### 103. Add daily blacklist update
+### 94. Deploy and test Grafana
 
-- **Change:** Add scheduled retrieval, validation, staging, and atomic guest
-  firewall activation while preserving the last known-good ruleset.
+- **Orchestration:** Make `test_env_host` deploy Grafana and run dashboard
+  checks in the isolated test environment.
 
-### 104. Test daily blacklist update and rollback
-
-- **Test:** In Docker, simulate successful update, fetch failure, invalid
-  data, activation failure, rollback, and failure reporting without changing
-  real firewall rules.
-
-### 105. Add Russian destination-list parser
-
-- **Change:** Add parsing for the separately approved Russian domain/IP
-  destination list.
-
-### 106. Test Russian destination-list parsing
-
-- **Test:** In Docker, test listed/unlisted domains, IPv4/IPv6, shared
-  addresses, and malformed fixtures.
-- **Blocked by:** Approved source, DNS handling, and shared-address policy.
-
-### 107. Add Russian destination enforcement
-
-- **Change:** Add the approved destination policy to the designated guest
-  firewall enforcement point.
-
-### 108. Test Russian destination enforcement
-
-- **Test:** In Docker networks, verify listed destinations are blocked,
-  unlisted permitted destinations work, and shared addresses follow the
-  approved policy.
-- **Dependency:** Task 105.
-
-### 109. Add Prometheus service metrics
-
-- **Change:** Expose health metrics for Outline, Squid, MTProxy, and tunnel
-  state without secrets or unnecessary per-user data.
-
-### 110. Test Prometheus metrics
-
-- **Test:** In Docker, verify expected metrics and assert no sentinel secret
-  appears in metric output.
-
-### 111. Add Grafana dashboards
-
-- **Change:** Add dashboards for service health and host resources.
-
-### 112. Test Grafana dashboard provisioning
-
-- **Test:** In Docker, load dashboards and verify required data sources and
-  panels.
-
-### 113. Add monitoring access restriction
-
-- **Change:** Restrict Prometheus and Grafana to the approved operator access
-  boundary.
-
-### 114. Test monitoring access restriction
-
-- **Test:** In Docker networks, verify operator access and reject
-  unauthorized or public access.
-
-### 115. Add deployment and recovery documentation
+### 98. Add deployment and recovery documentation
 
 - **Change:** Document configuration, deployment, verification, upgrade,
   rollback, cleanup, secret handling, and incident response.
 
-### 116. Test deployment documentation
+### 99. Test deployment and recovery documentation
 
-- **Test:** In Docker, check required runbook sections and exercise documented
-  commands against isolated Ubuntu test VMs.
+- **Test:** Validate required sections and exercise documented commands
+  against isolated Ubuntu test VMs from Docker.
 
-### 117. Remove GCP dependency from production service deployment
+### 100. Remove GCP-specific code from production agents
 
-- **Change:** Keep GCP API calls in `test_env_host`; make production agents
-  and guest firewall deployment provider-independent.
+- **Change:** Keep GCP provisioning in `test_env_host`; keep production
+  service deployment provider-independent.
 
-### 118. Test production provider independence
+### 101. Test production provider independence
 
-- **Test:** In Docker, run service deployment and firewall tests without GCP
-  credentials or API access.
+- **Test:** Run service-agent tests in Docker without GCP credentials or GCP
+  API access.
 
 ## Decisions that block dependent tasks
 
-- GCP project ID, account/billing, region/zone, Ubuntu image, VM size/cost,
+- GCP project ID, billing/account, region/zone, Ubuntu image, VM size/cost,
   network/subnet, SSH method, and operator access boundary.
-- Whether ping is mandatory and which HTTP response counts as success.
-- Outline versions and a technically proven Outline-to-Squid forwarding
+- Whether ping is required to succeed and the exact HTTP success condition.
+- Outline versions and the technically proven Outline-to-Squid forwarding
   design.
-- The actual proxy endpoint meant by "router IP".
-- Protected secret store and test access-key handoff mechanism.
+- The actual proxy listener/address meant by "router IP".
+- Protected secret store and test VPN-key handoff.
 - Exact ingress blacklist artifact and freshness policy.
 - Russian destination source, DNS behavior, and shared-address policy.
-- Firewall ports, address sets, DNS allowances, and operational exceptions.
-- MTProxy image/version and secret configuration.
-- Monitoring access, retention, alerting, and VM cleanup policy.
+- MTProxy image/version and secret delivery.
+- Monitoring access, retention, alert recipients, and VM cleanup policy.
+
+## Deferred to the firewall phase
+
+The following are intentionally outside this task list and must be planned as
+separate small change/test/orchestration cycles in the later firewall phase:
+
+- Guest-firewall setup and service-specific allow/deny rules on Ubuntu VMs.
+- Default-deny ingress/egress enforcement and IPv4/IPv6 policy tests.
+- The daily `C24Be/AS_Network_List` retrieval, validation, atomic activation,
+  rollback, and reporting workflow.
+- Russian destination-list selection, parsing, and enforcement.
+- Firewall restrictions for proxy, tunnel, and monitoring access.
