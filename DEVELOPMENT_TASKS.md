@@ -30,7 +30,7 @@ behavior that requires them.
 
 ## Prepare `fck-rkn-test` and create `eu-server`
 
-### 1. Add test environment configuration
+### 1. [x] Add test environment configuration
 
 - **Change:** Add the tracked template `config/test.env.example` with
   a placeholder for the GCP project ID used by `fck-rkn-test`. The local
