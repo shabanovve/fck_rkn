@@ -80,7 +80,7 @@ behavior that requires them.
 - **Change:** Add one deployment action that starts Squid in Docker on
   `eu-server`, listening on TCP port 3128.
 
-### 15. Add Squid startup test to `eu-server-test-agent`
+### 15. [x] Add Squid startup test to `eu-server-test-agent`
 
 - **Test:** Add a check for Squid health and TCP port 3128 on `eu-server`.
 

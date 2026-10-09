@@ -112,6 +112,11 @@ The `deploy-squid` action exits with status `0` only when the remote Docker
 deployment command succeeds; SSH failures, Docker/package errors, and command
 timeouts return nonzero.
 
+After deployment, run `.venv/bin/eu-server-test-agent` to verify that the
+Squid container is running and that TCP port 3128 accepts local connections on
+`eu-server`. The orchestrator does not yet run this check; that is covered by
+task 16.
+
 ## Behavior and safety
 
 - If `eu-server` is absent, the tool creates it without an external IP.
