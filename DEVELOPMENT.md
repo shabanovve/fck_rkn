@@ -37,6 +37,11 @@
   outbound-access substitute. Configure Cloud NAT for the VM's subnet and
   region, and verify outbound access through NAT as part of the relevant test
   workflow.
+- Re-running Squid deployment must leave an already-running Squid container
+  untouched; replace it only when it is not running.
+- Re-running Outline Server deployment must leave an already-running,
+  correctly configured Outline container untouched. Refuse to replace an
+  existing Outline container with unexpected configuration.
 - The repository's `config/` directory may contain only the tracked
   `config/test.env.example` template. Local configuration files, generated
   files, credentials, and any other files under `config/` must not be added

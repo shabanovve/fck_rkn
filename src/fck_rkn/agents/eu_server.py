@@ -19,8 +19,18 @@ PING_COMMAND = "ping -c 1 -W 10 youtube.com"
 SQUID_CONTAINER_NAME = "fck-rkn-squid"
 SQUID_IMAGE = "ubuntu/squid:latest"
 SQUID_PORT = 3128
+OUTLINE_CONTAINER_NAME = "fck-rkn-outline-shadowbox"
+OUTLINE_IMAGE = "quay.io/outline/shadowbox:stable"
+OUTLINE_INSTALLER_URL = (
+    "https://raw.githubusercontent.com/Jigsaw-Code/outline-server/"
+    "master/src/server_manager/install_scripts/install_server.sh"
+)
+OUTLINE_STATE_DIRECTORY = "/opt/fck-rkn-outline"
+OUTLINE_API_PORT = 10000
+OUTLINE_ACCESS_KEY_PORT = 10001
 SSH_COMMAND_TIMEOUT_SECONDS = 90
 SQUID_DEPLOY_TIMEOUT_SECONDS = 900
+OUTLINE_DEPLOY_TIMEOUT_SECONDS = 900
 
 
 def run_youtube_ping(settings: TestEnvironmentSettings) -> int:
@@ -77,6 +87,10 @@ def deploy_squid(settings: TestEnvironmentSettings) -> int:
             "command -v docker >/dev/null 2>&1 || "
             "(sudo apt-get update && "
             "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io)",
+            f"if [ \"$(sudo docker inspect --format='{{{{.State.Running}}}}' "
+            f"{SQUID_CONTAINER_NAME} 2>/dev/null || true)\" = true ]; then "
+            'echo "Squid container is already running; leaving it unchanged"; '
+            "exit 0; fi",
             f"sudo docker pull {SQUID_IMAGE}",
             f"if sudo docker container inspect {SQUID_CONTAINER_NAME} "
             ">/dev/null 2>&1; then "
@@ -129,7 +143,7 @@ def deploy_squid(settings: TestEnvironmentSettings) -> int:
         )
         return result.returncode or 1
 
-    logger.info("Squid container started on TCP port %d", SQUID_PORT)
+    logger.info("Squid deployment completed on TCP port %d", SQUID_PORT)
     return 0
 
 
@@ -174,6 +188,96 @@ def follow_squid_logs(settings: TestEnvironmentSettings) -> int:
     return 0
 
 
+def deploy_outline(settings: TestEnvironmentSettings) -> int:
+    """Install the official stable Outline Server using eu-server's private IP."""
+    remote_command = "\n".join(
+        (
+            "set -euo pipefail",
+            f"container_name={OUTLINE_CONTAINER_NAME}",
+            f"expected_image={OUTLINE_IMAGE}",
+            'if sudo docker container inspect "$container_name" >/dev/null 2>&1; then',
+            '  actual_image="$(sudo docker inspect --format="{{.Config.Image}}" "$container_name")"',
+            '  actual_state="$(sudo docker inspect --format="{{.State.Status}}" "$container_name")"',
+            '  if [ "$actual_image" = "$expected_image" ] && [ "$actual_state" = running ]; then',
+            '    echo "Outline Server container is already running; leaving it unchanged"',
+            "    exit 0",
+            "  fi",
+            '  echo "Existing Outline Server container differs; refusing to replace it" >&2',
+            "  exit 1",
+            "fi",
+            'if sudo docker container inspect watchtower >/dev/null 2>&1; then',
+            '  echo "A watchtower container already exists; refusing to replace it" >&2',
+            "  exit 1",
+            "fi",
+            'if ! command -v docker >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then',
+            "  sudo apt-get update",
+            "  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl",
+            "fi",
+            "sudo systemctl enable --now docker",
+            'private_ip="$(curl --fail --silent --show-error '
+            "-H 'Metadata-Flavor: Google' "
+            "'http://metadata.google.internal/computeMetadata/v1/"
+            "instance/network-interfaces/0/ip')\"",
+            'echo "Installing official Outline Server stable image on the private VM address"',
+            f"curl --fail --silent --show-error {OUTLINE_INSTALLER_URL} | "
+            "sudo env "
+            f"CONTAINER_NAME={OUTLINE_CONTAINER_NAME} "
+            f"SB_IMAGE={OUTLINE_IMAGE} "
+            f"SHADOWBOX_DIR={OUTLINE_STATE_DIRECTORY} "
+            "bash -s -- "
+            '--hostname "$private_ip" '
+            f"--api-port {OUTLINE_API_PORT} "
+            f"--keys-port {OUTLINE_ACCESS_KEY_PORT} "
+            ">/dev/null 2>&1 || { "
+            "echo 'Official Outline Server installer failed; sensitive installer output was suppressed' >&2; "
+            "exit 1; }",
+            'echo "Outline Server deployment completed on the private VM address"',
+        )
+    )
+    command = [
+        "gcloud",
+        "compute",
+        "ssh",
+        INSTANCE_NAME,
+        f"--project={settings.GCP_PROJECT_ID}",
+        f"--zone={settings.GCP_ZONE}",
+        "--tunnel-through-iap",
+        f"--command={remote_command}",
+        "--quiet",
+    ]
+    logger.info(
+        "Deploying Outline Server on %s over IAP SSH with a private endpoint",
+        INSTANCE_NAME,
+    )
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            timeout=OUTLINE_DEPLOY_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "Outline Server deployment over IAP SSH exceeded the %d second timeout",
+            OUTLINE_DEPLOY_TIMEOUT_SECONDS,
+        )
+        return 1
+    except OSError as error:
+        logger.error("Could not start gcloud SSH command: %s", error)
+        return 1
+
+    if result.returncode != 0:
+        logger.error(
+            "Outline Server deployment or IAP SSH failed with exit status %d",
+            result.returncode,
+        )
+        return result.returncode or 1
+
+    logger.info("Outline Server deployment completed on %s", INSTANCE_NAME)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -184,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "action",
         nargs="?",
-        choices=("ping", "deploy-squid", "logs-squid"),
+        choices=("ping", "deploy-squid", "logs-squid", "deploy-outline"),
         default="ping",
         help="Action to run (default: ping)",
     )
@@ -203,6 +307,8 @@ def main(argv: list[str] | None = None) -> int:
         return deploy_squid(settings)
     if args.action == "logs-squid":
         return follow_squid_logs(settings)
+    if args.action == "deploy-outline":
+        return deploy_outline(settings)
     return run_youtube_ping(settings)
 
 

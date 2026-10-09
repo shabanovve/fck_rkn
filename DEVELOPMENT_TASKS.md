@@ -78,7 +78,8 @@ behavior that requires them.
 ### 14. [x] Add Squid deployment to `eu-server-agent`
 
 - **Change:** Add one deployment action that starts Squid in Docker on
-  `eu-server`, listening on TCP port 3128.
+  `eu-server`, listening on TCP port 3128. If the named Squid container is
+  already running, leave it unchanged instead of restarting it.
 
 ### 15. [x] Add Squid startup test to `eu-server-test-agent`
 
@@ -104,7 +105,8 @@ behavior that requires them.
 ### 22. Add EU Outline Server deployment
 
 - **Change:** Add an action to `eu-server-agent` that starts the approved
-  Outline Server container on `eu-server`.
+  Outline Server container on `eu-server`. If its correctly configured
+  container is already running, leave it unchanged instead of restarting it.
 
 ### 23. Add EU Outline health test
 
@@ -180,7 +182,7 @@ behavior that requires them.
 - **Orchestration:** Make `test_env_host` invoke the RU probe and its
   test-agent check on isolated Ubuntu VMs. Do not proceed with forwarding
   unless the real path works.
-- **Blocked by:** Approved Outline versions and an explicitly approved
+- **Blocked by:** An approved Outline client version and explicitly approved
   forwarding design. Outline/Shadowsocks alone does not provide general
   layer-3 routing.
 
@@ -420,8 +422,8 @@ behavior that requires them.
 - GCP project ID, billing/account, region/zone, Ubuntu image, VM size/cost,
   network/subnet, SSH method, and operator access boundary.
 - Whether ping is required to succeed and the exact HTTP success condition.
-- Outline versions and the technically proven Outline-to-Squid forwarding
-  design.
+- Outline client version and the technically proven Outline-to-Squid
+  forwarding design.
 - The actual proxy listener/address meant by "router IP".
 - Protected secret store and test VPN-key handoff.
 - Exact ingress blacklist artifact and freshness policy.

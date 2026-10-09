@@ -22,12 +22,26 @@ To deploy Squid directly from the repository environment, run
 `.venv/bin/eu-server-agent deploy-squid`. The action installs Ubuntu's
 `docker.io` package if Docker is missing, then starts the `ubuntu/squid`
 container with TCP port 3128 published on `eu-server`. Re-running the action
-replaces its named container. `test_env_host` runs this action automatically
-after the ping check. Deployment output is streamed to the terminal as the
-remote commands run.
+leaves it untouched if it is already running; a stopped container is replaced.
+`test_env_host` runs this action automatically after the ping check.
+Deployment output is streamed to the terminal as the remote commands run.
 
 To stream the Squid container's live Docker logs independently, run
 `.venv/bin/eu-server-agent logs-squid`. Press Ctrl-C to stop following logs.
+
+To deploy the official Outline Server stable image directly on `eu-server`,
+run `.venv/bin/eu-server-agent deploy-outline`. The installer configures
+Outline with the VM's private IP and fixed management/access-key ports. Its
+secret-bearing installer output is suppressed; generated state remains in the
+protected `/opt/fck-rkn-outline` directory on the VM. The orchestrator does
+not yet run this action; that is covered by task 24. If the named container is
+already running the expected image, it is left unchanged. A mismatched existing
+container is not replaced.
+
+Outline uses Shadowsocks as an application-layer proxy. It does not create an
+L3 VPN interface, routes, or a separate tunnel address range. Clients on
+another VM must connect to the private Outline endpoint, with VPC firewall
+access configured separately.
 
 ## Prerequisites
 

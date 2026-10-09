@@ -83,7 +83,8 @@ is reported accurately.
 ### 4. Deploy and test Squid on `eu-server`
 
 - Extend `eu-server-agent` to deploy Squid in a Docker container on
-  `eu-server`, listening on TCP port 3128.
+  `eu-server`, listening on TCP port 3128. If its named container is already
+  running, leave it unchanged instead of restarting it.
 - Restrict access to the test network and explicitly approved test-client
   sources. Do not create a public open proxy.
 - Configure the required host firewall rules inside the Ubuntu VM. GCP
@@ -102,7 +103,8 @@ the proxy.
 ### 5. Deploy and test Outline Server on `eu-server`
 
 - Extend `eu-server-agent` to deploy the approved Outline Server container
-  configuration on `eu-server`.
+  configuration on `eu-server`. Reuse an already-running container when its
+  image and running state match the approved configuration; do not restart it.
 - Provide and invoke a script to create a VPN user/access key after Outline
   Server is deployed and running, before client connectivity testing.
 - Extend `eu-server-test-agent` to verify Outline Server health and test a
@@ -235,8 +237,8 @@ milestones:
    Squid request to `youtube.com`?
 9. Should Squid and the Outline endpoints be reachable only over private
    addresses, or is any narrowly restricted public ingress required?
-10. Which Outline Server/client versions and test-key provisioning method
-    should be used?
+10. The EU Outline Server uses the official stable image. Which Outline
+    client version and protected test-key provisioning method should be used?
 11. For the requested “router IP,” do you mean the test client's default
     gateway, its Outline local proxy listener, or another address? Outline
     clients commonly expose a local proxy rather than a layer-3 router.

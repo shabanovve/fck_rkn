@@ -9,11 +9,19 @@ from unittest.mock import patch
 
 from fck_rkn.agents.eu_server import (
     PING_COMMAND,
+    OUTLINE_ACCESS_KEY_PORT,
+    OUTLINE_API_PORT,
+    OUTLINE_CONTAINER_NAME,
+    OUTLINE_DEPLOY_TIMEOUT_SECONDS,
+    OUTLINE_IMAGE,
+    OUTLINE_INSTALLER_URL,
+    OUTLINE_STATE_DIRECTORY,
     SQUID_CONTAINER_NAME,
     SQUID_DEPLOY_TIMEOUT_SECONDS,
     SQUID_IMAGE,
     SQUID_PORT,
     deploy_squid,
+    deploy_outline,
     follow_squid_logs,
     main,
     run_youtube_ping,
@@ -126,6 +134,19 @@ class EuServerAgentTests(unittest.TestCase):
             if argument.startswith("--command=")
         )
         self.assertIn("apt-get install -y docker.io", remote_command)
+        running_guard = (
+            f'docker inspect --format=\'{{{{.State.Running}}}}\' '
+            f"{SQUID_CONTAINER_NAME}"
+        )
+        self.assertIn(running_guard, remote_command)
+        self.assertIn(
+            "Squid container is already running; leaving it unchanged",
+            remote_command,
+        )
+        self.assertLess(
+            remote_command.index("leaving it unchanged"),
+            remote_command.index(f"docker pull {SQUID_IMAGE}"),
+        )
         self.assertIn(f"docker pull {SQUID_IMAGE}", remote_command)
         self.assertIn(f"--name {SQUID_CONTAINER_NAME}", remote_command)
         self.assertIn("--restart unless-stopped", remote_command)
@@ -188,6 +209,83 @@ class EuServerAgentTests(unittest.TestCase):
             patch("fck_rkn.agents.eu_server.deploy_squid", return_value=0) as deploy,
         ):
             result = main(["deploy-squid"])
+
+        self.assertEqual(result, 0)
+        deploy.assert_called_once_with(self.settings)
+
+    def test_deploys_official_outline_server_with_private_endpoint(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=0)
+        with patch(
+            "fck_rkn.agents.eu_server.subprocess.run",
+            return_value=completed,
+        ) as run:
+            result = deploy_outline(self.settings)
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "eu-server"])
+        self.assertIn("--project=fck-rkn-test", command)
+        self.assertIn("--zone=europe-north1-a", command)
+        self.assertIn("--tunnel-through-iap", command)
+        remote_command = next(
+            argument.removeprefix("--command=")
+            for argument in command
+            if argument.startswith("--command=")
+        )
+        self.assertIn(OUTLINE_INSTALLER_URL, remote_command)
+        self.assertIn(f"SB_IMAGE={OUTLINE_IMAGE}", remote_command)
+        self.assertIn(f"CONTAINER_NAME={OUTLINE_CONTAINER_NAME}", remote_command)
+        self.assertIn(f"SHADOWBOX_DIR={OUTLINE_STATE_DIRECTORY}", remote_command)
+        self.assertIn("--hostname \"$private_ip\"", remote_command)
+        self.assertIn(f"--api-port {OUTLINE_API_PORT}", remote_command)
+        self.assertIn(f"--keys-port {OUTLINE_ACCESS_KEY_PORT}", remote_command)
+        self.assertIn(">/dev/null 2>&1", remote_command)
+        self.assertIn("Metadata-Flavor: Google", remote_command)
+        self.assertIn("refusing to replace it", remote_command)
+        self.assertIn(
+            'if [ "$actual_image" = "$expected_image" ] && '
+            '[ "$actual_state" = running ]; then',
+            remote_command,
+        )
+        self.assertIn(
+            "Outline Server container is already running; leaving it unchanged",
+            remote_command,
+        )
+        self.assertLess(
+            remote_command.index("leaving it unchanged"),
+            remote_command.index(OUTLINE_INSTALLER_URL),
+        )
+        self.assertEqual(
+            run.call_args.kwargs["timeout"],
+            OUTLINE_DEPLOY_TIMEOUT_SECONDS,
+        )
+        self.assertIs(run.call_args.kwargs["stdout"], sys.stdout)
+        self.assertIs(run.call_args.kwargs["stderr"], sys.stderr)
+        self.assertEqual(result, 0)
+
+    def test_outline_deployment_reports_timeout(self) -> None:
+        with (
+            patch(
+                "fck_rkn.agents.eu_server.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(
+                    "gcloud compute ssh",
+                    OUTLINE_DEPLOY_TIMEOUT_SECONDS,
+                ),
+            ),
+            self.assertLogs("fck_rkn.agents.eu_server", level="ERROR"),
+        ):
+            result = deploy_outline(self.settings)
+
+        self.assertNotEqual(result, 0)
+
+    def test_cli_dispatches_deploy_outline_action(self) -> None:
+        with (
+            patch("fck_rkn.agents.eu_server.load_config", return_value=self.settings),
+            patch(
+                "fck_rkn.agents.eu_server.deploy_outline",
+                return_value=0,
+            ) as deploy,
+        ):
+            result = main(["deploy-outline"])
 
         self.assertEqual(result, 0)
         deploy.assert_called_once_with(self.settings)
