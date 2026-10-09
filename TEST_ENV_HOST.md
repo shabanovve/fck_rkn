@@ -17,6 +17,13 @@ The initial `eu-server-agent` action is also available directly as
 `eu-server` over IAP SSH. When called through the orchestrator, it runs only
 after VM provisioning and IAP SSH readiness have succeeded.
 
+To deploy Squid directly from the repository environment, run
+`.venv/bin/eu-server-agent deploy-squid`. The action installs Ubuntu's
+`docker.io` package if Docker is missing, then starts the `ubuntu/squid`
+container with TCP port 3128 published on `eu-server`. Re-running the action
+replaces its named container. The orchestrator does not yet invoke this action;
+that is covered by task 16.
+
 ## Prerequisites
 
 - A configured GCP project named `fck-rkn-test`, with billing enabled.
@@ -100,6 +107,10 @@ The ping agent prints the captured remote command output. It exits with status
 `0` only when both the SSH command and ping succeed; SSH failures, ping
 failures, and command timeouts return a nonzero status. The orchestrator also
 returns nonzero if the agent action fails.
+
+The `deploy-squid` action exits with status `0` only when the remote Docker
+deployment command succeeds; SSH failures, Docker/package errors, and command
+timeouts return nonzero.
 
 ## Behavior and safety
 

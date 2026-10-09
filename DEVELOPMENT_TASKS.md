@@ -75,7 +75,7 @@ behavior that requires them.
 
 ## Squid on `eu-server`
 
-### 14. Add Squid deployment to `eu-server-agent`
+### 14. [x] Add Squid deployment to `eu-server-agent`
 
 - **Change:** Add one deployment action that starts Squid in Docker on
   `eu-server`, listening on TCP port 3128.
