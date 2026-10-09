@@ -59,7 +59,7 @@ behavior that requires them.
 
 ## First `eu-server-agent` behavior: successful ping over SSH
 
-### 11. Add ping to `eu-server-agent`
+### 11. [x] Add ping to `eu-server-agent`
 
 - **Change:** Add one action to `eu-server-agent` that connects to
   `eu-server` over SSH and runs `ping youtube.com`; return success only when

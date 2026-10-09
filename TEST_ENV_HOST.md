@@ -10,6 +10,11 @@ deploy the service agents or run their tests. Creating the VM and firewall
 rules changes GCP resources and can incur charges. Run it only in the
 `fck-rkn-test` project when provisioning is intended.
 
+The initial `eu-server-agent` action is available as
+`.venv/bin/eu-server-agent`. It runs one bounded `ping youtube.com` from
+`eu-server` over IAP SSH. It requires the VM to exist and be SSH-ready; task 13
+will wire this action into the orchestrator.
+
 ## Prerequisites
 
 - A configured GCP project named `fck-rkn-test`, with billing enabled.
@@ -75,10 +80,20 @@ or the compatibility launcher:
 .venv/bin/python test_env_host.py
 ```
 
+To invoke the ping action directly after provisioning:
+
+```sh
+.venv/bin/eu-server-agent
+```
+
 The CLI emits timestamped progress logs to the console, including config
 validation, project access, firewall-rule checks, VM lookup/creation, VM
 readiness, and IAP SSH readiness. It intentionally does not print local
 configuration values or capture and display the output of SSH retry attempts.
+
+The ping agent prints the captured remote command output. It exits with status
+`0` only when both the SSH command and ping succeed; SSH failures, ping
+failures, and command timeouts return a nonzero status.
 
 ## Behavior and safety
 
