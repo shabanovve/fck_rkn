@@ -84,17 +84,17 @@ behavior that requires them.
 
 - **Test:** Add a check for Squid health and TCP port 3128 on `eu-server`.
 
-### 16. Deploy and test Squid startup
+### 16. [x] Deploy and test Squid startup
 
 - **Orchestration:** Make `test_env_host` deploy the Squid action and then
   run the new `eu-server-test-agent` check.
 
-### 17. Add Squid HTTP request test
+### 17. [x] Add Squid HTTP request test
 
 - **Test:** Extend `eu-server-test-agent` to send an HTTP request to
   `youtube.com` through Squid and verify the agreed success result.
 
-### 18. Run the Squid HTTP request test
+### 18. [x] Run the Squid HTTP request test
 
 - **Orchestration:** Make `test_env_host` run the HTTP-through-Squid test
   after Squid deployment and startup verification.

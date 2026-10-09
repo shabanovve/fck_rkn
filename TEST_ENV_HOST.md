@@ -7,10 +7,11 @@ readiness through IAP and OS Login.
 
 The orchestrator ensures Cloud Router/Cloud NAT, provisions `eu-server`,
 checks VM access, runs the initial `eu-server-agent` ping action, deploys
-Squid, and verifies Squid startup. Provisioning the router, NAT, VM, firewall
-rules, and Squid changes GCP resources and can incur charges, including Cloud
-NAT and automatically allocated NAT IP charges. Run it only in the
-`fck-rkn-test` project when provisioning is intended.
+Squid, verifies Squid startup, and sends an HTTP request to `youtube.com`
+through Squid. Provisioning the router, NAT, VM, firewall rules, and Squid
+changes GCP resources and can incur charges, including Cloud NAT and
+automatically allocated NAT IP charges. Run it only in the `fck-rkn-test`
+project when provisioning is intended.
 
 The initial `eu-server-agent` action is also available directly as
 `.venv/bin/eu-server-agent`. It runs one bounded `ping youtube.com` from
@@ -123,8 +124,8 @@ Squid container is running and that TCP port 3128 accepts local connections on
 To test an HTTP GET to `youtube.com` through Squid, run
 `.venv/bin/eu-server-test-agent http`. An HTTP status from 200 through 399 is
 considered successful; the action prints the returned status and exits
-nonzero for a failed request or any other status. The orchestrator does not
-yet run this HTTP check; that is covered by task 18.
+nonzero for a failed request or any other status. `test_env_host` runs this
+check after the Squid startup check.
 
 ## Behavior and safety
 
@@ -161,4 +162,4 @@ The process returns status `0` on success, `2` for invalid or unreadable
 configuration, `3` for authentication failures, `4` for project-access
 failures, `5` for provisioning or readiness failures, and `6` if the remote
 ping agent fails, `7` if Squid deployment fails, and `8` if the Squid startup
-test fails.
+test fails, and `9` if the HTTP-through-Squid test fails.

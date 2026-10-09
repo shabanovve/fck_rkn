@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import deploy_squid, run_youtube_ping
-from fck_rkn.agents.eu_server_test import check_squid_startup
+from fck_rkn.agents.eu_server_test import check_squid_http, check_squid_startup
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import ensure_eu_server, validate_project_access
 
@@ -170,5 +170,20 @@ def main() -> int:
         return 8
 
     logger.info("eu-server-test-agent Squid startup check passed")
+    logger.info("Invoking eu-server-test-agent Squid HTTP check")
+    squid_http_exit_code = check_squid_http(settings)
+    if squid_http_exit_code != 0:
+        logger.error(
+            "eu-server-test-agent Squid HTTP check failed with exit status %d",
+            squid_http_exit_code,
+        )
+        print(
+            "eu-server-test-agent Squid HTTP check failed with exit status "
+            f"{squid_http_exit_code}.",
+            file=sys.stderr,
+        )
+        return 9
+
+    logger.info("eu-server-test-agent Squid HTTP check passed")
     logger.info("Test environment preflight and provisioning completed")
     return 0
