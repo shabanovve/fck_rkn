@@ -43,6 +43,11 @@ L3 VPN interface, routes, or a separate tunnel address range. Clients on
 another VM must connect to the private Outline endpoint, with VPC firewall
 access configured separately.
 
+After deploying Outline, run `.venv/bin/eu-server-test-agent outline` to
+verify the expected container is running, the secret management API returns
+an authorized access-key list, and the access-key TCP endpoint is listening.
+The check does not print the API URL or any access keys.
+
 ## Prerequisites
 
 - A configured GCP project named `fck-rkn-test`, with billing enabled.

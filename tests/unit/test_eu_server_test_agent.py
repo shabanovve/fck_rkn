@@ -6,11 +6,19 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest.mock import patch
 
-from fck_rkn.agents.eu_server import SQUID_CONTAINER_NAME, SQUID_PORT
+from fck_rkn.agents.eu_server import (
+    OUTLINE_ACCESS_KEY_PORT,
+    OUTLINE_CONTAINER_NAME,
+    OUTLINE_IMAGE,
+    SQUID_CONTAINER_NAME,
+    SQUID_PORT,
+)
 from fck_rkn.agents.eu_server_test import (
+    OUTLINE_HEALTH_CHECK_COMMAND,
     SSH_COMMAND_TIMEOUT_SECONDS,
     SQUID_HTTP_CHECK_COMMAND,
     SQUID_STARTUP_CHECK_COMMAND,
+    check_outline_health,
     check_squid_http,
     check_squid_startup,
     main,
@@ -194,6 +202,100 @@ class EuServerTestAgentTests(unittest.TestCase):
             ) as check,
         ):
             result = main(["http"])
+
+        self.assertEqual(result, 0)
+        check.assert_called_once_with(self.settings)
+
+    def test_checks_outline_container_authorized_api_and_access_port(self) -> None:
+        output = StringIO()
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="Outline Server container, authorized API, and access endpoint are healthy\n",
+            stderr="",
+        )
+        with (
+            patch(
+                "fck_rkn.agents.eu_server_test.subprocess.run",
+                return_value=completed,
+            ) as run,
+            redirect_stdout(output),
+        ):
+            result = check_outline_health(self.settings)
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "eu-server"])
+        self.assertIn("--project=fck-rkn-test", command)
+        self.assertIn("--zone=europe-north1-a", command)
+        self.assertIn("--tunnel-through-iap", command)
+        self.assertIn(f"--command={OUTLINE_HEALTH_CHECK_COMMAND}", command)
+        self.assertIn(OUTLINE_CONTAINER_NAME, OUTLINE_HEALTH_CHECK_COMMAND)
+        self.assertIn(OUTLINE_IMAGE, OUTLINE_HEALTH_CHECK_COMMAND)
+        self.assertIn(
+            "access-keys",
+            OUTLINE_HEALTH_CHECK_COMMAND,
+        )
+        self.assertIn(
+            f"/dev/tcp/127.0.0.1/{OUTLINE_ACCESS_KEY_PORT}",
+            OUTLINE_HEALTH_CHECK_COMMAND,
+        )
+        self.assertIn("json.load", OUTLINE_HEALTH_CHECK_COMMAND)
+        self.assertNotIn("print(keys", OUTLINE_HEALTH_CHECK_COMMAND)
+        self.assertEqual(
+            run.call_args.kwargs["timeout"],
+            SSH_COMMAND_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(result, 0)
+        self.assertIn("Outline Server", output.getvalue())
+
+    def test_outline_health_check_reports_remote_failure(self) -> None:
+        stderr = StringIO()
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr="Outline Server authorized management endpoint is unhealthy\n",
+        )
+        with (
+            patch(
+                "fck_rkn.agents.eu_server_test.subprocess.run",
+                return_value=completed,
+            ),
+            redirect_stderr(stderr),
+            self.assertLogs("fck_rkn.agents.eu_server_test", level="ERROR"),
+        ):
+            result = check_outline_health(self.settings)
+
+        self.assertEqual(result, 1)
+        self.assertIn("authorized management endpoint", stderr.getvalue())
+
+    def test_outline_health_check_reports_ssh_timeout(self) -> None:
+        with (
+            patch(
+                "fck_rkn.agents.eu_server_test.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(
+                    "gcloud compute ssh",
+                    SSH_COMMAND_TIMEOUT_SECONDS,
+                ),
+            ),
+            self.assertLogs("fck_rkn.agents.eu_server_test", level="ERROR"),
+        ):
+            result = check_outline_health(self.settings)
+
+        self.assertNotEqual(result, 0)
+
+    def test_cli_dispatches_outline_health_check(self) -> None:
+        with (
+            patch(
+                "fck_rkn.agents.eu_server_test.load_config",
+                return_value=self.settings,
+            ),
+            patch(
+                "fck_rkn.agents.eu_server_test.check_outline_health",
+                return_value=0,
+            ) as check,
+        ):
+            result = main(["outline"])
 
         self.assertEqual(result, 0)
         check.assert_called_once_with(self.settings)
