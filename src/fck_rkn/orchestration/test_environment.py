@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 
 from google.api_core.exceptions import GoogleAPICallError
@@ -9,20 +10,64 @@ from google.auth.exceptions import GoogleAuthError
 from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
-from fck_rkn.config import TestEnvironmentSettings, load_config
-from fck_rkn.gcp.compute import validate_project_access
+from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
+from fck_rkn.gcp.compute import ensure_eu_server, validate_project_access
+
+
+logger = logging.getLogger(__name__)
 
 
 def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stdout,
+    )
+    logger.info("Starting test environment orchestrator")
     try:
         settings: TestEnvironmentSettings = load_config()
+    except DotenvSyntaxError as error:
+        logger.error("Test configuration has invalid dotenv syntax")
+        print("Configuration file syntax error.", file=sys.stderr)
+        print(f"  File: {error.path}", file=sys.stderr)
+        print(f"  Line: {error.line}", file=sys.stderr)
+        print(
+            "  Check that each non-comment line uses KEY=value syntax. "
+            "The line contents are intentionally not shown.",
+            file=sys.stderr,
+        )
+        return 2
+    except OSError as error:
+        logger.error("Could not read the test configuration file")
+        print("Could not read the test configuration file.", file=sys.stderr)
+        print(f"  File: {error.filename or 'config/test.env'}", file=sys.stderr)
+        print(f"  Error type: {type(error).__name__}", file=sys.stderr)
+        return 2
     except (SettingsError, ValidationError) as error:
+        logger.error("Test configuration is missing or invalid")
         print(
             "Configuration error: test settings are missing or invalid.",
             file=sys.stderr,
         )
         if isinstance(error, ValidationError):
-            print(error.errors(include_input=False), file=sys.stderr)
+            details = error.errors(include_input=False)
+            missing = sorted(
+                {
+                    str(detail["loc"][0])
+                    for detail in details
+                    if detail["type"] == "missing"
+                }
+            )
+            if missing:
+                message = f"  Missing required setting(s): {', '.join(missing)}."
+                if "GCP_IAP_SOURCE_RANGE" in missing:
+                    message += (
+                        " Set it in config/test.env to the current CIDR from "
+                        "Google's official IAP TCP forwarding documentation."
+                    )
+                print(message, file=sys.stderr)
+            else:
+                print(details, file=sys.stderr)
         else:
             print(str(error), file=sys.stderr)
         return 2
@@ -30,6 +75,7 @@ def main() -> int:
     try:
         validate_project_access(settings)
     except GoogleAuthError:
+        logger.error("GCP authentication failed during project access check")
         print(
             "GCP authentication failed. Configure Application Default "
             "Credentials with `gcloud auth application-default login`.",
@@ -37,6 +83,7 @@ def main() -> int:
         )
         return 3
     except GoogleAPICallError as error:
+        logger.error("GCP project access check failed")
         print("GCP project access check failed.", file=sys.stderr)
         print(f"  Error type: {type(error).__name__}", file=sys.stderr)
         if error.code is not None:
@@ -44,8 +91,36 @@ def main() -> int:
         print(f"  Details: {error.message or error}", file=sys.stderr)
         return 4
     except ValueError as error:
+        logger.error("GCP project validation failed")
         print(f"GCP project validation failed: {error}", file=sys.stderr)
         return 4
 
-    print("GCP credentials and test project access are valid.")
+    try:
+        instance = ensure_eu_server(settings)
+    except GoogleAPICallError as error:
+        logger.error("GCP eu-server provisioning failed")
+        print("GCP eu-server provisioning failed.", file=sys.stderr)
+        print(f"  Error type: {type(error).__name__}", file=sys.stderr)
+        if error.code is not None:
+            print(f"  HTTP status: {error.code}", file=sys.stderr)
+        print(f"  Details: {error.message or error}", file=sys.stderr)
+        return 5
+    except GoogleAuthError:
+        logger.error("GCP authentication failed during VM provisioning")
+        print(
+            "GCP authentication failed during eu-server provisioning. "
+            "Verify the active gcloud account and ADC credentials.",
+            file=sys.stderr,
+        )
+        return 3
+    except (OSError, RuntimeError, TimeoutError) as error:
+        logger.error("eu-server provisioning failed: %s", error)
+        print(f"eu-server provisioning failed: {error}", file=sys.stderr)
+        return 5
+
+    print(
+        f"GCP access is valid; {instance.name} is running and SSH-ready "
+        f"in {settings.GCP_ZONE}."
+    )
+    logger.info("Test environment preflight and provisioning completed")
     return 0

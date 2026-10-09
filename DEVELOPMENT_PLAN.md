@@ -220,10 +220,11 @@ milestones:
 4. Should `test_env_host` run on an operator workstation or a dedicated
    runner? Which authentication method should it use (for example,
    Application Default Credentials or a dedicated service account)?
-5. How should agents authenticate over SSH (OS Login, SSH keys, or another
-   approved method), and where will credentials be stored?
-6. Which VPC/subnet and ingress/egress rules should be used? Should SSH be
-   limited to IAP or a specified operator IP range?
+5. Agents must authenticate over SSH using OS Login through IAP TCP
+   forwarding. Test VMs must not have external IPs; allow TCP/22 only from
+   the IAP TCP forwarding source range configured locally on a VM-specific
+   network tag.
+6. Which VPC/subnet and remaining ingress/egress rules should be used?
 7. Should `ping youtube.com` be a strict pass/fail requirement? ICMP may be
    blocked independently of DNS and HTTP connectivity.
 8. Which HTTP status codes and response conditions count as a successful

@@ -49,6 +49,12 @@ behavior that requires them.
   the configured GCP test project and zone. If it is absent, create an Ubuntu
   VM with that name in the configured test network, then wait until it is
   running and SSH-ready.
+- **Approved test settings:** `europe-north1-a`, `e2-micro`, Ubuntu 24.04 LTS,
+  the `default` VPC/subnet, OS Login through IAP, and no external IP. Allow
+  SSH ingress only from the IAP TCP forwarding source range configured in
+  untracked local settings; scope SSH firewall rules to `eu-server` and reject
+  conflicting existing resources without changing them. Never include the
+  literal range in tracked files.
 
 
 ## First `eu-server-agent` behavior: successful ping over SSH

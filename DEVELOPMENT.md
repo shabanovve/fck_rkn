@@ -11,6 +11,21 @@
 
 - Use Ubuntu as the operating system for all project virtual machines.
 
+## Git-tracked File Safety
+
+- Files tracked by Git must not contain concrete IPv4 or IPv6 addresses or
+  CIDR ranges, including public service ranges such as the IAP TCP forwarding
+  source range. Use descriptive placeholders in tracked templates and store
+  required real network values only in ignored local configuration or obtain
+  them at runtime from an authoritative source.
+- Files tracked by Git must never contain credentials or credential material,
+  including passwords, private keys, access tokens, ADC files, or service
+  account keys. Use placeholders in examples and keep real credentials in an
+  approved local or managed secret store.
+- Do not put concrete IP addresses or credentials into source, tests,
+  documentation, fixtures, or commit messages. Test with injected settings or
+  non-routable symbolic placeholders instead.
+
 ## Environments
 
 - Name the test environment `fck-rkn-test`.
@@ -114,6 +129,40 @@ Use Google Cloud CLI Application Default Credentials (ADC) when running
 authenticate as the developer without storing a service-account key in the
 repository.
 
+### SSH through IAP
+
+- Use Identity-Aware Proxy (IAP) TCP forwarding for SSH to test VMs. Do not
+  assign them external IP addresses and do not allow SSH from an operator's
+  public IP CIDR.
+- Enable both the Compute Engine API and the IAP API in the isolated
+  `fck-rkn-test` project:
+
+  ```sh
+  gcloud services enable compute.googleapis.com iap.googleapis.com \
+    --project=fck-rkn-test
+  ```
+
+- Grant the operator the IAP TCP forwarding permission, normally through
+  `roles/iap.tunnelResourceAccessor`, and the OS Login permissions needed for
+  SSH. Use `roles/compute.osLogin` for standard OS Login access; use
+  `roles/compute.osAdminLogin` only when administrator privileges are
+  required. Grant the minimum Compute Engine and network permissions needed
+  for provisioning; do not grant project-wide Owner access.
+- On the VM's dedicated network tag, allow ingress TCP/22 only from Google's
+  IAP TCP forwarding range currently published in Google's official
+  documentation. Set `GCP_IAP_SOURCE_RANGE` in ignored `config/test.env` to
+  that range. Do not add a public-wide or operator-IP allow rule for SSH.
+  Keep other ingress restrictions in place.
+- Connect using `gcloud compute ssh` with the `--tunnel-through-iap` option.
+  This keeps SSH reachable when the operator's public IP changes and avoids
+  exposing the VM directly to the Internet.
+- `test_env_host` must provision VMs without external IPs, configure the
+  scoped IAP-only SSH firewall rule, and wait for SSH readiness through IAP.
+  Its implementation and configuration must not depend on a fixed public IP
+  or `GCP_SSH_SOURCE_CIDR`.
+- For setup, execution, expected behavior, and troubleshooting, see
+  [`TEST_ENV_HOST.md`](TEST_ENV_HOST.md).
+
 1. Install and initialize the Google Cloud CLI (`gcloud`) using Google's
    official installation instructions. Sign in with the Google account that
    has access to the `fck-rkn-test` project:
@@ -182,17 +231,28 @@ repository.
    disabled.
 
    The preflight performed by `test_env_host` uses ADC to call the Compute
-   Engine API and fails before VM operations if authentication or project
-   access fails. Grant only the permissions required for the current
-   development task; VM creation permissions are not needed for a read-only
-   preflight.
+   Engine API and fails before provisioning if authentication or project
+   access fails. Provisioning additionally requires permission to create
+   Compute Engine instances, use the selected subnet, manage the two scoped
+   VPC firewall rules, and log in through OS Login. Prefer narrowly scoped
+   custom roles or appropriately scoped predefined roles rather than granting
+   project-wide Owner access.
 
-5. Run the orchestrator from the repository root after creating
-   `config/test.env` from the example and setting its real project ID:
+5. Create the ignored `config/test.env` from the example and confirm that it
+   targets `fck-rkn-test`. If it contains the obsolete
+   `GCP_SSH_SOURCE_CIDR` setting from an earlier setup, remove that line.
+   Replace the `GCP_IAP_SOURCE_RANGE` placeholder with the current IPv4 `/20`
+   range from Google's official IAP TCP forwarding documentation. Keep the
+   literal range only in ignored local configuration, never in a tracked file.
+   Then run the orchestrator from the repository root:
 
    ```sh
    .venv/bin/python -m fck_rkn
    ```
+
+   This command can create the `eu-server` VM and IAP SSH firewall rules in
+   GCP, which may incur charges. Run it only when provisioning is intended and
+   confirm the project and budget first.
 
 - Do not use `GOOGLE_APPLICATION_CREDENTIALS` with a downloaded
   service-account key as a substitute for ADC user login unless a separately
@@ -206,8 +266,36 @@ repository.
 
 - `test_env_host` validates `config/test.env` and uses Application Default
   Credentials to call the Compute Engine API and verify access to the
-  configured test project. The identity needs permission to read project
-  metadata, and the Compute Engine API must be enabled.
+  isolated `fck-rkn-test` project; it rejects any other project ID. The
+  identity needs permission to read project metadata, and the Compute Engine
+  API must be enabled.
+- If configuration parsing fails, the CLI reports the filename and malformed
+  line number without printing that line's contents. Fix the indicated entry
+  so it uses `KEY=value` syntax. If it reports `GCP_IAP_SOURCE_RANGE` missing,
+  add that setting to the ignored `config/test.env` using the current range
+  from Google's official IAP TCP forwarding documentation. Do not copy real
+  IP ranges or credentials into tracked files or share the local config file.
+- The CLI writes timestamped INFO logs to the console while validating
+  configuration, checking GCP access, applying firewall rules, provisioning
+  the VM, and waiting for IAP SSH readiness. Logs describe progress and error
+  details without printing local configuration contents or credentials.
+- The `eu-server` provisioning defaults in `config/test.env.example` use the
+  `europe-north1-a` zone, `e2-micro`, Ubuntu 24.04 LTS, and the `default` VPC
+  and subnet. VMs must have no external IP. SSH uses OS Login through IAP;
+  firewall rules allow TCP/22 only from the locally configured IAP source
+  range, targeting the VM's dedicated SSH network tag. Set
+  `GCP_IAP_SOURCE_RANGE` in ignored `config/test.env` to the current range
+  from Google's official IAP TCP forwarding documentation; do not copy the
+  literal range into tracked files. Ensure the active `gcloud` account is the
+  same operator identity as ADC and has permission to create Compute Engine
+  instances, manage VPC firewall rules, use the selected subnet, use IAP TCP
+  forwarding, and log in through OS Login before running the orchestrator.
+  Typical predefined roles include `roles/compute.instanceAdmin.v1`,
+  `roles/compute.networkAdmin`, `roles/compute.networkUser` on the selected
+  VPC, `roles/iap.tunnelResourceAccessor`, and `roles/compute.osLogin`; prefer
+  custom least-privilege roles where practical. It will reuse an existing VM
+  and fail rather than silently change it if the VM is stopped or its SSH
+  firewall rules conflict with the approved configuration.
 - Do not install project dependencies into the system Python environment.
 
 ## Changes
