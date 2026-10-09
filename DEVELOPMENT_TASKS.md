@@ -19,6 +19,8 @@ behavior that requires them.
   `fck-rkn-test` environment. Network tests must use Docker networks and
   verify actual allowed and denied traffic.
 - Never target production `fck_rkn` from test code or `test_env_host`.
+- Give every GCP test VM outbound Internet access through Cloud NAT; do not
+  assign external IPs to VMs.
 - Enforce required firewall rules inside each Ubuntu VM. GCP firewall rules
   may supplement, but must not replace, guest firewall enforcement.
 - A deployment is not verified until `test_env_host` has run the matching
@@ -50,11 +52,11 @@ behavior that requires them.
   VM with that name in the configured test network, then wait until it is
   running and SSH-ready.
 - **Approved test settings:** `europe-north1-a`, `e2-micro`, Ubuntu 24.04 LTS,
-  the `default` VPC/subnet, OS Login through IAP, and no external IP. Allow
-  SSH ingress only from the IAP TCP forwarding source range configured in
-  untracked local settings; scope SSH firewall rules to `eu-server` and reject
-  conflicting existing resources without changing them. Never include the
-  literal range in tracked files.
+  the `default` VPC/subnet, OS Login through IAP, no external IP, and outbound
+  Internet access through Cloud NAT. Allow SSH ingress only from the IAP TCP
+  forwarding source range configured in untracked local settings; scope SSH
+  firewall rules to `eu-server` and reject conflicting existing resources
+  without changing them. Never include the literal range in tracked files.
 
 
 ## First `eu-server-agent` behavior: successful ping over SSH
@@ -65,7 +67,7 @@ behavior that requires them.
   `eu-server` over SSH and runs `ping youtube.com`; return success only when
   ping succeeds.
 
-### 13. Deploy and run the ping check
+### 13. [x] Deploy and run the ping check
 
 - **Orchestration:** Make `test_env_host` deploy/invoke the updated
   `eu-server-agent` after provisioning and IAP SSH readiness; the workflow

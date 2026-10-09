@@ -16,6 +16,8 @@ from fck_rkn.config import TestEnvironmentSettings
 
 
 INSTANCE_NAME = "eu-server"
+NAT_ROUTER_NAME = "fck-rkn-test-nat-router"
+NAT_CONFIG_NAME = "fck-rkn-test-cloud-nat"
 INSTANCE_OPERATION_TIMEOUT_SECONDS = 300
 INSTANCE_READY_TIMEOUT_SECONDS = 600
 SSH_READY_TIMEOUT_SECONDS = 600
@@ -203,10 +205,153 @@ def _firewall_rule_mismatches(
     return mismatches
 
 
+def _region_for_zone(settings: TestEnvironmentSettings) -> str:
+    return settings.GCP_ZONE.rsplit("-", maxsplit=1)[0]
+
+
+def build_cloud_router(settings: TestEnvironmentSettings) -> compute_v1.Router:
+    """Build a dedicated Cloud Router and public Cloud NAT for the test subnet."""
+    logger.info("Building Cloud Router and NAT configuration")
+    region = _region_for_zone(settings)
+    network = (
+        f"projects/{settings.GCP_PROJECT_ID}/global/networks/"
+        f"{settings.GCP_NETWORK}"
+    )
+    subnet = (
+        f"projects/{settings.GCP_PROJECT_ID}/regions/{region}/subnetworks/"
+        f"{settings.GCP_SUBNETWORK}"
+    )
+    return compute_v1.Router(
+        name=NAT_ROUTER_NAME,
+        network=network,
+        nats=[
+            compute_v1.RouterNat(
+                name=NAT_CONFIG_NAME,
+                type_="PUBLIC",
+                nat_ip_allocate_option="AUTO_ONLY",
+                source_subnetwork_ip_ranges_to_nat="LIST_OF_SUBNETWORKS",
+                enable_endpoint_independent_mapping=True,
+                subnetworks=[
+                    compute_v1.RouterNatSubnetworkToNat(
+                        name=subnet,
+                        source_ip_ranges_to_nat=["ALL_IP_RANGES"],
+                    )
+                ],
+            )
+        ],
+    )
+
+
+def _router_mismatches(
+    existing: compute_v1.Router,
+    desired: compute_v1.Router,
+) -> list[str]:
+    logger.info("Comparing Cloud Router and NAT settings")
+    mismatches: list[str] = []
+    if not (existing.network or "").endswith(desired.network):
+        mismatches.append("network")
+    if len(existing.nats) != 1:
+        mismatches.append("NAT configuration count")
+        return mismatches
+
+    actual_nat = existing.nats[0]
+    expected_nat = desired.nats[0]
+    if actual_nat.name != expected_nat.name:
+        mismatches.append("NAT name")
+    if actual_nat.type_ != expected_nat.type_:
+        mismatches.append("NAT type")
+    if actual_nat.nat_ip_allocate_option != expected_nat.nat_ip_allocate_option:
+        mismatches.append("NAT IP allocation mode")
+    if (
+        actual_nat.source_subnetwork_ip_ranges_to_nat
+        != expected_nat.source_subnetwork_ip_ranges_to_nat
+    ):
+        mismatches.append("NAT subnet selection mode")
+    if (
+        actual_nat.enable_endpoint_independent_mapping
+        != expected_nat.enable_endpoint_independent_mapping
+    ):
+        mismatches.append("NAT endpoint-independent mapping")
+    if actual_nat.rules:
+        mismatches.append("NAT rules")
+    if len(actual_nat.subnetworks) != 1:
+        mismatches.append("NAT subnet count")
+    else:
+        actual_subnet = actual_nat.subnetworks[0]
+        expected_subnet = expected_nat.subnetworks[0]
+        if not (actual_subnet.name or "").endswith(expected_subnet.name):
+            mismatches.append("NAT subnet")
+        if list(actual_subnet.source_ip_ranges_to_nat) != list(
+            expected_subnet.source_ip_ranges_to_nat
+        ):
+            mismatches.append("NAT source ranges")
+        if actual_subnet.secondary_ip_range_names:
+            mismatches.append("NAT secondary IP ranges")
+    if actual_nat.nat64_subnetworks or actual_nat.source_subnetwork_ip_ranges_to_nat64:
+        mismatches.append("NAT64 configuration")
+    if actual_nat.nat_ips:
+        mismatches.append("manually assigned NAT IPs")
+    return mismatches
+
+
+def ensure_cloud_nat(
+    settings: TestEnvironmentSettings,
+    routers_client: compute_v1.RoutersClient,
+) -> compute_v1.Router:
+    """Create or verify Cloud NAT before provisioning VMs in the subnet."""
+    logger.info(
+        "Ensuring Cloud NAT for subnet %s in region %s",
+        settings.GCP_SUBNETWORK,
+        _region_for_zone(settings),
+    )
+    desired = build_cloud_router(settings)
+    try:
+        existing = routers_client.get(
+            project=settings.GCP_PROJECT_ID,
+            region=_region_for_zone(settings),
+            router=NAT_ROUTER_NAME,
+        )
+    except NotFound:
+        logger.info("Creating dedicated Cloud Router and NAT")
+        try:
+            operation = routers_client.insert(
+                project=settings.GCP_PROJECT_ID,
+                region=_region_for_zone(settings),
+                router_resource=desired,
+            )
+            logger.info("Waiting for Cloud Router creation to complete")
+            operation.result(timeout=INSTANCE_OPERATION_TIMEOUT_SECONDS)
+        except AlreadyExists:
+            logger.info(
+                "Another provisioning run created Cloud Router %s",
+                NAT_ROUTER_NAME,
+            )
+        existing = routers_client.get(
+            project=settings.GCP_PROJECT_ID,
+            region=_region_for_zone(settings),
+            router=NAT_ROUTER_NAME,
+        )
+
+    mismatches = _router_mismatches(existing, desired)
+    if mismatches:
+        logger.error(
+            "Cloud Router %s differs in: %s",
+            NAT_ROUTER_NAME,
+            ", ".join(mismatches),
+        )
+        raise RuntimeError(
+            f"Cloud Router {NAT_ROUTER_NAME!r} exists with settings "
+            "different from the required Cloud NAT configuration "
+            f"(mismatched fields: {', '.join(mismatches)})"
+        )
+    logger.info("Cloud Router and NAT match the required settings")
+    return existing
+
+
 def build_eu_server(settings: TestEnvironmentSettings) -> compute_v1.Instance:
     """Build the Ubuntu VM resource for the approved test configuration."""
     logger.info("Building eu-server VM resource")
-    region = settings.GCP_ZONE.rsplit("-", maxsplit=1)[0]
+    region = _region_for_zone(settings)
     network_path = (
         f"projects/{settings.GCP_PROJECT_ID}/global/networks/"
         f"{settings.GCP_NETWORK}"
@@ -434,11 +579,12 @@ def ensure_eu_server(
     settings: TestEnvironmentSettings,
     instances_client: compute_v1.InstancesClient | None = None,
     firewalls_client: compute_v1.FirewallsClient | None = None,
+    routers_client: compute_v1.RoutersClient | None = None,
 ) -> compute_v1.Instance:
     """Create or reuse eu-server, then wait for authenticated SSH readiness."""
     logger.info("Starting eu-server provisioning")
     _require_gcloud_cli()
-    if instances_client is None or firewalls_client is None:
+    if instances_client is None or firewalls_client is None or routers_client is None:
         logger.info("Creating authenticated Compute Engine API clients")
         credentials, _ = google.auth.default(
             scopes=["https://www.googleapis.com/auth/cloud-platform"]
@@ -449,7 +595,11 @@ def ensure_eu_server(
         firewalls_client = firewalls_client or compute_v1.FirewallsClient(
             credentials=credentials
         )
+        routers_client = routers_client or compute_v1.RoutersClient(
+            credentials=credentials
+        )
 
+    ensure_cloud_nat(settings, routers_client)
     _ensure_ssh_firewall_rule(settings, firewalls_client)
     instance = _get_or_create_eu_server(settings, instances_client)
     _validate_instance_configuration(instance, settings)

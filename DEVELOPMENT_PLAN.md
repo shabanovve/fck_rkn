@@ -20,6 +20,8 @@ credentials or expose an unauthenticated proxy to the public Internet.
 `test_env_host` owns the end-to-end lifecycle of the test environment:
 
 - Create or reuse the required GCP virtual machines and prepare them for use.
+- Give every GCP test VM outbound Internet access through Cloud NAT without
+  assigning external IP addresses.
 - Wait for VM readiness and provide the appropriate agents with access to
   their target VM.
 - Run `eu-server-agent` and `ru-server-agent` to deploy or update services on
@@ -41,6 +43,8 @@ all part of the orchestrated workflow.
 - Create or select a GCP project for the `fck-rkn-test` test environment.
 - Enable only the APIs needed for VM provisioning and access.
 - Configure billing, IAM, and a dedicated test network before creating VMs.
+- Configure Cloud NAT for the test VM subnet and region so VMs can access the
+  Internet without external IP addresses.
 - Record the project ID, region/zone, network, firewall policy, and resource
   budget in local operator configuration; never commit credentials.
 - Keep GCP-specific provisioning and API calls in the test-environment
@@ -221,9 +225,9 @@ milestones:
    runner? Which authentication method should it use (for example,
    Application Default Credentials or a dedicated service account)?
 5. Agents must authenticate over SSH using OS Login through IAP TCP
-   forwarding. Test VMs must not have external IPs; allow TCP/22 only from
-   the IAP TCP forwarding source range configured locally on a VM-specific
-   network tag.
+   forwarding. Test VMs must not have external IPs, and their outbound
+   Internet access must use Cloud NAT. Allow TCP/22 only from the IAP TCP
+   forwarding source range configured locally on a VM-specific network tag.
 6. Which VPC/subnet and remaining ingress/egress rules should be used?
 7. Should `ping youtube.com` be a strict pass/fail requirement? ICMP may be
    blocked independently of DNS and HTTP connectivity.

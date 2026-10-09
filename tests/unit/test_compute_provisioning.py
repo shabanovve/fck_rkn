@@ -9,7 +9,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import AlreadyExists, NotFound
 from google.cloud import compute_v1
 from pydantic import ValidationError
 
@@ -20,6 +20,8 @@ from fck_rkn.config import (
 )
 from fck_rkn.gcp.compute import (
     INSTANCE_NAME,
+    NAT_CONFIG_NAME,
+    NAT_ROUTER_NAME,
     _ensure_ssh_firewall_rule,
     _firewall_rule_matches,
     _firewall_rule_mismatches,
@@ -27,7 +29,9 @@ from fck_rkn.gcp.compute import (
     _wait_for_ssh,
     _validate_instance_configuration,
     build_eu_server,
+    build_cloud_router,
     build_ssh_firewall_rules,
+    ensure_cloud_nat,
     ensure_eu_server,
 )
 from fck_rkn.orchestration.test_environment import main as orchestrator_main
@@ -95,6 +99,97 @@ class ComputeProvisioningTests(unittest.TestCase):
         self.assertTrue(deny_range.network_address.is_unspecified)
         self.assertEqual(deny_rule.denied[0].I_p_protocol, "tcp")
         self.assertEqual(deny_rule.denied[0].ports, ["22"])
+
+    def test_cloud_nat_targets_selected_subnet_with_auto_allocated_ips(self) -> None:
+        router = build_cloud_router(make_settings())
+
+        self.assertEqual(router.name, NAT_ROUTER_NAME)
+        self.assertEqual(
+            router.network,
+            "projects/fck-rkn-test/global/networks/default",
+        )
+        self.assertEqual(len(router.nats), 1)
+        nat = router.nats[0]
+        self.assertEqual(nat.name, NAT_CONFIG_NAME)
+        self.assertEqual(nat.type_, "PUBLIC")
+        self.assertEqual(nat.nat_ip_allocate_option, "AUTO_ONLY")
+        self.assertTrue(nat.enable_endpoint_independent_mapping)
+        self.assertEqual(
+            nat.source_subnetwork_ip_ranges_to_nat,
+            "LIST_OF_SUBNETWORKS",
+        )
+        self.assertEqual(len(nat.subnetworks), 1)
+        self.assertTrue(nat.subnetworks[0].name.endswith(
+            "/regions/europe-north1/subnetworks/default"
+        ))
+        self.assertEqual(
+            nat.subnetworks[0].source_ip_ranges_to_nat,
+            ["ALL_IP_RANGES"],
+        )
+        self.assertFalse(nat.nat_ips)
+
+    def test_creates_missing_cloud_router_with_nat(self) -> None:
+        settings = make_settings()
+        routers_client = Mock()
+        routers_client.get.side_effect = [
+            NotFound("router missing"),
+            build_cloud_router(settings),
+        ]
+        operation = Mock()
+        routers_client.insert.return_value = operation
+
+        result = ensure_cloud_nat(settings, routers_client)
+
+        self.assertEqual(result.name, NAT_ROUTER_NAME)
+        operation.result.assert_called_once()
+        created_router = routers_client.insert.call_args.kwargs["router_resource"]
+        self.assertEqual(created_router.name, NAT_ROUTER_NAME)
+        self.assertEqual(created_router.nats[0].name, NAT_CONFIG_NAME)
+
+    def test_reuses_existing_matching_cloud_router(self) -> None:
+        settings = make_settings()
+        router = build_cloud_router(settings)
+        router.network = (
+            "https://www.googleapis.com/compute/v1/" + router.network
+        )
+        routers_client = Mock()
+        routers_client.get.return_value = router
+
+        result = ensure_cloud_nat(settings, routers_client)
+
+        self.assertIs(result, router)
+        routers_client.insert.assert_not_called()
+
+    def test_reuses_cloud_router_created_by_concurrent_provisioning(self) -> None:
+        settings = make_settings()
+        router = build_cloud_router(settings)
+        routers_client = Mock()
+        routers_client.get.side_effect = [
+            NotFound("router missing"),
+            router,
+        ]
+        routers_client.insert.side_effect = AlreadyExists(
+            "router was created concurrently"
+        )
+
+        result = ensure_cloud_nat(settings, routers_client)
+
+        self.assertIs(result, router)
+        routers_client.insert.assert_called_once()
+        self.assertEqual(routers_client.get.call_count, 2)
+
+    def test_rejects_existing_router_with_mismatched_nat_without_modifying(self) -> None:
+        settings = make_settings()
+        router = build_cloud_router(settings)
+        router.nats[0].nat_ip_allocate_option = "MANUAL_ONLY"
+        routers_client = Mock()
+        routers_client.get.return_value = router
+
+        with self.assertRaisesRegex(RuntimeError, "NAT IP allocation mode"):
+            ensure_cloud_nat(settings, routers_client)
+
+        routers_client.insert.assert_not_called()
+        routers_client.patch.assert_not_called()
 
     def test_rejects_projects_other_than_isolated_test_project(self) -> None:
         with self.assertRaisesRegex(ValidationError, "isolated test project"):
@@ -194,6 +289,7 @@ class ComputeProvisioningTests(unittest.TestCase):
         instances_client.get.return_value = instance
 
         with (
+            patch("fck_rkn.gcp.compute.ensure_cloud_nat"),
             patch("fck_rkn.gcp.compute._ensure_ssh_firewall_rule"),
             patch("fck_rkn.gcp.compute._wait_for_ssh"),
             patch("fck_rkn.gcp.compute._require_gcloud_cli"),
@@ -203,6 +299,7 @@ class ComputeProvisioningTests(unittest.TestCase):
                     settings,
                     instances_client=instances_client,
                     firewalls_client=Mock(),
+                    routers_client=Mock(),
                 )
 
         self.assertIs(result, instance)
@@ -256,6 +353,7 @@ class ComputeProvisioningTests(unittest.TestCase):
         instances_client.insert.return_value = operation
 
         with (
+            patch("fck_rkn.gcp.compute.ensure_cloud_nat"),
             patch("fck_rkn.gcp.compute._ensure_ssh_firewall_rule"),
             patch("fck_rkn.gcp.compute._wait_for_ssh") as wait_for_ssh,
             patch("fck_rkn.gcp.compute._require_gcloud_cli"),
@@ -264,6 +362,7 @@ class ComputeProvisioningTests(unittest.TestCase):
                 settings,
                 instances_client=instances_client,
                 firewalls_client=Mock(),
+                routers_client=Mock(),
             )
 
         self.assertIs(result, instance)
@@ -273,6 +372,40 @@ class ComputeProvisioningTests(unittest.TestCase):
         ]
         self.assertEqual(created_instance.name, INSTANCE_NAME)
         wait_for_ssh.assert_called_once_with(settings)
+
+    def test_ensures_cloud_nat_before_firewall_and_vm(self) -> None:
+        settings = make_settings()
+        instance = self.make_running_instance()
+        order: list[str] = []
+        with (
+            patch("fck_rkn.gcp.compute._require_gcloud_cli"),
+            patch(
+                "fck_rkn.gcp.compute.ensure_cloud_nat",
+                side_effect=lambda *_: order.append("nat"),
+            ),
+            patch(
+                "fck_rkn.gcp.compute._ensure_ssh_firewall_rule",
+                side_effect=lambda *_: order.append("firewall"),
+            ),
+            patch(
+                "fck_rkn.gcp.compute._get_or_create_eu_server",
+                side_effect=lambda *_: order.append("vm") or instance,
+            ),
+            patch("fck_rkn.gcp.compute._validate_instance_configuration"),
+            patch(
+                "fck_rkn.gcp.compute._wait_for_running",
+                return_value=instance,
+            ),
+            patch("fck_rkn.gcp.compute._wait_for_ssh"),
+        ):
+            ensure_eu_server(
+                settings,
+                instances_client=Mock(),
+                firewalls_client=Mock(),
+                routers_client=Mock(),
+            )
+
+        self.assertEqual(order, ["nat", "firewall", "vm"])
 
     def test_requires_gcloud_before_making_cloud_changes(self) -> None:
         instances_client = Mock()
@@ -286,6 +419,7 @@ class ComputeProvisioningTests(unittest.TestCase):
                     make_settings(),
                     instances_client=instances_client,
                     firewalls_client=firewalls_client,
+                    routers_client=Mock(),
                 )
 
         firewalls_client.get.assert_not_called()

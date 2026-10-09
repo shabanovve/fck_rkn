@@ -32,6 +32,11 @@
 - Name the production environment `fck_rkn`.
 - Keep test and production resources, credentials, and configuration
   separated.
+- Every GCP test VM must have outbound Internet access through Cloud NAT and
+  must not have an external IP address. Do not use VM external IPs as an
+  outbound-access substitute. Configure Cloud NAT for the VM's subnet and
+  region, and verify outbound access through NAT as part of the relevant test
+  workflow.
 - The repository's `config/` directory may contain only the tracked
   `config/test.env.example` template. Local configuration files, generated
   files, credentials, and any other files under `config/` must not be added
@@ -146,8 +151,11 @@ repository.
   `roles/iap.tunnelResourceAccessor`, and the OS Login permissions needed for
   SSH. Use `roles/compute.osLogin` for standard OS Login access; use
   `roles/compute.osAdminLogin` only when administrator privileges are
-  required. Grant the minimum Compute Engine and network permissions needed
-  for provisioning; do not grant project-wide Owner access.
+  required. Provisioning also needs the minimum Compute Engine permissions
+  needed to create/read the dedicated regional Cloud Router and configure
+  Cloud NAT, instances, and scoped firewall rules; do not grant project-wide
+  Owner access. Cloud NAT and its automatically allocated public IP addresses
+  can incur charges.
 - On the VM's dedicated network tag, allow ingress TCP/22 only from Google's
   IAP TCP forwarding range currently published in Google's official
   documentation. Set `GCP_IAP_SOURCE_RANGE` in ignored `config/test.env` to
