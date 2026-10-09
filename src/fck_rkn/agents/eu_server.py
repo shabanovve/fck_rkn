@@ -28,9 +28,13 @@ OUTLINE_INSTALLER_URL = (
 OUTLINE_STATE_DIRECTORY = "/opt/fck-rkn-outline"
 OUTLINE_API_PORT = 10000
 OUTLINE_ACCESS_KEY_PORT = 10001
+OUTLINE_TEST_KEY_ID = "fck-rkn-test-user"
+OUTLINE_TEST_KEY_NAME = "fck-rkn-test-user"
+OUTLINE_KEY_CREATE_TIMEOUT_SECONDS = 90
 SSH_COMMAND_TIMEOUT_SECONDS = 90
 SQUID_DEPLOY_TIMEOUT_SECONDS = 900
 OUTLINE_DEPLOY_TIMEOUT_SECONDS = 900
+OUTLINE_KEY_TEST_TIMEOUT_SECONDS = 900
 
 
 def run_youtube_ping(settings: TestEnvironmentSettings) -> int:
@@ -278,6 +282,124 @@ def deploy_outline(settings: TestEnvironmentSettings) -> int:
     return 0
 
 
+def create_outline_test_user(settings: TestEnvironmentSettings) -> int:
+    """Create or reuse a test key and immediately test it without storing it."""
+    remote_command = "\n".join(
+        (
+            "set -euo pipefail",
+            "sudo python3 - <<'PY'",
+            "import json",
+            "import ssl",
+            "import urllib.error",
+            "import urllib.parse",
+            "import urllib.request",
+            f"key_id = {OUTLINE_TEST_KEY_ID!r}",
+            f"key_name = {OUTLINE_TEST_KEY_NAME!r}",
+            f"state_directory = {OUTLINE_STATE_DIRECTORY!r}",
+            "with open(f'{state_directory}/access.txt', encoding='utf-8') as state:",
+            "    api_url = next(",
+            "        line.removeprefix('apiUrl:').strip()",
+            "        for line in state",
+            "        if line.startswith('apiUrl:')",
+            "    )",
+            "context = ssl._create_unverified_context()",
+            "key_endpoint = f'{api_url}/access-keys/{urllib.parse.quote(key_id)}'",
+            "try:",
+            "    with urllib.request.urlopen(key_endpoint, context=context, timeout=30) as response:",
+            "        key = json.load(response)",
+            "except urllib.error.HTTPError as error:",
+            "    if error.code != 404:",
+            "        raise",
+            "    request = urllib.request.Request(",
+            "        key_endpoint,",
+            "        data=json.dumps({'name': key_name}).encode(),",
+            "        headers={'Content-Type': 'application/json'},",
+            "        method='PUT',",
+            "    )",
+            "    with urllib.request.urlopen(request, context=context, timeout=30) as response:",
+            "        key = json.load(response)",
+            "if key.get('id') != key_id or key.get('name') != key_name:",
+            "    raise RuntimeError('Outline test key identity mismatch')",
+            "access_url = key.get('accessUrl')",
+            "if not isinstance(access_url, str) or not access_url.startswith('ss://'):",
+            "    raise RuntimeError('Outline did not return a valid access key')",
+            "print(access_url)",
+            "PY",
+        )
+    )
+    create_command = [
+        "gcloud",
+        "compute",
+        "ssh",
+        INSTANCE_NAME,
+        f"--project={settings.GCP_PROJECT_ID}",
+        f"--zone={settings.GCP_ZONE}",
+        "--tunnel-through-iap",
+        f"--command={remote_command}",
+        "--quiet",
+    ]
+    logger.info(
+        "Creating or reusing the named Outline test key on %s",
+        INSTANCE_NAME,
+    )
+    try:
+        created = subprocess.run(
+            create_command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=OUTLINE_KEY_CREATE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("Outline test-key creation over IAP SSH timed out")
+        return 1
+    except OSError as error:
+        logger.error("Could not start gcloud SSH command: %s", error)
+        return 1
+
+    access_url = created.stdout.strip()
+    if (
+        created.returncode != 0
+        or not access_url.startswith("ss://")
+        or "\n" in access_url
+    ):
+        logger.error(
+            "Outline test-key creation failed; sensitive command output was suppressed"
+        )
+        return created.returncode or 1
+
+    logger.info("Testing the Outline key through eu-server-test-agent")
+    try:
+        tested = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "fck_rkn.agents.eu_server_test",
+                "outline-key",
+            ],
+            check=False,
+            input=access_url,
+            capture_output=True,
+            text=True,
+            timeout=OUTLINE_KEY_TEST_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("Outline test-key data-plane check timed out")
+        return 1
+    except OSError as error:
+        logger.error("Could not start eu-server-test-agent: %s", error)
+        return 1
+
+    if tested.returncode != 0:
+        logger.error(
+            "Outline test-key data-plane check failed; sensitive command output was suppressed"
+        )
+        return tested.returncode or 1
+
+    logger.info("Outline test key passed the real proxy request check")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -288,7 +410,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "action",
         nargs="?",
-        choices=("ping", "deploy-squid", "logs-squid", "deploy-outline"),
+        choices=(
+            "ping",
+            "deploy-squid",
+            "logs-squid",
+            "deploy-outline",
+            "create-outline-test-user",
+        ),
         default="ping",
         help="Action to run (default: ping)",
     )
@@ -309,6 +437,8 @@ def main(argv: list[str] | None = None) -> int:
         return follow_squid_logs(settings)
     if args.action == "deploy-outline":
         return deploy_outline(settings)
+    if args.action == "create-outline-test-user":
+        return create_outline_test_user(settings)
     return run_youtube_ping(settings)
 
 

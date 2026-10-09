@@ -16,12 +16,15 @@ from fck_rkn.agents.eu_server import (
     OUTLINE_IMAGE,
     OUTLINE_INSTALLER_URL,
     OUTLINE_STATE_DIRECTORY,
+    OUTLINE_TEST_KEY_ID,
+    OUTLINE_TEST_KEY_NAME,
     SQUID_CONTAINER_NAME,
     SQUID_DEPLOY_TIMEOUT_SECONDS,
     SQUID_IMAGE,
     SQUID_PORT,
     deploy_squid,
     deploy_outline,
+    create_outline_test_user,
     follow_squid_logs,
     main,
     run_youtube_ping,
@@ -289,6 +292,87 @@ class EuServerAgentTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         deploy.assert_called_once_with(self.settings)
+
+    def test_creates_and_immediately_tests_outline_key_without_persisting_it(self) -> None:
+        access_url = "ss://sensitive-test-key@example.invalid:10001/?outline=1"
+        created = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=f"{access_url}\n",
+            stderr="",
+        )
+        tested = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+        with patch(
+            "fck_rkn.agents.eu_server.subprocess.run",
+            side_effect=(created, tested),
+        ) as run:
+            result = create_outline_test_user(self.settings)
+
+        create_command = run.call_args_list[0].args[0]
+        self.assertEqual(
+            create_command[:4],
+            ["gcloud", "compute", "ssh", "eu-server"],
+        )
+        remote_command = next(
+            argument.removeprefix("--command=")
+            for argument in create_command
+            if argument.startswith("--command=")
+        )
+        self.assertIn(f"key_id = {OUTLINE_TEST_KEY_ID!r}", remote_command)
+        self.assertIn(f"key_name = {OUTLINE_TEST_KEY_NAME!r}", remote_command)
+        self.assertIn("method='PUT'", remote_command)
+        self.assertIn("json.load(response)", remote_command)
+        self.assertIn("print(access_url)", remote_command)
+        self.assertNotIn(access_url, remote_command)
+        self.assertTrue(run.call_args_list[0].kwargs["capture_output"])
+
+        test_call = run.call_args_list[1]
+        self.assertEqual(
+            test_call.args[0][-3:],
+            ["-m", "fck_rkn.agents.eu_server_test", "outline-key"],
+        )
+        self.assertEqual(test_call.kwargs["input"], access_url)
+        self.assertNotIn(access_url, " ".join(test_call.args[0]))
+        self.assertTrue(test_call.kwargs["capture_output"])
+        self.assertEqual(result, 0)
+
+    def test_outline_key_creation_failure_does_not_run_test_agent_or_leak_output(self) -> None:
+        access_url = "ss://sensitive-test-key@example.invalid:10001/?outline=1"
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout=access_url,
+            stderr=access_url,
+        )
+        with (
+            patch(
+                "fck_rkn.agents.eu_server.subprocess.run",
+                return_value=completed,
+            ) as run,
+            self.assertLogs("fck_rkn.agents.eu_server", level="ERROR"),
+        ):
+            result = create_outline_test_user(self.settings)
+
+        run.assert_called_once()
+        self.assertEqual(result, 1)
+
+    def test_cli_dispatches_create_outline_test_user_action(self) -> None:
+        with (
+            patch("fck_rkn.agents.eu_server.load_config", return_value=self.settings),
+            patch(
+                "fck_rkn.agents.eu_server.create_outline_test_user",
+                return_value=0,
+            ) as create,
+        ):
+            result = main(["create-outline-test-user"])
+
+        self.assertEqual(result, 0)
+        create.assert_called_once_with(self.settings)
 
     def test_cli_keeps_ping_as_default_action(self) -> None:
         with (

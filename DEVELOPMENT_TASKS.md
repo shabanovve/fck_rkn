@@ -120,13 +120,17 @@ behavior that requires them.
 
 ### 25. Add EU VPN-user creation script
 
-- **Change:** Add a script that creates a VPN user/access key for the EU
-  Outline Server.
+- **Change:** Add a script that creates or reuses a named test access key for
+  the EU Outline Server, passes the returned access URL only through process
+  memory/stdin, and immediately invokes `eu-server-test-agent` without
+  separately persisting or logging the URL. Outline Server retains its key
+  record in its own state.
 
 ### 26. Add EU VPN-user creation test
 
-- **Test:** Add an `eu-server-test-agent` check that verifies a test user/key
-  was created and can be used.
+- **Test:** Add an `eu-server-test-agent` check that uses a pinned
+  Shadowsocks client to establish a real connection with the test key and
+  make an HTTP request through it.
 
 ### 27. Run EU VPN-user creation and test
 

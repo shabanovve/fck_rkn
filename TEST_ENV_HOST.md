@@ -48,6 +48,16 @@ verify the expected container is running, the secret management API returns
 an authorized access-key list, and the access-key TCP endpoint is listening.
 The check does not print the API URL or any access keys.
 
+To create or reuse the named EU test key and immediately exercise it, run
+`.venv/bin/eu-server-agent create-outline-test-user`. The command passes the
+returned access URL directly from the remote creation command to
+`eu-server-test-agent` through stdin; it is not written to disk, command-line
+arguments, or logs. Outline Server retains the corresponding key record in
+its own state. The test-agent starts the pinned
+`ghcr.io/shadowsocks/sslocal-rust:v1.25.0` client temporarily on `eu-server`
+and makes an HTTP request to `youtube.com` through the resulting local SOCKS
+listener. The temporary client container is removed after the check.
+
 ## Prerequisites
 
 - A configured GCP project named `fck-rkn-test`, with billing enabled.

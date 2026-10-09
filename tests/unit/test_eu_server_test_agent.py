@@ -15,10 +15,16 @@ from fck_rkn.agents.eu_server import (
 )
 from fck_rkn.agents.eu_server_test import (
     OUTLINE_HEALTH_CHECK_COMMAND,
+    OUTLINE_KEY_CHECK_COMMAND,
+    OUTLINE_KEY_CLIENT_CONTAINER,
+    OUTLINE_KEY_CLIENT_IMAGE,
+    OUTLINE_KEY_LOCAL_SOCKS_PORT,
+    OUTLINE_KEY_TEST_TIMEOUT_SECONDS,
     SSH_COMMAND_TIMEOUT_SECONDS,
     SQUID_HTTP_CHECK_COMMAND,
     SQUID_STARTUP_CHECK_COMMAND,
     check_outline_health,
+    check_outline_access_key,
     check_squid_http,
     check_squid_startup,
     main,
@@ -299,6 +305,92 @@ class EuServerTestAgentTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         check.assert_called_once_with(self.settings)
+
+    def test_tests_outline_key_with_real_client_and_proxied_http_request(self) -> None:
+        access_url = "ss://sensitive-test-key@example.invalid:10001/?outline=1"
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+        with patch(
+            "fck_rkn.agents.eu_server_test.subprocess.run",
+            return_value=completed,
+        ) as run:
+            result = check_outline_access_key(self.settings, access_url)
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "eu-server"])
+        self.assertIn("--tunnel-through-iap", command)
+        self.assertIn(f"--command={OUTLINE_KEY_CHECK_COMMAND}", command)
+        self.assertNotIn(access_url, " ".join(command))
+        self.assertEqual(run.call_args.kwargs["input"], access_url)
+        self.assertTrue(run.call_args.kwargs["capture_output"])
+        self.assertEqual(
+            run.call_args.kwargs["timeout"],
+            OUTLINE_KEY_TEST_TIMEOUT_SECONDS,
+        )
+        self.assertIn(OUTLINE_KEY_CLIENT_IMAGE, OUTLINE_KEY_CHECK_COMMAND)
+        self.assertIn(OUTLINE_KEY_CLIENT_CONTAINER, OUTLINE_KEY_CHECK_COMMAND)
+        self.assertIn("sslocal -c /dev/stdin", OUTLINE_KEY_CHECK_COMMAND)
+        self.assertIn("--socks5-hostname", OUTLINE_KEY_CHECK_COMMAND)
+        self.assertIn("http://youtube.com/", OUTLINE_KEY_CHECK_COMMAND)
+        self.assertIn(str(OUTLINE_KEY_LOCAL_SOCKS_PORT), OUTLINE_KEY_CHECK_COMMAND)
+        self.assertEqual(result, 0)
+
+    def test_outline_key_check_rejects_malformed_input(self) -> None:
+        with (
+            patch(
+                "fck_rkn.agents.eu_server_test.subprocess.run",
+            ) as run,
+            self.assertLogs("fck_rkn.agents.eu_server_test", level="ERROR"),
+        ):
+            result = check_outline_access_key(self.settings, "not-an-outline-key")
+
+        run.assert_not_called()
+        self.assertEqual(result, 1)
+
+    def test_outline_key_check_suppresses_remote_failure_output(self) -> None:
+        access_url = "ss://sensitive-test-key@example.invalid:10001/?outline=1"
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout=access_url,
+            stderr=access_url,
+        )
+        with (
+            patch(
+                "fck_rkn.agents.eu_server_test.subprocess.run",
+                return_value=completed,
+            ),
+            self.assertLogs("fck_rkn.agents.eu_server_test", level="ERROR") as logs,
+        ):
+            result = check_outline_access_key(self.settings, access_url)
+
+        self.assertEqual(result, 1)
+        self.assertNotIn(access_url, "\n".join(logs.output))
+
+    def test_cli_dispatches_outline_key_check_from_stdin(self) -> None:
+        access_url = "ss://sensitive-test-key@example.invalid:10001/?outline=1"
+        with (
+            patch(
+                "fck_rkn.agents.eu_server_test.load_config",
+                return_value=self.settings,
+            ),
+            patch(
+                "fck_rkn.agents.eu_server_test.sys.stdin",
+                StringIO(access_url),
+            ),
+            patch(
+                "fck_rkn.agents.eu_server_test.check_outline_access_key",
+                return_value=0,
+            ) as check,
+        ):
+            result = main(["outline-key"])
+
+        self.assertEqual(result, 0)
+        check.assert_called_once_with(self.settings, access_url)
 
 
 if __name__ == "__main__":
