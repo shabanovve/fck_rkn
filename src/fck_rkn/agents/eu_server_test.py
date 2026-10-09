@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import logging
 import subprocess
 import sys
@@ -24,6 +25,18 @@ SQUID_STARTUP_CHECK_COMMAND = (
     " || { echo 'Squid TCP listener is unavailable' >&2; exit 1; }"
 )
 SSH_COMMAND_TIMEOUT_SECONDS = 90
+SQUID_HTTP_CHECK_COMMAND = (
+    "python3 -c 'import http.client, sys; "
+    f'connection = http.client.HTTPConnection("127.0.0.1", {SQUID_PORT}, '
+    "timeout=30); "
+    'connection.request("GET", "http://youtube.com/", '
+    'headers={"Host": "youtube.com"}); '
+    "response = connection.getresponse(); "
+    "status = response.status; "
+    "response.close(); connection.close(); "
+    "print(status); "
+    "sys.exit(not 200 <= status < 400)'"
+)
 
 
 def check_squid_startup(settings: TestEnvironmentSettings) -> int:
@@ -80,12 +93,74 @@ def check_squid_startup(settings: TestEnvironmentSettings) -> int:
     return 0
 
 
-def main() -> int:
+def check_squid_http(settings: TestEnvironmentSettings) -> int:
+    """Check an HTTP request to youtube.com through Squid on eu-server."""
+    command = [
+        "gcloud",
+        "compute",
+        "ssh",
+        INSTANCE_NAME,
+        f"--project={settings.GCP_PROJECT_ID}",
+        f"--zone={settings.GCP_ZONE}",
+        "--tunnel-through-iap",
+        f"--command={SQUID_HTTP_CHECK_COMMAND}",
+        "--quiet",
+    ]
+    logger.info(
+        "Checking HTTP GET youtube.com through Squid on %s over IAP",
+        INSTANCE_NAME,
+    )
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=SSH_COMMAND_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "Squid HTTP check over IAP SSH exceeded the %d second timeout",
+            SSH_COMMAND_TIMEOUT_SECONDS,
+        )
+        return 1
+    except OSError as error:
+        logger.error("Could not start gcloud SSH command: %s", error)
+        return 1
+
+    if result.stdout:
+        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+    if result.returncode != 0:
+        logger.error(
+            "HTTP request through Squid or IAP SSH failed with exit status %d",
+            result.returncode,
+        )
+        if result.stderr:
+            print(result.stderr, file=sys.stderr, end="")
+        return result.returncode or 1
+
+    logger.info("HTTP GET youtube.com through Squid succeeded")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         stream=sys.stdout,
     )
+    parser = argparse.ArgumentParser(
+        description="Run eu-server service checks."
+    )
+    parser.add_argument(
+        "action",
+        nargs="?",
+        choices=("startup", "http"),
+        default="startup",
+        help="Check to run (default: startup)",
+    )
+    args = parser.parse_args(argv)
+
     try:
         settings = load_config()
     except (OSError, SettingsError, ValidationError, ValueError) as error:
@@ -95,6 +170,8 @@ def main() -> int:
         )
         return 2
 
+    if args.action == "http":
+        return check_squid_http(settings)
     return check_squid_startup(settings)
 
 

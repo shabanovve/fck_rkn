@@ -120,6 +120,12 @@ After deployment, run `.venv/bin/eu-server-test-agent` to verify that the
 Squid container is running and that TCP port 3128 accepts local connections on
 `eu-server`. `test_env_host` runs this check after Squid deployment.
 
+To test an HTTP GET to `youtube.com` through Squid, run
+`.venv/bin/eu-server-test-agent http`. An HTTP status from 200 through 399 is
+considered successful; the action prints the returned status and exits
+nonzero for a failed request or any other status. The orchestrator does not
+yet run this HTTP check; that is covered by task 18.
+
 ## Behavior and safety
 
 - If `eu-server` is absent, the tool creates it without an external IP.
