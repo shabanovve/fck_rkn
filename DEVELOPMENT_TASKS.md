@@ -102,18 +102,18 @@ behavior that requires them.
 
 ## Outline Server on `eu-server`
 
-### 22. Add EU Outline Server deployment
+### 22. [x] Add EU Outline Server deployment
 
 - **Change:** Add an action to `eu-server-agent` that starts the approved
   Outline Server container on `eu-server`. If its correctly configured
   container is already running, leave it unchanged instead of restarting it.
 
-### 23. Add EU Outline health test
+### 23. [x] Add EU Outline health test
 
 - **Test:** Add an `eu-server-test-agent` check for Outline Server health and
   authorized endpoint availability.
 
-### 24. Deploy and test EU Outline health
+### 24. [x] Deploy and test EU Outline health
 
 - **Orchestration:** Make `test_env_host` deploy Outline and run the new
   health test.

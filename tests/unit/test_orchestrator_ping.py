@@ -21,6 +21,18 @@ class OrchestratorPingTests(unittest.TestCase):
             name="eu-server",
             status="RUNNING",
         )
+        self.outline_deploy = patch(
+            "fck_rkn.orchestration.test_environment.deploy_outline",
+            return_value=0,
+        )
+        self.outline_check = patch(
+            "fck_rkn.orchestration.test_environment.check_outline_health",
+            return_value=0,
+        )
+        self.outline_deploy_mock = self.outline_deploy.start()
+        self.outline_check_mock = self.outline_check.start()
+        self.addCleanup(self.outline_deploy.stop)
+        self.addCleanup(self.outline_check.stop)
 
     def test_invokes_ping_only_after_project_and_vm_checks_pass(self) -> None:
         with (
@@ -65,6 +77,8 @@ class OrchestratorPingTests(unittest.TestCase):
         deploy.assert_called_once_with(self.settings)
         squid_check.assert_called_once_with(self.settings)
         http_check.assert_called_once_with(self.settings)
+        self.outline_deploy_mock.assert_called_once_with(self.settings)
+        self.outline_check_mock.assert_called_once_with(self.settings)
 
     def test_fails_workflow_when_ping_agent_returns_nonzero(self) -> None:
         stderr = StringIO()
@@ -230,6 +244,92 @@ class OrchestratorPingTests(unittest.TestCase):
         squid_check.assert_called_once_with(self.settings)
         http_check.assert_called_once_with(self.settings)
         self.assertIn("Squid HTTP check failed", stderr.getvalue())
+
+    def test_fails_if_outline_deployment_fails_and_skips_health_check(self) -> None:
+        stderr = StringIO()
+        self.outline_deploy_mock.return_value = 1
+        with (
+            patch(
+                "fck_rkn.orchestration.test_environment.logging.basicConfig"
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.load_config",
+                return_value=self.settings,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.validate_project_access"
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.ensure_eu_server",
+                return_value=self.instance,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.run_youtube_ping",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.deploy_squid",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.check_squid_startup",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.check_squid_http",
+                return_value=0,
+            ),
+            redirect_stderr(stderr),
+        ):
+            result = main()
+
+        self.assertEqual(result, 10)
+        self.outline_deploy_mock.assert_called_once_with(self.settings)
+        self.outline_check_mock.assert_not_called()
+        self.assertIn("Outline deployment failed", stderr.getvalue())
+
+    def test_fails_workflow_when_outline_health_check_fails(self) -> None:
+        stderr = StringIO()
+        self.outline_check_mock.return_value = 1
+        with (
+            patch(
+                "fck_rkn.orchestration.test_environment.logging.basicConfig"
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.load_config",
+                return_value=self.settings,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.validate_project_access"
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.ensure_eu_server",
+                return_value=self.instance,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.run_youtube_ping",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.deploy_squid",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.check_squid_startup",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.check_squid_http",
+                return_value=0,
+            ),
+            redirect_stderr(stderr),
+        ):
+            result = main()
+
+        self.assertEqual(result, 11)
+        self.outline_deploy_mock.assert_called_once_with(self.settings)
+        self.outline_check_mock.assert_called_once_with(self.settings)
+        self.assertIn("Outline health check failed", stderr.getvalue())
 
     def test_does_not_run_ping_if_vm_provisioning_fails(self) -> None:
         with (

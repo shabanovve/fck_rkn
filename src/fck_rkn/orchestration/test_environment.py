@@ -10,8 +10,12 @@ from google.auth.exceptions import GoogleAuthError
 from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
-from fck_rkn.agents.eu_server import deploy_squid, run_youtube_ping
-from fck_rkn.agents.eu_server_test import check_squid_http, check_squid_startup
+from fck_rkn.agents.eu_server import deploy_outline, deploy_squid, run_youtube_ping
+from fck_rkn.agents.eu_server_test import (
+    check_outline_health,
+    check_squid_http,
+    check_squid_startup,
+)
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import ensure_eu_server, validate_project_access
 
@@ -185,5 +189,36 @@ def main() -> int:
         return 9
 
     logger.info("eu-server-test-agent Squid HTTP check passed")
+    logger.info("Invoking eu-server-agent Outline deployment")
+    outline_deploy_exit_code = deploy_outline(settings)
+    if outline_deploy_exit_code != 0:
+        logger.error(
+            "eu-server-agent Outline deployment failed with exit status %d",
+            outline_deploy_exit_code,
+        )
+        print(
+            "eu-server-agent Outline deployment failed with exit status "
+            f"{outline_deploy_exit_code}.",
+            file=sys.stderr,
+        )
+        return 10
+
+    logger.info("eu-server-agent Outline deployment passed")
+    logger.info("Invoking eu-server-test-agent Outline health check")
+    outline_health_exit_code = check_outline_health(settings)
+    if outline_health_exit_code != 0:
+        logger.error(
+            "eu-server-test-agent Outline health check failed with exit "
+            "status %d",
+            outline_health_exit_code,
+        )
+        print(
+            "eu-server-test-agent Outline health check failed with exit "
+            f"status {outline_health_exit_code}.",
+            file=sys.stderr,
+        )
+        return 11
+
+    logger.info("eu-server-test-agent Outline health check passed")
     logger.info("Test environment preflight and provisioning completed")
     return 0

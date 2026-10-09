@@ -8,7 +8,8 @@ readiness through IAP and OS Login.
 The orchestrator ensures Cloud Router/Cloud NAT, provisions `eu-server`,
 checks VM access, runs the initial `eu-server-agent` ping action, deploys
 Squid, verifies Squid startup, and sends an HTTP request to `youtube.com`
-through Squid. Provisioning the router, NAT, VM, firewall rules, and Squid
+through Squid. It then deploys Outline Server and runs the Outline health
+check. Provisioning the router, NAT, VM, firewall rules, Squid, and Outline
 changes GCP resources and can incur charges, including Cloud NAT and
 automatically allocated NAT IP charges. Run it only in the `fck-rkn-test`
 project when provisioning is intended.
@@ -34,9 +35,9 @@ run `.venv/bin/eu-server-agent deploy-outline`. The installer configures
 Outline with the VM's private IP and fixed management/access-key ports. Its
 secret-bearing installer output is suppressed; generated state remains in the
 protected `/opt/fck-rkn-outline` directory on the VM. The orchestrator does
-not yet run this action; that is covered by task 24. If the named container is
-already running the expected image, it is left unchanged. A mismatched existing
-container is not replaced.
+run this action automatically after the Squid checks. If the named container
+is already running the expected image, it is left unchanged. A mismatched
+existing container is not replaced.
 
 Outline uses Shadowsocks as an application-layer proxy. It does not create an
 L3 VPN interface, routes, or a separate tunnel address range. Clients on
@@ -46,7 +47,8 @@ access configured separately.
 After deploying Outline, run `.venv/bin/eu-server-test-agent outline` to
 verify the expected container is running, the secret management API returns
 an authorized access-key list, and the access-key TCP endpoint is listening.
-The check does not print the API URL or any access keys.
+The check does not print the API URL or any access keys. `test_env_host` runs
+this check automatically after successful Outline deployment.
 
 To create or reuse the named EU test key and immediately exercise it, run
 `.venv/bin/eu-server-agent create-outline-test-user`. The command passes the
@@ -191,4 +193,5 @@ The process returns status `0` on success, `2` for invalid or unreadable
 configuration, `3` for authentication failures, `4` for project-access
 failures, `5` for provisioning or readiness failures, and `6` if the remote
 ping agent fails, `7` if Squid deployment fails, and `8` if the Squid startup
-test fails, and `9` if the HTTP-through-Squid test fails.
+test fails, `9` if the HTTP-through-Squid test fails, `10` if Outline
+deployment fails, and `11` if the Outline health check fails.
