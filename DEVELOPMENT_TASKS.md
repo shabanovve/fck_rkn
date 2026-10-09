@@ -68,8 +68,8 @@ behavior that requires them.
 ### 13. Deploy and run the ping check
 
 - **Orchestration:** Make `test_env_host` deploy/invoke the updated
-  `eu-server-agent`, the workflow passes
-  only if SSH execution and ping both succeed.
+  `eu-server-agent` after provisioning and IAP SSH readiness; the workflow
+  passes only if the agent's SSH execution and remote ping both succeed.
 
 ## Squid on `eu-server`
 

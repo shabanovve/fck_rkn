@@ -10,6 +10,7 @@ from google.auth.exceptions import GoogleAuthError
 from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
+from fck_rkn.agents.eu_server import run_youtube_ping
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import ensure_eu_server, validate_project_access
 
@@ -122,5 +123,20 @@ def main() -> int:
         f"GCP access is valid; {instance.name} is running and SSH-ready "
         f"in {settings.GCP_ZONE}."
     )
+    logger.info("Invoking eu-server-agent ping check")
+    ping_exit_code = run_youtube_ping(settings)
+    if ping_exit_code != 0:
+        logger.error(
+            "eu-server-agent ping check failed with exit status %d",
+            ping_exit_code,
+        )
+        print(
+            f"eu-server-agent ping check failed with exit status "
+            f"{ping_exit_code}.",
+            file=sys.stderr,
+        )
+        return 6
+
+    logger.info("eu-server-agent ping check passed")
     logger.info("Test environment preflight and provisioning completed")
     return 0

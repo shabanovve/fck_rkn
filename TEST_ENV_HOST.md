@@ -5,15 +5,16 @@ local settings, verifies Google Cloud access, creates or checks the scoped SSH
 firewall rules, finds or creates the VM, waits for it to run, and checks SSH
 readiness through IAP and OS Login.
 
-The orchestrator currently provisions and checks VM access; it does not yet
-deploy the service agents or run their tests. Creating the VM and firewall
-rules changes GCP resources and can incur charges. Run it only in the
-`fck-rkn-test` project when provisioning is intended.
+The orchestrator provisions `eu-server`, checks VM access, then invokes the
+initial `eu-server-agent` ping action. It does not yet deploy service
+containers or run service test agents. Creating the VM and firewall rules
+changes GCP resources and can incur charges. Run it only in the `fck-rkn-test`
+project when provisioning is intended.
 
-The initial `eu-server-agent` action is available as
+The initial `eu-server-agent` action is also available directly as
 `.venv/bin/eu-server-agent`. It runs one bounded `ping youtube.com` from
-`eu-server` over IAP SSH. It requires the VM to exist and be SSH-ready; task 13
-will wire this action into the orchestrator.
+`eu-server` over IAP SSH. When called through the orchestrator, it runs only
+after VM provisioning and IAP SSH readiness have succeeded.
 
 ## Prerequisites
 
@@ -93,7 +94,8 @@ configuration values or capture and display the output of SSH retry attempts.
 
 The ping agent prints the captured remote command output. It exits with status
 `0` only when both the SSH command and ping succeed; SSH failures, ping
-failures, and command timeouts return a nonzero status.
+failures, and command timeouts return a nonzero status. The orchestrator also
+returns nonzero if the agent action fails.
 
 ## Behavior and safety
 
@@ -125,4 +127,5 @@ failures, and command timeouts return a nonzero status.
 
 The process returns status `0` on success, `2` for invalid or unreadable
 configuration, `3` for authentication failures, `4` for project-access
-failures, and `5` for provisioning or readiness failures.
+failures, `5` for provisioning or readiness failures, and `6` if the remote
+ping agent fails.
