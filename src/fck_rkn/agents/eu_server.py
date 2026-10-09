@@ -108,8 +108,8 @@ def deploy_squid(settings: TestEnvironmentSettings) -> int:
         result = subprocess.run(
             command,
             check=False,
-            capture_output=True,
-            text=True,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
             timeout=SQUID_DEPLOY_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
@@ -122,18 +122,55 @@ def deploy_squid(settings: TestEnvironmentSettings) -> int:
         logger.error("Could not start gcloud SSH command: %s", error)
         return 1
 
-    if result.stdout:
-        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
     if result.returncode != 0:
         logger.error(
             "Squid deployment or IAP SSH failed with exit status %d",
             result.returncode,
         )
-        if result.stderr:
-            print(result.stderr, file=sys.stderr, end="")
         return result.returncode or 1
 
     logger.info("Squid container started on TCP port %d", SQUID_PORT)
+    return 0
+
+
+def follow_squid_logs(settings: TestEnvironmentSettings) -> int:
+    """Stream live Squid container logs from eu-server through IAP SSH."""
+    remote_command = (
+        f"sudo docker logs --follow --timestamps {SQUID_CONTAINER_NAME}"
+    )
+    command = [
+        "gcloud",
+        "compute",
+        "ssh",
+        INSTANCE_NAME,
+        f"--project={settings.GCP_PROJECT_ID}",
+        f"--zone={settings.GCP_ZONE}",
+        "--tunnel-through-iap",
+        f"--command={remote_command}",
+        "--quiet",
+    ]
+    logger.info(
+        "Streaming live Squid container logs from %s through IAP; "
+        "press Ctrl-C to stop",
+        INSTANCE_NAME,
+    )
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+    except OSError as error:
+        logger.error("Could not start gcloud SSH command: %s", error)
+        return 1
+
+    if result.returncode != 0:
+        logger.error(
+            "Squid log stream or IAP SSH failed with exit status %d",
+            result.returncode,
+        )
+        return result.returncode or 1
     return 0
 
 
@@ -147,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "action",
         nargs="?",
-        choices=("ping", "deploy-squid"),
+        choices=("ping", "deploy-squid", "logs-squid"),
         default="ping",
         help="Action to run (default: ping)",
     )
@@ -164,6 +201,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.action == "deploy-squid":
         return deploy_squid(settings)
+    if args.action == "logs-squid":
+        return follow_squid_logs(settings)
     return run_youtube_ping(settings)
 
 
