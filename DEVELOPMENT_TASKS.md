@@ -120,11 +120,10 @@ behavior that requires them.
 
 ### 25. [x] Add EU VPN-user creation script
 
-- **Change:** Add a script that creates or reuses a named test access key for
-  the EU Outline Server, passes the returned access URL only through process
-  memory/stdin, and immediately invokes `eu-server-test-agent` without
-  separately persisting or logging the URL. Outline Server retains its key
-  record in its own state.
+- **Change:** Add a command that creates or reuses a named access key for
+  the EU Outline Server without persisting or logging the URL. Outline Server
+  retains its key record in its own state. A direct operator invocation emits
+  the URL to stdout for secure handoff; orchestration passes it only in memory.
 
 ### 26. [x] Add EU VPN-user creation test
 
@@ -134,9 +133,9 @@ behavior that requires them.
 
 ### 27. Run EU VPN-user creation and test
 
-- **Orchestration:** Make `test_env_host` run `eu-server-agent` after Outline
-  is healthy, then run the user/key test. Keep the key out of logs and source
-  control.
+- **Orchestration:** Make `test_env_host` create or reuse a named test user
+  after Outline is healthy, then pass its key in memory to the user/key test.
+  Never emit the test key to stdout, logs, or source control.
 
 ## Create `ru-server`
 

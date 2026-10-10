@@ -28,13 +28,10 @@ OUTLINE_INSTALLER_URL = (
 OUTLINE_STATE_DIRECTORY = "/opt/fck-rkn-outline"
 OUTLINE_API_PORT = 10000
 OUTLINE_ACCESS_KEY_PORT = 10001
-OUTLINE_TEST_KEY_ID = "fck-rkn-test-user"
-OUTLINE_TEST_KEY_NAME = "fck-rkn-test-user"
 OUTLINE_KEY_CREATE_TIMEOUT_SECONDS = 90
 SSH_COMMAND_TIMEOUT_SECONDS = 90
 SQUID_DEPLOY_TIMEOUT_SECONDS = 900
 OUTLINE_DEPLOY_TIMEOUT_SECONDS = 900
-OUTLINE_KEY_TEST_TIMEOUT_SECONDS = 900
 
 
 def run_youtube_ping(settings: TestEnvironmentSettings) -> int:
@@ -282,44 +279,55 @@ def deploy_outline(settings: TestEnvironmentSettings) -> int:
     return 0
 
 
-def create_outline_test_user(settings: TestEnvironmentSettings) -> int:
-    """Create or reuse a test key and immediately test it without storing it."""
+def create_outline_user(
+    settings: TestEnvironmentSettings,
+    user_name: str,
+) -> str | None:
+    """Create or reuse a named Outline access key and return its access URL."""
+    user_name = user_name.strip()
+    if not user_name:
+        logger.error("Outline user name must not be empty")
+        return None
+
     remote_command = "\n".join(
         (
             "set -euo pipefail",
             "sudo python3 - <<'PY'",
             "import json",
             "import ssl",
-            "import urllib.error",
-            "import urllib.parse",
             "import urllib.request",
-            f"key_id = {OUTLINE_TEST_KEY_ID!r}",
-            f"key_name = {OUTLINE_TEST_KEY_NAME!r}",
+            f"user_name = {user_name!r}",
             f"state_directory = {OUTLINE_STATE_DIRECTORY!r}",
             "with open(f'{state_directory}/access.txt', encoding='utf-8') as state:",
-            "    api_url = next(",
+            "    api_url = next((",
             "        line.removeprefix('apiUrl:').strip()",
             "        for line in state",
             "        if line.startswith('apiUrl:')",
-            "    )",
+            "    ), None)",
+            "if not api_url:",
+            "    raise RuntimeError('Outline management endpoint is unavailable')",
             "context = ssl._create_unverified_context()",
-            "key_endpoint = f'{api_url}/access-keys/{urllib.parse.quote(key_id)}'",
-            "try:",
-            "    with urllib.request.urlopen(key_endpoint, context=context, timeout=30) as response:",
-            "        key = json.load(response)",
-            "except urllib.error.HTTPError as error:",
-            "    if error.code != 404:",
-            "        raise",
+            "keys_endpoint = f'{api_url}/access-keys'",
+            "with urllib.request.urlopen(keys_endpoint, context=context, timeout=30) as response:",
+            "    keys = json.load(response).get('accessKeys')",
+            "if not isinstance(keys, list):",
+            "    raise RuntimeError('Outline returned an invalid access-key list')",
+            "matching_keys = [key for key in keys if key.get('name') == user_name]",
+            "if len(matching_keys) > 1:",
+            "    raise RuntimeError('More than one Outline key has this user name')",
+            "if matching_keys:",
+            "    key = matching_keys[0]",
+            "else:",
             "    request = urllib.request.Request(",
-            "        key_endpoint,",
-            "        data=json.dumps({'name': key_name}).encode(),",
+            "        keys_endpoint,",
+            "        data=json.dumps({'name': user_name}).encode(),",
             "        headers={'Content-Type': 'application/json'},",
-            "        method='PUT',",
+            "        method='POST',",
             "    )",
             "    with urllib.request.urlopen(request, context=context, timeout=30) as response:",
             "        key = json.load(response)",
-            "if key.get('id') != key_id or key.get('name') != key_name:",
-            "    raise RuntimeError('Outline test key identity mismatch')",
+            "if key.get('name') != user_name:",
+            "    raise RuntimeError('Outline returned a key for a different user')",
             "access_url = key.get('accessUrl')",
             "if not isinstance(access_url, str) or not access_url.startswith('ss://'):",
             "    raise RuntimeError('Outline did not return a valid access key')",
@@ -327,7 +335,7 @@ def create_outline_test_user(settings: TestEnvironmentSettings) -> int:
             "PY",
         )
     )
-    create_command = [
+    command = [
         "gcloud",
         "compute",
         "ssh",
@@ -339,74 +347,42 @@ def create_outline_test_user(settings: TestEnvironmentSettings) -> int:
         "--quiet",
     ]
     logger.info(
-        "Creating or reusing the named Outline test key on %s",
+        "Creating or reusing Outline user %s on %s",
+        user_name,
         INSTANCE_NAME,
     )
     try:
-        created = subprocess.run(
-            create_command,
+        result = subprocess.run(
+            command,
             check=False,
             capture_output=True,
             text=True,
             timeout=OUTLINE_KEY_CREATE_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
-        logger.error("Outline test-key creation over IAP SSH timed out")
-        return 1
+        logger.error("Outline user creation over IAP SSH timed out")
+        return None
     except OSError as error:
         logger.error("Could not start gcloud SSH command: %s", error)
-        return 1
+        return None
 
-    access_url = created.stdout.strip()
+    access_url = result.stdout.strip()
     if (
-        created.returncode != 0
+        result.returncode != 0
         or not access_url.startswith("ss://")
         or "\n" in access_url
     ):
         logger.error(
-            "Outline test-key creation failed; sensitive command output was suppressed"
+            "Outline user creation failed; sensitive command output was suppressed"
         )
-        return created.returncode or 1
+        return None
 
-    logger.info("Testing the Outline key through eu-server-test-agent")
-    try:
-        tested = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "fck_rkn.agents.eu_server_test",
-                "outline-key",
-            ],
-            check=False,
-            input=access_url,
-            capture_output=True,
-            text=True,
-            timeout=OUTLINE_KEY_TEST_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error("Outline test-key data-plane check timed out")
-        return 1
-    except OSError as error:
-        logger.error("Could not start eu-server-test-agent: %s", error)
-        return 1
-
-    if tested.returncode != 0:
-        logger.error(
-            "Outline test-key data-plane check failed; sensitive command output was suppressed"
-        )
-        return tested.returncode or 1
-
-    logger.info("Outline test key passed the real proxy request check")
-    return 0
+    logger.info("Outline user key is ready; access URL withheld from logs")
+    return access_url
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        stream=sys.stdout,
-    )
-    parser = argparse.ArgumentParser(description="Run eu-server test actions.")
+    parser = argparse.ArgumentParser(description="Run eu-server actions.")
     parser.add_argument(
         "action",
         nargs="?",
@@ -415,12 +391,24 @@ def main(argv: list[str] | None = None) -> int:
             "deploy-squid",
             "logs-squid",
             "deploy-outline",
-            "create-outline-test-user",
+            "create-outline-user",
         ),
         default="ping",
         help="Action to run (default: ping)",
     )
+    parser.add_argument(
+        "--name",
+        help="Display name for the Outline user being created or reused",
+    )
     args = parser.parse_args(argv)
+    if args.action == "create-outline-user" and not args.name:
+        parser.error("--name is required for create-outline-user")
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stderr if args.action == "create-outline-user" else sys.stdout,
+    )
 
     try:
         settings = load_config()
@@ -437,8 +425,12 @@ def main(argv: list[str] | None = None) -> int:
         return follow_squid_logs(settings)
     if args.action == "deploy-outline":
         return deploy_outline(settings)
-    if args.action == "create-outline-test-user":
-        return create_outline_test_user(settings)
+    if args.action == "create-outline-user":
+        access_url = create_outline_user(settings, args.name)
+        if access_url is None:
+            return 1
+        print(access_url)
+        return 0
     return run_youtube_ping(settings)
 
 

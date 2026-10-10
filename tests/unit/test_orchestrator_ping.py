@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest.mock import patch
 
@@ -29,12 +29,25 @@ class OrchestratorPingTests(unittest.TestCase):
             "fck_rkn.orchestration.test_environment.check_outline_health",
             return_value=0,
         )
+        self.outline_user = patch(
+            "fck_rkn.orchestration.test_environment.create_outline_user",
+            return_value="ss://test-key@example.invalid:10001/",
+        )
+        self.outline_key_check = patch(
+            "fck_rkn.orchestration.test_environment.check_outline_access_key",
+            return_value=0,
+        )
         self.outline_deploy_mock = self.outline_deploy.start()
         self.outline_check_mock = self.outline_check.start()
+        self.outline_user_mock = self.outline_user.start()
+        self.outline_key_check_mock = self.outline_key_check.start()
         self.addCleanup(self.outline_deploy.stop)
         self.addCleanup(self.outline_check.stop)
+        self.addCleanup(self.outline_user.stop)
+        self.addCleanup(self.outline_key_check.stop)
 
     def test_invokes_ping_only_after_project_and_vm_checks_pass(self) -> None:
+        output = StringIO()
         with (
             patch(
                 "fck_rkn.orchestration.test_environment.logging.basicConfig"
@@ -66,6 +79,8 @@ class OrchestratorPingTests(unittest.TestCase):
                 "fck_rkn.orchestration.test_environment.check_squid_http",
                 return_value=0,
             ) as http_check,
+            redirect_stdout(output),
+            redirect_stderr(StringIO()),
         ):
             result = main()
 
@@ -79,6 +94,15 @@ class OrchestratorPingTests(unittest.TestCase):
         http_check.assert_called_once_with(self.settings)
         self.outline_deploy_mock.assert_called_once_with(self.settings)
         self.outline_check_mock.assert_called_once_with(self.settings)
+        self.outline_user_mock.assert_called_once_with(
+            self.settings,
+            "fck-rkn-test-user",
+        )
+        self.outline_key_check_mock.assert_called_once_with(
+            self.settings,
+            "ss://test-key@example.invalid:10001/",
+        )
+        self.assertNotIn("ss://test-key", output.getvalue())
 
     def test_fails_workflow_when_ping_agent_returns_nonzero(self) -> None:
         stderr = StringIO()
@@ -329,7 +353,104 @@ class OrchestratorPingTests(unittest.TestCase):
         self.assertEqual(result, 11)
         self.outline_deploy_mock.assert_called_once_with(self.settings)
         self.outline_check_mock.assert_called_once_with(self.settings)
+        self.outline_user_mock.assert_not_called()
+        self.outline_key_check_mock.assert_not_called()
         self.assertIn("Outline health check failed", stderr.getvalue())
+
+    def test_fails_if_outline_user_creation_fails_and_skips_key_test(self) -> None:
+        stderr = StringIO()
+        self.outline_user_mock.return_value = None
+        with (
+            patch(
+                "fck_rkn.orchestration.test_environment.logging.basicConfig"
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.load_config",
+                return_value=self.settings,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.validate_project_access"
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.ensure_eu_server",
+                return_value=self.instance,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.run_youtube_ping",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.deploy_squid",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.check_squid_startup",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.check_squid_http",
+                return_value=0,
+            ),
+            redirect_stderr(stderr),
+        ):
+            result = main()
+
+        self.assertEqual(result, 12)
+        self.outline_user_mock.assert_called_once_with(
+            self.settings,
+            "fck-rkn-test-user",
+        )
+        self.outline_key_check_mock.assert_not_called()
+        self.assertIn("test user creation failed", stderr.getvalue())
+
+    def test_fails_workflow_when_outline_access_key_check_fails(self) -> None:
+        stderr = StringIO()
+        self.outline_key_check_mock.return_value = 1
+        with (
+            patch(
+                "fck_rkn.orchestration.test_environment.logging.basicConfig"
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.load_config",
+                return_value=self.settings,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.validate_project_access"
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.ensure_eu_server",
+                return_value=self.instance,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.run_youtube_ping",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.deploy_squid",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.check_squid_startup",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.check_squid_http",
+                return_value=0,
+            ),
+            redirect_stderr(stderr),
+        ):
+            result = main()
+
+        self.assertEqual(result, 13)
+        self.outline_user_mock.assert_called_once_with(
+            self.settings,
+            "fck-rkn-test-user",
+        )
+        self.outline_key_check_mock.assert_called_once_with(
+            self.settings,
+            "ss://test-key@example.invalid:10001/",
+        )
+        self.assertIn("Outline access-key check failed", stderr.getvalue())
 
     def test_does_not_run_ping_if_vm_provisioning_fails(self) -> None:
         with (

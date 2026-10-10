@@ -50,12 +50,12 @@ an authorized access-key list, and the access-key TCP endpoint is listening.
 The check does not print the API URL or any access keys. `test_env_host` runs
 this check automatically after successful Outline deployment.
 
-To create or reuse the named EU test key and immediately exercise it, run
-`.venv/bin/eu-server-agent create-outline-test-user`. The command passes the
-returned access URL directly from the remote creation command to
-`eu-server-test-agent` through stdin; it is not written to disk, command-line
-arguments, or logs. Outline Server retains the corresponding key record in
-its own state. The test-agent starts the pinned
+For operator instructions to create or retrieve an Outline user on
+`eu-server` and securely handle its access URL, see
+[Creating an Outline user on `eu-server`](EU_SERVER_OUTLINE_USER_GUIDE.md).
+`test_env_host` creates or reuses its named test user after the Outline
+health check, passes the URL in memory to `eu-server-test-agent`, and never
+displays it. The test-agent starts the pinned
 `ghcr.io/shadowsocks/sslocal-rust:v1.25.0` client temporarily on `eu-server`
 and makes an HTTP request to `youtube.com` through the resulting local SOCKS
 listener. The temporary client container is removed after the check.
@@ -194,4 +194,5 @@ configuration, `3` for authentication failures, `4` for project-access
 failures, `5` for provisioning or readiness failures, and `6` if the remote
 ping agent fails, `7` if Squid deployment fails, and `8` if the Squid startup
 test fails, `9` if the HTTP-through-Squid test fails, `10` if Outline
-deployment fails, and `11` if the Outline health check fails.
+deployment fails, `11` if the Outline health check fails, `12` if Outline
+test-user creation fails, and `13` if its access-key check fails.
