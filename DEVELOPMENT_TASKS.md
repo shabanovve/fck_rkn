@@ -118,7 +118,7 @@ behavior that requires them.
 - **Orchestration:** Make `test_env_host` deploy Outline and run the new
   health test.
 
-### 25. Add EU VPN-user creation script
+### 25. [x] Add EU VPN-user creation script
 
 - **Change:** Add a script that creates or reuses a named test access key for
   the EU Outline Server, passes the returned access URL only through process
@@ -126,7 +126,7 @@ behavior that requires them.
   separately persisting or logging the URL. Outline Server retains its key
   record in its own state.
 
-### 26. Add EU VPN-user creation test
+### 26. [x] Add EU VPN-user creation test
 
 - **Test:** Add an `eu-server-test-agent` check that uses a pinned
   Shadowsocks client to establish a real connection with the test key and
