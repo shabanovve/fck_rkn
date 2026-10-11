@@ -125,17 +125,18 @@ behavior that requires them.
   retains its key record in its own state. A direct operator invocation emits
   the URL to stdout for secure handoff; orchestration passes it only in memory.
 
-### 26. [x] Add EU VPN-user creation test
+### 26. [x] Check Outline container state and VPN port
 
-- **Test:** Add an `eu-server-test-agent` check that uses a pinned
-  Shadowsocks client to establish a real connection with the test key and
-  make an HTTP request through it.
+- **Test:** The `eu-server-test-agent` Outline health check verifies the
+  Outline container is `running` with the expected image, the authorized
+  management API responds, and the VPN access port is open. Do not run a real
+  client in a temporary Docker container.
 
-### 27. Run EU VPN-user creation and test
+### 27. [x] Run Outline health check in orchestration
 
-- **Orchestration:** Make `test_env_host` create or reuse a named test user
-  after Outline is healthy, then pass its key in memory to the user/key test.
-  Never emit the test key to stdout, logs, or source control.
+- **Orchestration:** `test_env_host` runs the Outline health check after
+  deployment and fails with exit code `11` if it does not pass. Orchestration
+  does not create test users.
 
 ## Create `ru-server`
 

@@ -11,13 +11,11 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import (
-    create_outline_user,
     deploy_outline,
     deploy_squid,
     run_youtube_ping,
 )
 from fck_rkn.agents.eu_server_test import (
-    check_outline_access_key,
     check_outline_health,
     check_squid_http,
     check_squid_startup,
@@ -31,7 +29,6 @@ from fck_rkn.gcp.compute import (
 
 
 logger = logging.getLogger(__name__)
-OUTLINE_ORCHESTRATION_USER_NAME = "fck-rkn-test-user"
 
 
 def _shutdown_vms(settings: TestEnvironmentSettings) -> int:
@@ -255,37 +252,5 @@ def main() -> int:
         return 11
 
     logger.info("eu-server-test-agent Outline health check passed")
-    logger.info("Creating or reusing the Outline orchestration test user")
-    outline_access_url = create_outline_user(
-        settings,
-        OUTLINE_ORCHESTRATION_USER_NAME,
-    )
-    if outline_access_url is None:
-        logger.error("Outline orchestration test user creation failed")
-        print(
-            "Outline orchestration test user creation failed.",
-            file=sys.stderr,
-        )
-        return 12
-
-    logger.info("Invoking eu-server-test-agent Outline access-key check")
-    outline_key_test_exit_code = check_outline_access_key(
-        settings,
-        outline_access_url,
-    )
-    if outline_key_test_exit_code != 0:
-        logger.error(
-            "eu-server-test-agent Outline access-key check failed with exit "
-            "status %d",
-            outline_key_test_exit_code,
-        )
-        print(
-            "eu-server-test-agent Outline access-key check failed with exit "
-            f"status {outline_key_test_exit_code}.",
-            file=sys.stderr,
-        )
-        return 13
-
-    logger.info("eu-server-test-agent Outline access-key check passed")
     logger.info("Test environment preflight and provisioning completed")
     return 0

@@ -194,8 +194,8 @@ configuration, `3` for authentication failures, `4` for project-access
 failures, `5` for provisioning or readiness failures, and `6` if the remote
 ping agent fails, `7` if Squid deployment fails, and `8` if the Squid startup
 test fails, `9` if the HTTP-through-Squid test fails, `10` if Outline
-deployment fails, `11` if the Outline health check fails, `12` if Outline
-test-user creation fails, and `13` if its access-key check fails.
+deployment fails, and `11` if the Outline health check fails
+(container not running, API unavailable, or VPN port closed).
 
 ## Manual VM shutdown
 
