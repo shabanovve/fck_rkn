@@ -420,6 +420,29 @@ behavior that requires them.
 - **Test:** Run service-agent tests in Docker without GCP credentials or GCP
   API access.
 
+## Manual shutdown of test VMs
+
+### 102. [x] Add manual shutdown action for all test VMs
+
+- **Requirement:** Provide `.venv/bin/test-env-host shutdown-vms` as an
+  explicit operator action. Validate access to the isolated `fck-rkn-test`
+  project, enumerate Compute Engine VMs across all zones, stop every VM in
+  `RUNNING` state, and wait for each stop operation to complete. Leave VMs in
+  other states unchanged. Do not delete VMs, disks, or network resources, and
+  do not invoke this action during the normal provisioning workflow.
+
+### 103. [x] Test manual shutdown behavior
+
+- **Test:** Verify shutdown is limited to the configured test project,
+  enumerates all zones, stops running VMs only, waits for stop operations,
+  and reports failures without deleting resources.
+
+### 104. [x] Document manual VM shutdown
+
+- **Documentation:** Describe the explicit shutdown command, its all-zones
+  scope, resources it leaves intact, and that normal provisioning does not
+  stop VMs.
+
 ## Decisions that block dependent tasks
 
 - GCP project ID, billing/account, region/zone, Ubuntu image, VM size/cost,

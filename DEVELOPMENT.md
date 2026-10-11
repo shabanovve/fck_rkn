@@ -42,6 +42,11 @@
 - Re-running Outline Server deployment must leave an already-running,
   correctly configured Outline container untouched. Refuse to replace an
   existing Outline container with unexpected configuration.
+- Provide a manual `test-env-host shutdown-vms` action that validates access
+  to the isolated `fck-rkn-test` project, finds running Compute Engine VMs
+  across all zones, stops them, and waits for the stop operations to complete.
+  It must not delete VMs or their disks, network resources, or firewall rules,
+  and must not run as part of the normal provisioning workflow.
 - The repository's `config/` directory may contain only the tracked
   `config/test.env.example` template. Local configuration files, generated
   files, credentials, and any other files under `config/` must not be added

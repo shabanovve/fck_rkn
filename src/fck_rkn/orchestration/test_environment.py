@@ -23,11 +23,36 @@ from fck_rkn.agents.eu_server_test import (
     check_squid_startup,
 )
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
-from fck_rkn.gcp.compute import ensure_eu_server, validate_project_access
+from fck_rkn.gcp.compute import (
+    ensure_eu_server,
+    stop_test_project_vms,
+    validate_project_access,
+)
 
 
 logger = logging.getLogger(__name__)
 OUTLINE_ORCHESTRATION_USER_NAME = "fck-rkn-test-user"
+
+
+def _shutdown_vms(settings: TestEnvironmentSettings) -> int:
+    try:
+        stopped = stop_test_project_vms(settings)
+    except GoogleAuthError:
+        logger.error("GCP authentication failed during VM shutdown")
+        print("GCP authentication failed during VM shutdown.", file=sys.stderr)
+        return 3
+    except GoogleAPICallError as error:
+        logger.error("GCP VM shutdown failed")
+        print("GCP VM shutdown failed.", file=sys.stderr)
+        print(f"  Error type: {type(error).__name__}", file=sys.stderr)
+        print(f"  Details: {error.message or error}", file=sys.stderr)
+        return 14
+    except (OSError, RuntimeError, TimeoutError) as error:
+        logger.error("VM shutdown failed: %s", error)
+        print(f"VM shutdown failed: {error}", file=sys.stderr)
+        return 14
+    print(f"Stopped {len(stopped)} running VM(s) in {settings.GCP_PROJECT_ID}.")
+    return 0
 
 
 def main() -> int:
@@ -107,6 +132,9 @@ def main() -> int:
         logger.error("GCP project validation failed")
         print(f"GCP project validation failed: {error}", file=sys.stderr)
         return 4
+
+    if sys.argv[1:2] == ["shutdown-vms"]:
+        return _shutdown_vms(settings)
 
     try:
         instance = ensure_eu_server(settings)

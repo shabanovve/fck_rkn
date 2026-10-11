@@ -75,6 +75,34 @@ def validate_project_access(settings: TestEnvironmentSettings) -> None:
     logger.info("ADC can access the configured test project")
 
 
+def stop_test_project_vms(settings: TestEnvironmentSettings) -> list[str]:
+    """Stop every RUNNING VM in all zones of the test project; return stopped names."""
+    credentials, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    client = compute_v1.InstancesClient(credentials=credentials)
+    pending: list[tuple[str, str, object]] = []
+    for scope, scoped_list in client.aggregated_list(
+        project=settings.GCP_PROJECT_ID
+    ):
+        zone = scope.split("/")[-1]
+        for instance in scoped_list.instances:
+            if instance.status != "RUNNING":
+                logger.info("Leaving %s in %s unchanged", instance.name, instance.status)
+                continue
+            logger.info("Stopping %s in %s", instance.name, zone)
+            operation = client.stop(
+                project=settings.GCP_PROJECT_ID,
+                zone=zone,
+                instance=instance.name,
+            )
+            pending.append((zone, instance.name, operation))
+    for zone, name, operation in pending:
+        operation.result(timeout=INSTANCE_OPERATION_TIMEOUT_SECONDS)
+        logger.info("Stopped %s in %s", name, zone)
+    return [name for _, name, _ in pending]
+
+
 def build_ssh_firewall_rules(
     settings: TestEnvironmentSettings,
 ) -> tuple[compute_v1.Firewall, compute_v1.Firewall]:

@@ -196,3 +196,11 @@ ping agent fails, `7` if Squid deployment fails, and `8` if the Squid startup
 test fails, `9` if the HTTP-through-Squid test fails, `10` if Outline
 deployment fails, `11` if the Outline health check fails, `12` if Outline
 test-user creation fails, and `13` if its access-key check fails.
+
+## Manual VM shutdown
+
+Run `.venv/bin/test-env-host shutdown-vms` to stop every `RUNNING` VM in all
+zones of the isolated `fck-rkn-test` project. The command waits for each stop
+operation to finish. VMs in other states are left unchanged, and no VMs,
+disks, or network resources are deleted. Normal provisioning never stops VMs.
+Exit code 14 means the shutdown failed.

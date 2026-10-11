@@ -557,3 +557,37 @@ class ComputeProvisioningTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StopVmsTests(unittest.TestCase):
+    def test_stops_only_running_vms_in_all_zones_and_waits(self) -> None:
+        from fck_rkn.gcp.compute import stop_test_project_vms
+
+        def scoped(*instances: tuple[str, str]) -> Mock:
+            vms = []
+            for name, status in instances:
+                vm = Mock(status=status)
+                vm.name = name
+                vms.append(vm)
+            return Mock(instances=vms)
+
+        client = Mock()
+        client.aggregated_list.return_value = [
+            ("zones/europe-west1-b", scoped(("a", "RUNNING"), ("b", "TERMINATED"))),
+            ("zones/us-central1-a", scoped(("c", "RUNNING"))),
+        ]
+        operations = [Mock(), Mock()]
+        client.stop.side_effect = operations
+        settings = make_settings()
+        with (
+            patch("fck_rkn.gcp.compute.google.auth.default", return_value=(Mock(), None)),
+            patch("fck_rkn.gcp.compute.compute_v1.InstancesClient", return_value=client),
+        ):
+            stopped = stop_test_project_vms(settings)
+
+        self.assertEqual(stopped, ["a", "c"])
+        client.aggregated_list.assert_called_once_with(project=settings.GCP_PROJECT_ID)
+        self.assertEqual(client.stop.call_count, 2)
+        client.delete.assert_not_called()
+        for operation in operations:
+            operation.result.assert_called_once()
