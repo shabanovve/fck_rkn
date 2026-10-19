@@ -31,7 +31,9 @@ To stream the Squid container's live Docker logs independently, run
 `.venv/bin/eu-server-agent logs-squid`. Press Ctrl-C to stop following logs.
 
 To deploy Outline Server directly on `eu-server`, run
-`.venv/bin/eu-server-agent deploy-outline`. The agent first builds an image
+`.venv/bin/eu-server-agent deploy-outline`. By default the standard stable
+Outline image is used. When started by `test_env_host` (or with
+`--allow-private-targets`) the agent first builds an image
 from the official stable image with `outline-ss-server` patched to accept
 private target addresses (the stock server rejects them), so RU clients can
 reach the private EU Squid endpoint through Outline. The patch removes the

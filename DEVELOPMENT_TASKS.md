@@ -235,6 +235,13 @@ behavior that requires them.
   `src/fck_rkn/remote/scripts/` and are loaded with `fck_rkn.remote.render`
   (`@NAME@` placeholders, `#include` fragments, strict unused/missing checks).
 
+### 42c. [x] Rebuild Outline only from `test_env_host`
+
+- **Change:** `deploy_outline` / `check_outline_health` take
+  `allow_private_targets`; `test_env_host` passes `True` (patched build),
+  otherwise the standard Docker image is used (also the CLI default; opt in
+  with `--allow-private-targets`).
+
 ### 46. Add tunnel-loss recovery to `ru-server-agent`
 
 - **Change:** Add retry behavior after Outline connection loss while keeping

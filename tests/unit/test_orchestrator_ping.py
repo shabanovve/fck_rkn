@@ -127,8 +127,12 @@ class OrchestratorPingTests(unittest.TestCase):
         deploy.assert_called_once_with(self.settings)
         squid_check.assert_called_once_with(self.settings)
         http_check.assert_called_once_with(self.settings)
-        self.outline_deploy_mock.assert_called_once_with(self.settings)
-        self.outline_check_mock.assert_called_once_with(self.settings)
+        self.outline_deploy_mock.assert_called_once_with(
+            self.settings, allow_private_targets=True
+        )
+        self.outline_check_mock.assert_called_once_with(
+            self.settings, allow_private_targets=True
+        )
 
     def test_fails_workflow_when_ping_agent_returns_nonzero(self) -> None:
         stderr = StringIO()
@@ -334,7 +338,9 @@ class OrchestratorPingTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(result, 10)
-        self.outline_deploy_mock.assert_called_once_with(self.settings)
+        self.outline_deploy_mock.assert_called_once_with(
+            self.settings, allow_private_targets=True
+        )
         self.outline_check_mock.assert_not_called()
         self.assertIn("Outline deployment failed", stderr.getvalue())
 
@@ -377,8 +383,12 @@ class OrchestratorPingTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(result, 11)
-        self.outline_deploy_mock.assert_called_once_with(self.settings)
-        self.outline_check_mock.assert_called_once_with(self.settings)
+        self.outline_deploy_mock.assert_called_once_with(
+            self.settings, allow_private_targets=True
+        )
+        self.outline_check_mock.assert_called_once_with(
+            self.settings, allow_private_targets=True
+        )
         self.assertIn("Outline health check failed", stderr.getvalue())
 
     def run_main_with_healthy_eu(self) -> tuple[int, StringIO]:

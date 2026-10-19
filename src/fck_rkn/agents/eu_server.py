@@ -23,10 +23,11 @@ SQUID_IMAGE = "ubuntu/squid:latest"
 SQUID_PORT = 3128
 OUTLINE_CONTAINER_NAME = "fck-rkn-outline-shadowbox"
 OUTLINE_BASE_IMAGE = "quay.io/outline/shadowbox:stable"
-OUTLINE_IMAGE = "fck-rkn-shadowbox:no-public-ip-check"
 # Test environment only: the patched outline-ss-server (see
 # remote/scripts/outline_shadowbox.Dockerfile) accepts private target addresses
-# so the RU route can reach eu-server's private Squid endpoint.
+# so the RU route can reach eu-server's private Squid endpoint. Production uses
+# the standard image.
+OUTLINE_PATCHED_IMAGE = "fck-rkn-shadowbox:no-public-ip-check"
 OUTLINE_SS_SERVER_VERSION = "v1.7.3"
 OUTLINE_INSTALLER_URL = (
     "https://raw.githubusercontent.com/Jigsaw-Code/outline-server/"
@@ -182,12 +183,26 @@ def follow_squid_logs(settings: TestEnvironmentSettings) -> int:
     return 0
 
 
-def deploy_outline(settings: TestEnvironmentSettings) -> int:
-    """Install the official stable Outline Server using eu-server's private IP."""
+def outline_image(allow_private_targets: bool) -> str:
+    """Return the Outline image: patched for the test environment, else standard."""
+    return OUTLINE_PATCHED_IMAGE if allow_private_targets else OUTLINE_BASE_IMAGE
+
+
+def deploy_outline(
+    settings: TestEnvironmentSettings,
+    allow_private_targets: bool = False,
+) -> int:
+    """Install Outline Server using eu-server's private IP.
+
+    The standard stable image is used unless allow_private_targets is set (test
+    environment), which rebuilds outline-ss-server to accept private targets.
+    """
     remote_command = render(
         "deploy_outline.sh",
         container_name=OUTLINE_CONTAINER_NAME,
-        image=OUTLINE_IMAGE,
+        image=outline_image(allow_private_targets),
+        patched="true" if allow_private_targets else "false",
+        patched_image=OUTLINE_PATCHED_IMAGE,
         base_image=OUTLINE_BASE_IMAGE,
         ss_server_version=OUTLINE_SS_SERVER_VERSION,
         installer_url=OUTLINE_INSTALLER_URL,
@@ -316,6 +331,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Action to run (default: ping)",
     )
     parser.add_argument(
+        "--allow-private-targets",
+        action="store_true",
+        help="deploy-outline: rebuild Outline to accept private targets "
+        "(test environment only)",
+    )
+    parser.add_argument(
         "--name",
         help="Display name for the Outline user being created or reused",
     )
@@ -343,7 +364,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "logs-squid":
         return follow_squid_logs(settings)
     if args.action == "deploy-outline":
-        return deploy_outline(settings)
+        return deploy_outline(settings, args.allow_private_targets)
     if args.action == "create-outline-user":
         access_url = create_outline_user(settings, args.name)
         if access_url is None:

@@ -14,7 +14,7 @@ from fck_rkn.agents.eu_server import (
     OUTLINE_CONTAINER_NAME,
     OUTLINE_DEPLOY_TIMEOUT_SECONDS,
     OUTLINE_BASE_IMAGE,
-    OUTLINE_IMAGE,
+    OUTLINE_PATCHED_IMAGE,
     OUTLINE_SS_SERVER_VERSION,
     OUTLINE_INSTALLER_URL,
     OUTLINE_STATE_DIRECTORY,
@@ -216,13 +216,13 @@ class EuServerAgentTests(unittest.TestCase):
         self.assertEqual(result, 0)
         deploy.assert_called_once_with(self.settings)
 
-    def test_deploys_official_outline_server_with_private_endpoint(self) -> None:
+    def test_deploys_outline_server_with_private_endpoint(self) -> None:
         completed = subprocess.CompletedProcess(args=[], returncode=0)
         with patch(
             "fck_rkn.agents.eu_server.subprocess.run",
             return_value=completed,
         ) as run:
-            result = deploy_outline(self.settings)
+            result = deploy_outline(self.settings, allow_private_targets=True)
 
         command = run.call_args.args[0]
         self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "eu-server"])
@@ -235,7 +235,8 @@ class EuServerAgentTests(unittest.TestCase):
             if argument.startswith("--command=")
         )
         self.assertIn(OUTLINE_INSTALLER_URL, remote_command)
-        self.assertIn(f"expected_image={OUTLINE_IMAGE}", remote_command)
+        self.assertIn(f"expected_image={OUTLINE_PATCHED_IMAGE}", remote_command)
+        self.assertIn("patched=true", remote_command)
         self.assertIn('SB_IMAGE="$expected_image"', remote_command)
         self.assertIn(f"container_name={OUTLINE_CONTAINER_NAME}", remote_command)
         self.assertIn('CONTAINER_NAME="$container_name"', remote_command)
@@ -246,7 +247,7 @@ class EuServerAgentTests(unittest.TestCase):
         self.assertIn(">/dev/null 2>&1", remote_command)
         self.assertIn(f"--branch {OUTLINE_SS_SERVER_VERSION}", remote_command)
         self.assertIn(f"FROM {OUTLINE_BASE_IMAGE}", remote_command)
-        self.assertIn("Replacing the stock Outline Server container", remote_command)
+        self.assertIn("Replacing the Outline Server container", remote_command)
         self.assertLess(
             remote_command.index("FCK_RKN_DOCKERFILE"),
             remote_command.index(OUTLINE_INSTALLER_URL),
@@ -289,6 +290,24 @@ class EuServerAgentTests(unittest.TestCase):
 
         self.assertNotEqual(result, 0)
 
+    def test_deploys_standard_outline_image_by_default(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=0)
+        with patch(
+            "fck_rkn.agents.eu_server.subprocess.run",
+            return_value=completed,
+        ) as run:
+            result = deploy_outline(self.settings)
+
+        remote_command = next(
+            argument.removeprefix("--command=")
+            for argument in run.call_args.args[0]
+            if argument.startswith("--command=")
+        )
+        self.assertEqual(result, 0)
+        self.assertIn(f"expected_image={OUTLINE_BASE_IMAGE}", remote_command)
+        self.assertIn("patched=false", remote_command)
+        self.assertIn('if [ "$patched" = true ]; then', remote_command)
+
     def test_cli_dispatches_deploy_outline_action(self) -> None:
         with (
             patch("fck_rkn.agents.eu_server.load_config", return_value=self.settings),
@@ -298,9 +317,14 @@ class EuServerAgentTests(unittest.TestCase):
             ) as deploy,
         ):
             result = main(["deploy-outline"])
+            private_result = main(["deploy-outline", "--allow-private-targets"])
 
         self.assertEqual(result, 0)
-        deploy.assert_called_once_with(self.settings)
+        self.assertEqual(private_result, 0)
+        self.assertEqual(
+            [call.args for call in deploy.call_args_list],
+            [(self.settings, False), (self.settings, True)],
+        )
 
     def test_creates_or_reuses_named_outline_user_and_returns_key_safely(self) -> None:
         access_url = "ss://sensitive-test-key@example.invalid:10001/?outline=1"

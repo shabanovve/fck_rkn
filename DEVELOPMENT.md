@@ -42,7 +42,8 @@
 - Re-running Outline Server deployment must leave an already-running,
   correctly configured Outline container untouched. Refuse to replace an
   existing Outline container with unexpected configuration.
-- The EU Outline Server image must be rebuilt from the official image with
+- The EU Outline Server image is rebuilt (only when deployed by `test_env_host`;
+  standalone runs use the standard image) from the official image with
   `outline-ss-server` patched to accept private target addresses. Use it only
   in the isolated test environment because it removes the server's protection
   against requests to private networks. Production must not use it: production
