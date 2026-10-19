@@ -30,6 +30,9 @@ CLIENT_IMAGE = PROBE_IMAGE
 CLIENT_STATE_DIRECTORY = "/opt/fck-rkn-outline-client"
 CLIENT_LOCAL_PORT = 1080
 CLIENT_DEPLOY_TIMEOUT_SECONDS = 900
+FORWARD_CONTAINER_NAME = "fck-rkn-squid-forward"
+FORWARD_STATE_DIRECTORY = "/opt/fck-rkn-squid-forward"
+FORWARD_LOCAL_PORT = SQUID_PORT
 
 
 def parse_access_url(access_url: str) -> tuple[str, str, str, int]:
@@ -163,11 +166,26 @@ def build_client_deploy_command() -> str:
     The client configuration (including the key) arrives on stdin and is stored
     in a root-only file; it is never part of the command line.
     """
+    return _build_container_deploy_command(
+        CLIENT_CONTAINER_NAME, CLIENT_STATE_DIRECTORY, "ss-local", "Outline client"
+    )
+
+
+def build_forward_deploy_command() -> str:
+    """Return a remote script that starts the persistent EU Squid TCP forward."""
+    return _build_container_deploy_command(
+        FORWARD_CONTAINER_NAME, FORWARD_STATE_DIRECTORY, "ss-tunnel", "Squid forward"
+    )
+
+
+def _build_container_deploy_command(
+    container_name: str, state_directory: str, entrypoint: str, title: str
+) -> str:
     return "\n".join(
         (
             "set -euo pipefail",
             "config=$(cat)",
-            f"container_name={CLIENT_CONTAINER_NAME}",
+            f"container_name={container_name}",
             f"expected_image={CLIENT_IMAGE}",
             "if ! command -v docker >/dev/null 2>&1; then",
             "  sudo apt-get update",
@@ -178,22 +196,22 @@ def build_client_deploy_command() -> str:
             '  actual_image="$(sudo docker inspect --format="{{.Config.Image}}" "$container_name")"',
             '  actual_state="$(sudo docker inspect --format="{{.State.Status}}" "$container_name")"',
             '  if [ "$actual_image" = "$expected_image" ] && [ "$actual_state" = running ]; then',
-            '    echo "Outline client container is already running; leaving it unchanged"',
+            f'    echo "{title} container is already running; leaving it unchanged"',
             "    exit 0",
             "  fi",
-            '  echo "Existing Outline client container differs; refusing to replace it" >&2',
+            f'  echo "Existing {title} container differs; refusing to replace it" >&2',
             "  exit 1",
             "fi",
-            f"sudo install -d -m 700 {CLIENT_STATE_DIRECTORY}",
-            f"printf '%s' \"$config\" | sudo sh -c 'umask 077; cat > {CLIENT_STATE_DIRECTORY}/config.json'",
+            f"sudo install -d -m 700 {state_directory}",
+            f"printf '%s' \"$config\" | sudo sh -c 'umask 077; cat > {state_directory}/config.json'",
             'sudo docker pull "$expected_image" >/dev/null',
             "sudo docker run --detach "
             '--name "$container_name" '
             "--restart unless-stopped --network host "
-            f"--volume {CLIENT_STATE_DIRECTORY}:/etc/shadowsocks:ro "
-            "--entrypoint ss-local "
+            f"--volume {state_directory}:/etc/shadowsocks:ro "
+            f"--entrypoint {entrypoint} "
             '"$expected_image" -c /etc/shadowsocks/config.json >/dev/null',
-            'echo "Outline client container started"',
+            f'echo "{title} container started"',
         )
     )
 
@@ -209,6 +227,43 @@ def build_client_config(method: str, password: str, host: str, port: int) -> str
             "local_port": CLIENT_LOCAL_PORT,
         }
     )
+
+
+def build_forward_config(method: str, password: str, host: str, port: int) -> str:
+    """Return the ss-tunnel config forwarding RU localhost to EU Squid via Outline."""
+    return json.dumps(
+        {
+            "server": host,
+            "server_port": port,
+            "method": method,
+            "password": password,
+            "local_address": "127.0.0.1",
+            "local_port": FORWARD_LOCAL_PORT,
+            "tunnel_address": f"{host}:{SQUID_PORT}",
+        }
+    )
+
+
+def deploy_squid_forward(
+    settings: TestEnvironmentSettings,
+    access_url: str,
+) -> int:
+    """Forward ru-server localhost TCP/3128 to EU Squid through EU Outline."""
+    try:
+        method, password, host, port = parse_access_url(access_url)
+    except ValueError as error:
+        logger.error("%s", error)
+        return 1
+    result = run_remote_with_input(
+        settings,
+        build_forward_deploy_command(),
+        build_forward_config(method, password, host, port),
+        "Deploying the EU Squid TCP forward in Docker",
+        timeout=CLIENT_DEPLOY_TIMEOUT_SECONDS,
+    )
+    if result == 0:
+        logger.info("EU Squid forward deployment completed on %s", RU_INSTANCE_NAME)
+    return result
 
 
 def deploy_outline_client(
@@ -269,7 +324,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run ru-server actions.")
     parser.add_argument(
         "action",
-        choices=("probe-outline-squid", "deploy-outline-client"),
+        choices=(
+            "probe-outline-squid",
+            "deploy-outline-client",
+            "deploy-squid-forward",
+        ),
         help="Action to run",
     )
     args = parser.parse_args(argv)
@@ -293,6 +352,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_outline_squid_probe(settings, sys.stdin.readline())
     if args.action == "deploy-outline-client":
         return deploy_outline_client(settings, sys.stdin.readline())
+    if args.action == "deploy-squid-forward":
+        return deploy_squid_forward(settings, sys.stdin.readline())
     return 1
 
 

@@ -9,7 +9,9 @@ import json
 
 from fck_rkn.agents.ru_server import (
     build_client_deploy_command,
+    build_forward_deploy_command,
     deploy_outline_client,
+    deploy_squid_forward,
     parse_access_url,
     run_outline_squid_probe,
 )
@@ -135,4 +137,56 @@ class RuServerClientDeployTests(unittest.TestCase):
     def test_deploy_rejects_invalid_key_without_running_ssh(self) -> None:
         with patch("fck_rkn.agents.ru_server.subprocess.run") as run:
             self.assertEqual(deploy_outline_client(make_settings(), "bad"), 1)
+        run.assert_not_called()
+
+
+class RuServerSquidForwardTests(unittest.TestCase):
+    def test_forwards_localhost_3128_to_eu_squid_with_config_via_stdin(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="started\n", stderr=""
+        )
+        with patch(
+            "fck_rkn.agents.ru_server.subprocess.run", return_value=completed
+        ) as run:
+            result = deploy_squid_forward(make_settings(), make_access_url())
+
+        self.assertEqual(result, 0)
+        command = run.call_args.args[0]
+        self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "ru-server"])
+        self.assertNotIn("test-secret", " ".join(command))
+        config = json.loads(run.call_args.kwargs["input"])
+        self.assertEqual(config["server"], "configured-host")
+        self.assertEqual(config["password"], "test-secret")
+        self.assertEqual(config["local_address"], "127.0.0.1")
+        self.assertEqual(config["local_port"], 3128)
+        self.assertEqual(config["tunnel_address"], "configured-host:3128")
+
+    def test_forward_script_is_private_idempotent_and_restarts(self) -> None:
+        script = build_forward_deploy_command()
+        self.assertIn("ss-tunnel", script)
+        self.assertIn("fck-rkn-squid-forward", script)
+        self.assertIn("--restart unless-stopped", script)
+        self.assertIn("install -d -m 700", script)
+        self.assertIn("umask 077", script)
+        self.assertIn("leaving it unchanged", script)
+        self.assertNotIn("test-secret", script)
+
+    def test_forward_and_client_use_separate_containers(self) -> None:
+        self.assertNotIn("fck-rkn-outline-client", build_forward_deploy_command())
+        self.assertNotIn("fck-rkn-squid-forward", build_client_deploy_command())
+
+    def test_forward_fails_without_leaking_output_and_rejects_bad_key(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="test-secret"
+        )
+        with (
+            patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed),
+            self.assertLogs("fck_rkn.agents.ru_server", level="ERROR") as logs,
+        ):
+            result = deploy_squid_forward(make_settings(), make_access_url())
+        self.assertEqual(result, 1)
+        self.assertNotIn("test-secret", "\n".join(logs.output))
+
+        with patch("fck_rkn.agents.ru_server.subprocess.run") as run:
+            self.assertEqual(deploy_squid_forward(make_settings(), "bad"), 1)
         run.assert_not_called()

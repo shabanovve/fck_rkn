@@ -207,7 +207,7 @@ behavior that requires them.
   the RU client test.
 - **Dependency:** Task 36 must pass.
 
-### 40. Add forwarding from RU to EU TCP/3128
+### 40. [x] Add forwarding from RU to EU TCP/3128
 
 - **Change:** Add the approved forwarding action to `ru-server-agent` so
   the EU Squid endpoint is available at the intended RU localhost port.
