@@ -15,7 +15,7 @@ from fck_rkn.agents.eu_server import (
     OUTLINE_DEPLOY_TIMEOUT_SECONDS,
     OUTLINE_BASE_IMAGE,
     OUTLINE_IMAGE,
-    OUTLINE_IMAGE_DOCKERFILE,
+    OUTLINE_SS_SERVER_VERSION,
     OUTLINE_INSTALLER_URL,
     OUTLINE_STATE_DIRECTORY,
     SQUID_CONTAINER_NAME,
@@ -137,11 +137,11 @@ class EuServerAgentTests(unittest.TestCase):
             if argument.startswith("--command=")
         )
         self.assertIn("apt-get install -y docker.io", remote_command)
-        running_guard = (
-            f'docker inspect --format=\'{{{{.State.Running}}}}\' '
-            f"{SQUID_CONTAINER_NAME}"
+        self.assertIn(f"container_name={SQUID_CONTAINER_NAME}", remote_command)
+        self.assertIn(
+            "docker inspect --format='{{.State.Running}}' \"$container_name\"",
+            remote_command,
         )
-        self.assertIn(running_guard, remote_command)
         self.assertIn(
             "Squid container is already running; leaving it unchanged",
             remote_command,
@@ -151,7 +151,7 @@ class EuServerAgentTests(unittest.TestCase):
             remote_command.index(f"docker pull {SQUID_IMAGE}"),
         )
         self.assertIn(f"docker pull {SQUID_IMAGE}", remote_command)
-        self.assertIn(f"--name {SQUID_CONTAINER_NAME}", remote_command)
+        self.assertIn('--name "$container_name"', remote_command)
         self.assertIn("--restart unless-stopped", remote_command)
         self.assertIn(
             f"--publish {SQUID_PORT}:{SQUID_PORT}/tcp",
@@ -235,14 +235,16 @@ class EuServerAgentTests(unittest.TestCase):
             if argument.startswith("--command=")
         )
         self.assertIn(OUTLINE_INSTALLER_URL, remote_command)
-        self.assertIn(f"SB_IMAGE={OUTLINE_IMAGE}", remote_command)
-        self.assertIn(f"CONTAINER_NAME={OUTLINE_CONTAINER_NAME}", remote_command)
+        self.assertIn(f"expected_image={OUTLINE_IMAGE}", remote_command)
+        self.assertIn('SB_IMAGE="$expected_image"', remote_command)
+        self.assertIn(f"container_name={OUTLINE_CONTAINER_NAME}", remote_command)
+        self.assertIn('CONTAINER_NAME="$container_name"', remote_command)
         self.assertIn(f"SHADOWBOX_DIR={OUTLINE_STATE_DIRECTORY}", remote_command)
         self.assertIn("--hostname \"$private_ip\"", remote_command)
         self.assertIn(f"--api-port {OUTLINE_API_PORT}", remote_command)
         self.assertIn(f"--keys-port {OUTLINE_ACCESS_KEY_PORT}", remote_command)
         self.assertIn(">/dev/null 2>&1", remote_command)
-        self.assertIn(OUTLINE_IMAGE_DOCKERFILE, remote_command)
+        self.assertIn(f"--branch {OUTLINE_SS_SERVER_VERSION}", remote_command)
         self.assertIn(f"FROM {OUTLINE_BASE_IMAGE}", remote_command)
         self.assertIn("Replacing the stock Outline Server container", remote_command)
         self.assertLess(
@@ -327,7 +329,10 @@ class EuServerAgentTests(unittest.TestCase):
             for argument in create_command
             if argument.startswith("--command=")
         )
-        self.assertIn("user_name = 'production-user'", remote_command)
+        self.assertIn(
+            "sudo python3 - production-user /opt/fck-rkn-outline",
+            remote_command,
+        )
         self.assertIn(
             "matching_keys = [key for key in keys if key.get('name') == user_name]",
             remote_command,

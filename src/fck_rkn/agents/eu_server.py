@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shlex
 import subprocess
 import sys
 
@@ -12,6 +13,7 @@ from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.config import TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import INSTANCE_NAME
+from fck_rkn.remote import render
 
 
 logger = logging.getLogger(__name__)
@@ -22,24 +24,10 @@ SQUID_PORT = 3128
 OUTLINE_CONTAINER_NAME = "fck-rkn-outline-shadowbox"
 OUTLINE_BASE_IMAGE = "quay.io/outline/shadowbox:stable"
 OUTLINE_IMAGE = "fck-rkn-shadowbox:no-public-ip-check"
+# Test environment only: the patched outline-ss-server (see
+# remote/scripts/outline_shadowbox.Dockerfile) accepts private target addresses
+# so the RU route can reach eu-server's private Squid endpoint.
 OUTLINE_SS_SERVER_VERSION = "v1.7.3"
-# Test environment only: the patched outline-ss-server accepts private target
-# addresses so the RU route can reach eu-server's private Squid endpoint.
-OUTLINE_IMAGE_DOCKERFILE = "\n".join(
-    (
-        "FROM golang:1.24 AS build",
-        "RUN git clone -q --depth 1 --branch "
-        f"{OUTLINE_SS_SERVER_VERSION} "
-        "https://github.com/Jigsaw-Code/outline-ss-server /src",
-        "WORKDIR /src",
-        "RUN sed -i 's/^\\(func RequirePublicIP(ip net.IP) error {\\)$/\\1\\n\\treturn nil/' "
-        "net/private_net.go \\",
-        " && grep -A1 'func RequirePublicIP' net/private_net.go | grep -q 'return nil' \\",
-        " && CGO_ENABLED=0 go build -o /outline-ss-server ./cmd/outline-ss-server",
-        f"FROM {OUTLINE_BASE_IMAGE}",
-        "COPY --from=build /outline-ss-server /opt/outline-server/bin/outline-ss-server",
-    )
-)
 OUTLINE_INSTALLER_URL = (
     "https://raw.githubusercontent.com/Jigsaw-Code/outline-server/"
     "master/src/server_manager/install_scripts/install_server.sh"
@@ -102,25 +90,11 @@ def run_youtube_ping(settings: TestEnvironmentSettings) -> int:
 
 def deploy_squid(settings: TestEnvironmentSettings) -> int:
     """Install Docker if needed and start Squid on eu-server over IAP SSH."""
-    remote_command = " && ".join(
-        (
-            "command -v docker >/dev/null 2>&1 || "
-            "(sudo apt-get update && "
-            "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io)",
-            f"if [ \"$(sudo docker inspect --format='{{{{.State.Running}}}}' "
-            f"{SQUID_CONTAINER_NAME} 2>/dev/null || true)\" = true ]; then "
-            'echo "Squid container is already running; leaving it unchanged"; '
-            "exit 0; fi",
-            f"sudo docker pull {SQUID_IMAGE}",
-            f"if sudo docker container inspect {SQUID_CONTAINER_NAME} "
-            ">/dev/null 2>&1; then "
-            f"sudo docker rm -f {SQUID_CONTAINER_NAME}; fi",
-            "sudo docker run --detach "
-            f"--name {SQUID_CONTAINER_NAME} "
-            "--restart unless-stopped "
-            f"--publish {SQUID_PORT}:{SQUID_PORT}/tcp "
-            f"{SQUID_IMAGE}",
-        )
+    remote_command = render(
+        "deploy_squid.sh",
+        container_name=SQUID_CONTAINER_NAME,
+        image=SQUID_IMAGE,
+        port=SQUID_PORT,
     )
     command = [
         "gcloud",
@@ -210,59 +184,16 @@ def follow_squid_logs(settings: TestEnvironmentSettings) -> int:
 
 def deploy_outline(settings: TestEnvironmentSettings) -> int:
     """Install the official stable Outline Server using eu-server's private IP."""
-    remote_command = "\n".join(
-        (
-            "set -euo pipefail",
-            f"container_name={OUTLINE_CONTAINER_NAME}",
-            f"expected_image={OUTLINE_IMAGE}",
-            'if sudo docker container inspect "$container_name" >/dev/null 2>&1; then',
-            '  actual_image="$(sudo docker inspect --format="{{.Config.Image}}" "$container_name")"',
-            '  actual_state="$(sudo docker inspect --format="{{.State.Status}}" "$container_name")"',
-            '  if [ "$actual_image" = "$expected_image" ] && [ "$actual_state" = running ]; then',
-            '    echo "Outline Server container is already running; leaving it unchanged"',
-            "    exit 0",
-            "  fi",
-            f'  if [ "$actual_image" = {OUTLINE_BASE_IMAGE} ]; then',
-            '    echo "Replacing the stock Outline Server container with the patched image"',
-            '    sudo docker rm -f "$container_name" watchtower >/dev/null 2>&1 || true',
-            "  else",
-            '    echo "Existing Outline Server container differs; refusing to replace it" >&2',
-            "    exit 1",
-            "  fi",
-            "fi",
-            'if sudo docker container inspect watchtower >/dev/null 2>&1; then',
-            '  echo "A watchtower container already exists; refusing to replace it" >&2',
-            "  exit 1",
-            "fi",
-            'if ! command -v docker >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then',
-            "  sudo apt-get update",
-            "  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl",
-            "fi",
-            "sudo systemctl enable --now docker",
-            'echo "Building the Outline Server image without the public-IP target check"',
-            "sudo docker build -t "
-            f"{OUTLINE_IMAGE} -f - \"$(mktemp -d)\" <<'FCK_RKN_DOCKERFILE'",
-            OUTLINE_IMAGE_DOCKERFILE,
-            "FCK_RKN_DOCKERFILE",
-            'private_ip="$(curl --fail --silent --show-error '
-            "-H 'Metadata-Flavor: Google' "
-            "'http://metadata.google.internal/computeMetadata/v1/"
-            "instance/network-interfaces/0/ip')\"",
-            'echo "Installing official Outline Server stable image on the private VM address"',
-            f"curl --fail --silent --show-error {OUTLINE_INSTALLER_URL} | "
-            "sudo env "
-            f"CONTAINER_NAME={OUTLINE_CONTAINER_NAME} "
-            f"SB_IMAGE={OUTLINE_IMAGE} "
-            f"SHADOWBOX_DIR={OUTLINE_STATE_DIRECTORY} "
-            "bash -s -- "
-            '--hostname "$private_ip" '
-            f"--api-port {OUTLINE_API_PORT} "
-            f"--keys-port {OUTLINE_ACCESS_KEY_PORT} "
-            ">/dev/null 2>&1 || { "
-            "echo 'Official Outline Server installer failed; sensitive installer output was suppressed' >&2; "
-            "exit 1; }",
-            'echo "Outline Server deployment completed on the private VM address"',
-        )
+    remote_command = render(
+        "deploy_outline.sh",
+        container_name=OUTLINE_CONTAINER_NAME,
+        image=OUTLINE_IMAGE,
+        base_image=OUTLINE_BASE_IMAGE,
+        ss_server_version=OUTLINE_SS_SERVER_VERSION,
+        installer_url=OUTLINE_INSTALLER_URL,
+        state_directory=OUTLINE_STATE_DIRECTORY,
+        api_port=OUTLINE_API_PORT,
+        keys_port=OUTLINE_ACCESS_KEY_PORT,
     )
     command = [
         "gcloud",
@@ -318,51 +249,10 @@ def create_outline_user(
         logger.error("Outline user name must not be empty")
         return None
 
-    remote_command = "\n".join(
-        (
-            "set -euo pipefail",
-            "sudo python3 - <<'PY'",
-            "import json",
-            "import ssl",
-            "import urllib.request",
-            f"user_name = {user_name!r}",
-            f"state_directory = {OUTLINE_STATE_DIRECTORY!r}",
-            "with open(f'{state_directory}/access.txt', encoding='utf-8') as state:",
-            "    api_url = next((",
-            "        line.removeprefix('apiUrl:').strip()",
-            "        for line in state",
-            "        if line.startswith('apiUrl:')",
-            "    ), None)",
-            "if not api_url:",
-            "    raise RuntimeError('Outline management endpoint is unavailable')",
-            "context = ssl._create_unverified_context()",
-            "keys_endpoint = f'{api_url}/access-keys'",
-            "with urllib.request.urlopen(keys_endpoint, context=context, timeout=30) as response:",
-            "    keys = json.load(response).get('accessKeys')",
-            "if not isinstance(keys, list):",
-            "    raise RuntimeError('Outline returned an invalid access-key list')",
-            "matching_keys = [key for key in keys if key.get('name') == user_name]",
-            "if len(matching_keys) > 1:",
-            "    raise RuntimeError('More than one Outline key has this user name')",
-            "if matching_keys:",
-            "    key = matching_keys[0]",
-            "else:",
-            "    request = urllib.request.Request(",
-            "        keys_endpoint,",
-            "        data=json.dumps({'name': user_name}).encode(),",
-            "        headers={'Content-Type': 'application/json'},",
-            "        method='POST',",
-            "    )",
-            "    with urllib.request.urlopen(request, context=context, timeout=30) as response:",
-            "        key = json.load(response)",
-            "if key.get('name') != user_name:",
-            "    raise RuntimeError('Outline returned a key for a different user')",
-            "access_url = key.get('accessUrl')",
-            "if not isinstance(access_url, str) or not access_url.startswith('ss://'):",
-            "    raise RuntimeError('Outline did not return a valid access key')",
-            "print(access_url)",
-            "PY",
-        )
+    remote_command = render(
+        "create_outline_user.sh",
+        user_name=shlex.quote(user_name),
+        state_directory=shlex.quote(OUTLINE_STATE_DIRECTORY),
     )
     command = [
         "gcloud",

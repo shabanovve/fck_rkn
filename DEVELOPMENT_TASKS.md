@@ -229,6 +229,12 @@ behavior that requires them.
   `outline-ss-server` accepts private target addresses (test environment only),
   so the RU forward can reach the private Squid endpoint.
 
+### 42b. [x] Move remote scripts out of Python strings
+
+- **Change:** Shell, Python and Dockerfile snippets live as real files in
+  `src/fck_rkn/remote/scripts/` and are loaded with `fck_rkn.remote.render`
+  (`@NAME@` placeholders, `#include` fragments, strict unused/missing checks).
+
 ### 46. Add tunnel-loss recovery to `ru-server-agent`
 
 - **Change:** Add retry behavior after Outline connection loss while keeping

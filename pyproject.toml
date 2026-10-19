@@ -22,3 +22,6 @@ ru-server-test-agent = "fck_rkn.agents.ru_server_test:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"fck_rkn.remote" = ["scripts/*"]

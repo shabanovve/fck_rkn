@@ -17,6 +17,7 @@ from pydantic_settings.exceptions import SettingsError
 from fck_rkn.agents.eu_server import SQUID_PORT
 from fck_rkn.config import TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import RU_INSTANCE_NAME
+from fck_rkn.remote import render
 
 
 logger = logging.getLogger(__name__)
@@ -53,43 +54,6 @@ def parse_access_url(access_url: str) -> tuple[str, str, str, int]:
     if not method or not password:
         raise ValueError("Outline access URL credentials are incomplete")
     return method, password, parts.hostname, parts.port
-
-
-def build_tunnel_command(probe_lines: tuple[str, ...]) -> str:
-    """Return a remote script that opens the Outline tunnel, then runs probe_lines.
-
-    The script reads "method password host port" from stdin.
-    """
-    return "\n".join(
-        (
-            "set -euo pipefail",
-            "read -r method password host port",
-            "if ! command -v docker >/dev/null 2>&1 || "
-            "! command -v curl >/dev/null 2>&1; then",
-            "  sudo apt-get update",
-            "  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl",
-            "fi",
-            "sudo systemctl enable --now docker",
-            f"sudo docker rm -f {PROBE_CONTAINER_NAME} >/dev/null 2>&1 || true",
-            f"sudo docker pull {PROBE_IMAGE} >/dev/null",
-            f"trap 'sudo docker rm -f {PROBE_CONTAINER_NAME} >/dev/null 2>&1 || true' EXIT",
-            "sudo docker run --detach "
-            f"--name {PROBE_CONTAINER_NAME} --network host "
-            "--entrypoint ss-tunnel "
-            f"{PROBE_IMAGE} "
-            '-s "$host" -p "$port" -k "$password" -m "$method" '
-            f'-l {PROBE_LOCAL_PORT} -L "$host:{SQUID_PORT}" -v >/dev/null',
-            "sleep 3",
-            "diagnose() {",
-            '  echo "--- ss-tunnel container state and logs ---"',
-            f"  sudo docker ps -a --filter name={PROBE_CONTAINER_NAME} "
-            "--format '{{.Status}}'",
-            f"  sudo docker logs --tail 30 {PROBE_CONTAINER_NAME} 2>&1 | "
-            "while IFS= read -r line; do echo \"${line//\"$password\"/[redacted]}\"; done",
-            "}",
-            *probe_lines,
-        )
-    )
 
 
 def run_remote_with_input(
@@ -181,42 +145,13 @@ def build_forward_deploy_command() -> str:
 def _build_container_deploy_command(
     container_name: str, state_directory: str, entrypoint: str, title: str
 ) -> str:
-    return "\n".join(
-        (
-            "set -euo pipefail",
-            "config=$(cat)",
-            f"container_name={container_name}",
-            f"expected_image={CLIENT_IMAGE}",
-            "if ! command -v docker >/dev/null 2>&1; then",
-            "  sudo apt-get update",
-            "  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io",
-            "fi",
-            "sudo systemctl enable --now docker",
-            'if sudo docker container inspect "$container_name" >/dev/null 2>&1; then',
-            '  actual_image="$(sudo docker inspect --format="{{.Config.Image}}" "$container_name")"',
-            '  actual_state="$(sudo docker inspect --format="{{.State.Status}}" "$container_name")"',
-            '  if [ "$actual_image" = "$expected_image" ] && [ "$actual_state" = running ]; then',
-            f'    echo "{title} container is already running; leaving it unchanged"',
-            "    exit 0",
-            "  fi",
-            '  if [ "$actual_state" = running ]; then',
-            f'    echo "Existing {title} container uses a different image; refusing to replace it" >&2',
-            "    exit 1",
-            "  fi",
-            f'  echo "Existing {title} container is not running; recreating it"',
-            '  sudo docker rm -f "$container_name" >/dev/null',
-            "fi",
-            f"sudo install -d -m 700 {state_directory}",
-            f"printf '%s' \"$config\" | sudo sh -c 'umask 077; cat > {state_directory}/config.json'",
-            'sudo docker pull "$expected_image" >/dev/null',
-            "sudo docker run --detach "
-            '--name "$container_name" '
-            "--restart unless-stopped --network host --user root "
-            f"--volume {state_directory}:/etc/shadowsocks:ro "
-            f"--entrypoint {entrypoint} "
-            '"$expected_image" -c /etc/shadowsocks/config.json >/dev/null',
-            f'echo "{title} container started"',
-        )
+    return render(
+        "deploy_container.sh",
+        container_name=container_name,
+        image=CLIENT_IMAGE,
+        state_directory=state_directory,
+        entrypoint=entrypoint,
+        title=title,
     )
 
 
@@ -298,20 +233,13 @@ def run_outline_squid_probe(
     access_url: str,
 ) -> int:
     """Try to reach the EU Squid endpoint from ru-server through EU Outline."""
-    remote_command = build_tunnel_command(
-        (
-            "curl_err=$(mktemp)",
-            "if ! status=$(curl --verbose --silent --output /dev/null "
-            "--max-time 30 --write-out '%{http_code}' "
-            f"--proxy http://127.0.0.1:{PROBE_LOCAL_PORT} {PROBE_TARGET_URL} "
-            '2>"$curl_err"); then',
-            '  echo "--- curl output ---"',
-            '  cat "$curl_err"',
-            "  diagnose",
-            "  exit 1",
-            "fi",
-            'echo "EU Squid answered through the Outline tunnel with HTTP $status"',
-        )
+    remote_command = render(
+        "outline_squid_probe.sh",
+        container_name=PROBE_CONTAINER_NAME,
+        image=PROBE_IMAGE,
+        local_port=PROBE_LOCAL_PORT,
+        squid_port=SQUID_PORT,
+        target_url=PROBE_TARGET_URL,
     )
     result = run_remote_with_key(
         settings,

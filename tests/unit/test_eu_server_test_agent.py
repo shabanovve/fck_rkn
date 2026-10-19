@@ -144,7 +144,8 @@ class EuServerTestAgentTests(unittest.TestCase):
         self.assertIn("--zone=europe-north1-a", command)
         self.assertIn("--tunnel-through-iap", command)
         self.assertIn(f"--command={SQUID_HTTP_CHECK_COMMAND}", command)
-        self.assertIn('HTTPConnection("127.0.0.1", 3128', SQUID_HTTP_CHECK_COMMAND)
+        self.assertIn('HTTPConnection("127.0.0.1", int(sys.argv[1])', SQUID_HTTP_CHECK_COMMAND)
+        self.assertIn("python3 - 3128", SQUID_HTTP_CHECK_COMMAND)
         self.assertIn('request("GET", "http://youtube.com/"', SQUID_HTTP_CHECK_COMMAND)
         self.assertIn("200 <= status < 400", SQUID_HTTP_CHECK_COMMAND)
         self.assertEqual(

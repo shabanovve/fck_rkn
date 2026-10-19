@@ -1,0 +1,49 @@
+import ast
+import subprocess
+import unittest
+from importlib.resources import files
+
+from fck_rkn.remote import render
+
+
+class RenderTests(unittest.TestCase):
+    def test_fills_placeholders_and_expands_includes(self) -> None:
+        script = render("deploy_squid.sh", container_name="c", image="i", port=1)
+        self.assertIn("container_name=c", script)
+        self.assertIn("apt-get install -y docker.io curl", script)
+        self.assertNotIn("#include", script)
+        self.assertNotIn("#!", script)
+
+    def test_rejects_missing_and_unused_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "no value for @IMAGE@"):
+            render("deploy_squid.sh", container_name="c", port=1)
+        with self.assertRaisesRegex(ValueError, "does not use: EXTRA"):
+            render("deploy_squid.sh", container_name="c", image="i", port=1, extra="x")
+
+    def test_values_are_not_expanded_twice(self) -> None:
+        script = render("deploy_squid.sh", container_name="@IMAGE@", image="i", port=1)
+        self.assertIn("container_name=@IMAGE@", script)
+
+    def test_python_scripts_are_valid_python(self) -> None:
+        for name in ("create_outline_user.py", "squid_http_check.py"):
+            source = (files("fck_rkn.remote") / "scripts" / name).read_text()
+            ast.parse(source)
+
+    def test_shell_scripts_are_valid_bash(self) -> None:
+        scripts = files("fck_rkn.remote") / "scripts"
+        for entry in scripts.iterdir():
+            if entry.name.endswith(".sh") and entry.name != "docker_setup.sh":
+                with self.subTest(script=entry.name):
+                    text = entry.read_text()
+                    text = text.replace("#include docker_setup.sh", "true")
+                    for include in ("create_outline_user.py", "squid_http_check.py",
+                                    "outline_shadowbox.Dockerfile"):
+                        text = text.replace(f"#include {include}", "")
+                    result = subprocess.run(
+                        ["bash", "-n"], input=text, text=True, capture_output=True
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
