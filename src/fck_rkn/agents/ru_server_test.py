@@ -11,9 +11,16 @@ from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import SQUID_PORT
 from fck_rkn.agents.ru_server import (
+    CLIENT_CONTAINER_NAME,
+    CLIENT_IMAGE,
+    CLIENT_LOCAL_PORT,
+    CLIENT_STATE_DIRECTORY,
     PROBE_LOCAL_PORT,
     PROBE_TARGET_URL,
+    build_client_config,
     build_tunnel_command,
+    parse_access_url,
+    run_remote_with_input,
     run_remote_with_key,
 )
 from fck_rkn.config import TestEnvironmentSettings, load_config
@@ -47,11 +54,64 @@ def check_outline_squid_route(
     )
 
 
+CLIENT_CHECK_COMMAND = "\n".join(
+    (
+        "set -euo pipefail",
+        "expected=$(cat)",
+        f"container_name={CLIENT_CONTAINER_NAME}",
+        'if [ "$(sudo docker inspect --format="{{.Config.Image}}" '
+        '"$container_name" 2>/dev/null || true)" != ' f"{CLIENT_IMAGE} ] || "
+        '[ "$(sudo docker inspect --format="{{.State.Status}}" '
+        '"$container_name" 2>/dev/null || true)" != running ]; then',
+        '  echo "Outline client container is not running with the expected image" >&2',
+        "  exit 1",
+        "fi",
+        "actual=$(sudo cat " f"{CLIENT_STATE_DIRECTORY}/config.json)",
+        'if [ "$actual" != "$expected" ]; then',
+        '  echo "Outline client is not configured with the test key" >&2',
+        "  exit 1",
+        "fi",
+        "if ! timeout 5 bash -c "
+        f"'echo > /dev/tcp/127.0.0.1/{CLIENT_LOCAL_PORT}'; then",
+        '  echo "Outline client local listener is unavailable" >&2',
+        "  exit 1",
+        "fi",
+        'server_host=$(python3 -c "import json,sys; c=json.loads(sys.argv[1]); '
+        'print(c[\'server\'], c[\'server_port\'])" "$expected")',
+        "read -r server_host server_port <<<\"$server_host\"",
+        "if ! timeout 10 bash -c "
+        "'echo > /dev/tcp/\"$0\"/\"$1\"' \"$server_host\" \"$server_port\"; then",
+        '  echo "EU Outline server is unreachable from the client" >&2',
+        "  exit 1",
+        "fi",
+        'echo "Outline client is running, uses the test key, and reaches EU Outline"',
+    )
+)
+
+
+def check_outline_client(
+    settings: TestEnvironmentSettings,
+    access_url: str,
+) -> int:
+    """Verify the ru-server Outline client runs and is bound to the test key."""
+    try:
+        method, password, host, port = parse_access_url(access_url)
+    except ValueError as error:
+        logger.error("%s", error)
+        return 1
+    return run_remote_with_input(
+        settings,
+        CLIENT_CHECK_COMMAND,
+        build_client_config(method, password, host, port),
+        "Checking the Outline client connection",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run ru-server service checks.")
     parser.add_argument(
         "action",
-        choices=("outline-squid-route",),
+        choices=("outline-squid-route", "outline-client"),
         help="Check to run",
     )
     args = parser.parse_args(argv)
@@ -71,7 +131,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # The key is read from stdin so it never appears in argv or shell history.
-    return check_outline_squid_route(settings, sys.stdin.readline())
+    access_url = sys.stdin.readline()
+    if args.action == "outline-client":
+        return check_outline_client(settings, access_url)
+    return check_outline_squid_route(settings, access_url)
 
 
 if __name__ == "__main__":

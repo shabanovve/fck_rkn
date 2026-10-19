@@ -198,6 +198,19 @@ def build_client_deploy_command() -> str:
     )
 
 
+def build_client_config(method: str, password: str, host: str, port: int) -> str:
+    return json.dumps(
+        {
+            "server": host,
+            "server_port": port,
+            "method": method,
+            "password": password,
+            "local_address": "127.0.0.1",
+            "local_port": CLIENT_LOCAL_PORT,
+        }
+    )
+
+
 def deploy_outline_client(
     settings: TestEnvironmentSettings,
     access_url: str,
@@ -208,16 +221,7 @@ def deploy_outline_client(
     except ValueError as error:
         logger.error("%s", error)
         return 1
-    client_config = json.dumps(
-        {
-            "server": host,
-            "server_port": port,
-            "method": method,
-            "password": password,
-            "local_address": "127.0.0.1",
-            "local_port": CLIENT_LOCAL_PORT,
-        }
-    )
+    client_config = build_client_config(method, password, host, port)
     result = run_remote_with_input(
         settings,
         build_client_deploy_command(),

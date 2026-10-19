@@ -196,7 +196,7 @@ behavior that requires them.
 - **Change:** Add an action that deploys the approved Outline client in
   Docker on `ru-server` and connects to EU Outline using a protected test key.
 
-### 38. Add RU Outline client test
+### 38. [x] Add RU Outline client test
 
 - **Test:** Add a `ru-server-test-agent` check that verifies the client is
   connected using the test key.
