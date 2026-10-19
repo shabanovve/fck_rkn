@@ -23,8 +23,8 @@ from fck_rkn.agents.eu_server_test import (
     check_squid_http,
     check_squid_startup,
 )
-from fck_rkn.agents.ru_server import deploy_outline_client
-from fck_rkn.agents.ru_server_test import check_outline_client
+from fck_rkn.agents.ru_server import deploy_outline_client, deploy_squid_forward
+from fck_rkn.agents.ru_server_test import check_outline_client, check_squid_forward
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import (
     ensure_eu_server,
@@ -318,6 +318,38 @@ def main() -> int:
         return 17
 
     logger.info("RU Outline client verified")
+
+    logger.info("Invoking ru-server-agent EU Squid forward deployment")
+    forward_deploy_exit_code = deploy_squid_forward(settings, access_url)
+    if forward_deploy_exit_code != 0:
+        logger.error(
+            "ru-server-agent Squid forward deployment failed with exit "
+            "status %d",
+            forward_deploy_exit_code,
+        )
+        print(
+            "ru-server-agent Squid forward deployment failed with exit "
+            f"status {forward_deploy_exit_code}.",
+            file=sys.stderr,
+        )
+        return 18
+
+    logger.info("Invoking ru-server-test-agent Squid forward check")
+    forward_check_exit_code = check_squid_forward(settings)
+    if forward_check_exit_code != 0:
+        logger.error(
+            "ru-server-test-agent Squid forward check failed with exit "
+            "status %d",
+            forward_check_exit_code,
+        )
+        print(
+            "ru-server-test-agent Squid forward check failed with exit "
+            f"status {forward_check_exit_code}.",
+            file=sys.stderr,
+        )
+        return 19
+
+    logger.info("RU forward to EU Squid verified")
 
     print(
         f"{ru_instance.name} is available in project "

@@ -218,7 +218,7 @@ behavior that requires them.
 - **Test:** Add a `ru-server-test-agent` check that verifies TCP/3128
   forwards to the real EU Squid service and carries an HTTP request.
 
-### 42. Deploy and test RU-to-EU forwarding
+### 42. [x] Deploy and test RU-to-EU forwarding
 
 - **Orchestration:** Make `test_env_host` deploy forwarding and run the
   forwarding test.

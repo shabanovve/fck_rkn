@@ -51,6 +51,18 @@ class OrchestratorPingTests(unittest.TestCase):
             "fck_rkn.orchestration.test_environment.check_outline_client",
             return_value=0,
         )
+        self.ru_forward_deploy = patch(
+            "fck_rkn.orchestration.test_environment.deploy_squid_forward",
+            return_value=0,
+        )
+        self.ru_forward_check = patch(
+            "fck_rkn.orchestration.test_environment.check_squid_forward",
+            return_value=0,
+        )
+        self.ru_forward_deploy_mock = self.ru_forward_deploy.start()
+        self.ru_forward_check_mock = self.ru_forward_check.start()
+        self.addCleanup(self.ru_forward_deploy.stop)
+        self.addCleanup(self.ru_forward_check.stop)
         self.ru_client_deploy_mock = self.ru_client_deploy.start()
         self.ru_client_check_mock = self.ru_client_check.start()
         self.addCleanup(self.ru_client_deploy.stop)
@@ -107,6 +119,10 @@ class OrchestratorPingTests(unittest.TestCase):
         self.ru_client_check_mock.assert_called_once_with(
             self.settings, "ss://configured-key"
         )
+        self.ru_forward_deploy_mock.assert_called_once_with(
+            self.settings, "ss://configured-key"
+        )
+        self.ru_forward_check_mock.assert_called_once_with(self.settings)
         ping.assert_called_once_with(self.settings)
         deploy.assert_called_once_with(self.settings)
         squid_check.assert_called_once_with(self.settings)
@@ -424,6 +440,33 @@ class OrchestratorPingTests(unittest.TestCase):
 
         self.assertEqual(result, 17)
         self.assertIn("client check failed", stderr.getvalue())
+
+    def test_stops_when_ru_squid_forward_deployment_fails(self) -> None:
+        self.ru_forward_deploy_mock.return_value = 1
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 18)
+        self.ru_forward_check_mock.assert_not_called()
+        self.assertIn("forward deployment failed", stderr.getvalue())
+        self.assertNotIn("ss://configured-key", stderr.getvalue())
+
+    def test_fails_when_ru_squid_forward_check_fails(self) -> None:
+        self.ru_forward_check_mock.return_value = 1
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 19)
+        self.assertIn("forward check failed", stderr.getvalue())
+
+    def test_forward_is_not_deployed_when_client_check_fails(self) -> None:
+        self.ru_client_check_mock.return_value = 1
+
+        result, _ = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 17)
+        self.ru_forward_deploy_mock.assert_not_called()
+        self.ru_forward_check_mock.assert_not_called()
 
     def test_does_not_run_ping_if_vm_provisioning_fails(self) -> None:
         with (
