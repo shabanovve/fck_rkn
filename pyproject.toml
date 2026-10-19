@@ -17,6 +17,7 @@ dependencies = [
 test-env-host = "fck_rkn.orchestration.test_environment:main"
 eu-server-agent = "fck_rkn.agents.eu_server:main"
 eu-server-test-agent = "fck_rkn.agents.eu_server_test:main"
+ru-server-agent = "fck_rkn.agents.ru_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -171,7 +171,7 @@ behavior that requires them.
 
 ## RU Outline client path to EU Squid
 
-### 34. Add Outline feasibility probe to `ru-server-agent`
+### 34. [x] Add Outline feasibility probe to `ru-server-agent`
 
 - **Change:** Add the smallest action that uses the intended Outline client
   to try reaching the EU Squid endpoint from `ru-server`.
