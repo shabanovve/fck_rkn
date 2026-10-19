@@ -46,18 +46,12 @@ def parse_access_url(access_url: str) -> tuple[str, str, str, int]:
     return method, password, parts.hostname, parts.port
 
 
-def run_outline_squid_probe(
-    settings: TestEnvironmentSettings,
-    access_url: str,
-) -> int:
-    """Try to reach the EU Squid endpoint from ru-server through EU Outline."""
-    try:
-        method, password, host, port = parse_access_url(access_url)
-    except ValueError as error:
-        logger.error("%s", error)
-        return 1
+def build_tunnel_command(probe_lines: tuple[str, ...]) -> str:
+    """Return a remote script that opens the Outline tunnel, then runs probe_lines.
 
-    remote_command = "\n".join(
+    The script reads "method password host port" from stdin.
+    """
+    return "\n".join(
         (
             "set -euo pipefail",
             "read -r method password host port",
@@ -77,13 +71,24 @@ def run_outline_squid_probe(
             '-s "$host" -p "$port" -k "$password" -m "$method" '
             f'-l {PROBE_LOCAL_PORT} -L "$host:{SQUID_PORT}" >/dev/null',
             "sleep 3",
-            "status=$(curl --silent --show-error --output /dev/null "
-            "--max-time 30 --write-out '%{http_code}' "
-            f"--proxy http://127.0.0.1:{PROBE_LOCAL_PORT} {PROBE_TARGET_URL})",
-            'echo "EU Squid answered through the Outline tunnel with HTTP $status"',
-            '[ "$status" != 000 ]',
+            *probe_lines,
         )
     )
+
+
+def run_remote_with_key(
+    settings: TestEnvironmentSettings,
+    access_url: str,
+    remote_command: str,
+    description: str,
+) -> int:
+    """Run remote_command on ru-server, passing the access key through stdin."""
+    try:
+        method, password, host, port = parse_access_url(access_url)
+    except ValueError as error:
+        logger.error("%s", error)
+        return 1
+
     command = [
         "gcloud",
         "compute",
@@ -95,11 +100,7 @@ def run_outline_squid_probe(
         f"--command={remote_command}",
         "--quiet",
     ]
-    logger.info(
-        "Probing EU Squid TCP/%d from %s through the Outline tunnel",
-        SQUID_PORT,
-        RU_INSTANCE_NAME,
-    )
+    logger.info("%s on %s", description, RU_INSTANCE_NAME)
     try:
         result = subprocess.run(
             command,
@@ -111,7 +112,8 @@ def run_outline_squid_probe(
         )
     except subprocess.TimeoutExpired:
         logger.error(
-            "Outline probe over IAP SSH exceeded the %d second timeout",
+            "%s exceeded the %d second timeout",
+            description,
             PROBE_TIMEOUT_SECONDS,
         )
         return 1
@@ -123,14 +125,37 @@ def run_outline_squid_probe(
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
     if result.returncode != 0:
         logger.error(
-            "Outline probe failed with exit status %d; "
-            "sensitive command output was suppressed",
+            "%s failed with exit status %d; sensitive command output was suppressed",
+            description,
             result.returncode,
         )
         return result.returncode or 1
-
-    logger.info("EU Squid is reachable from %s through Outline", RU_INSTANCE_NAME)
     return 0
+
+
+def run_outline_squid_probe(
+    settings: TestEnvironmentSettings,
+    access_url: str,
+) -> int:
+    """Try to reach the EU Squid endpoint from ru-server through EU Outline."""
+    remote_command = build_tunnel_command(
+        (
+            "status=$(curl --silent --show-error --output /dev/null "
+            "--max-time 30 --write-out '%{http_code}' "
+            f"--proxy http://127.0.0.1:{PROBE_LOCAL_PORT} {PROBE_TARGET_URL})",
+            'echo "EU Squid answered through the Outline tunnel with HTTP $status"',
+            '[ "$status" != 000 ]',
+        )
+    )
+    result = run_remote_with_key(
+        settings,
+        access_url,
+        remote_command,
+        f"Probing EU Squid TCP/{SQUID_PORT} through the Outline tunnel",
+    )
+    if result == 0:
+        logger.info("EU Squid is reachable from %s through Outline", RU_INSTANCE_NAME)
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:

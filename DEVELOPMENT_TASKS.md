@@ -176,7 +176,7 @@ behavior that requires them.
 - **Change:** Add the smallest action that uses the intended Outline client
   to try reaching the EU Squid endpoint from `ru-server`.
 
-### 35. Add feasibility test to `ru-server-test-agent`
+### 35. [x] Add feasibility test to `ru-server-test-agent`
 
 - **Test:** Add a test-agent check for the actual route to EU TCP/3128 using
   the real Outline client/server, not a simulated route.
