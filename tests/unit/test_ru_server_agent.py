@@ -5,7 +5,14 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from fck_rkn.agents.ru_server import parse_access_url, run_outline_squid_probe
+import json
+
+from fck_rkn.agents.ru_server import (
+    build_client_deploy_command,
+    deploy_outline_client,
+    parse_access_url,
+    run_outline_squid_probe,
+)
 from fck_rkn.config import TestEnvironmentSettings
 
 
@@ -78,4 +85,54 @@ class RuServerAgentTests(unittest.TestCase):
             )
         with patch("fck_rkn.agents.ru_server.subprocess.run") as run:
             self.assertEqual(run_outline_squid_probe(make_settings(), "bad"), 1)
+        run.assert_not_called()
+
+
+class RuServerClientDeployTests(unittest.TestCase):
+    def test_deploys_persistent_client_with_config_via_stdin(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="started\n", stderr=""
+        )
+        with patch(
+            "fck_rkn.agents.ru_server.subprocess.run", return_value=completed
+        ) as run:
+            result = deploy_outline_client(make_settings(), make_access_url())
+
+        self.assertEqual(result, 0)
+        command = run.call_args.args[0]
+        self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "ru-server"])
+        self.assertNotIn("test-secret", " ".join(command))
+        config = json.loads(run.call_args.kwargs["input"])
+        self.assertEqual(config["server"], "configured-host")
+        self.assertEqual(config["server_port"], 10001)
+        self.assertEqual(config["method"], "test-method")
+        self.assertEqual(config["password"], "test-secret")
+        self.assertEqual(config["local_address"], "127.0.0.1")
+
+    def test_client_script_is_private_idempotent_and_restarts(self) -> None:
+        script = build_client_deploy_command()
+        self.assertIn("ss-local", script)
+        self.assertIn("--restart unless-stopped", script)
+        self.assertIn("install -d -m 700", script)
+        self.assertIn("umask 077", script)
+        self.assertIn("leaving it unchanged", script)
+        self.assertIn("refusing to replace it", script)
+        self.assertNotIn("test-secret", script)
+
+    def test_deploy_fails_on_remote_error_without_leaking_output(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="test-secret"
+        )
+        with (
+            patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed),
+            self.assertLogs("fck_rkn.agents.ru_server", level="ERROR") as logs,
+        ):
+            result = deploy_outline_client(make_settings(), make_access_url())
+
+        self.assertEqual(result, 1)
+        self.assertNotIn("test-secret", "\n".join(logs.output))
+
+    def test_deploy_rejects_invalid_key_without_running_ssh(self) -> None:
+        with patch("fck_rkn.agents.ru_server.subprocess.run") as run:
+            self.assertEqual(deploy_outline_client(make_settings(), "bad"), 1)
         run.assert_not_called()

@@ -191,7 +191,7 @@ behavior that requires them.
   Squid TCP/3128. Outline/Shadowsocks alone does not provide general layer-3
   routing, so later forwarding tasks must stay within this approved design.
 
-### 37. Add Outline client deployment to `ru-server-agent`
+### 37. [x] Add Outline client deployment to `ru-server-agent`
 
 - **Change:** Add an action that deploys the approved Outline client in
   Docker on `ru-server` and connects to EU Outline using a protected test key.
