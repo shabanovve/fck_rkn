@@ -140,21 +140,21 @@ behavior that requires them.
 
 ## Create `ru-server`
 
-### 28. Add `ru-server` lookup to `test_env_host`
+### 28. [x] Add `ru-server` lookup to `test_env_host`
 
 - **Change:** Make `test_env_host` look up `ru-server` in the configured test
   project, zone, and network.
 
-### 29. Test `ru-server` lookup
+### 29. [x] Test `ru-server` lookup
 
 - **Test:** In Docker, verify present and absent instance responses.
 
-### 30. Add `ru-server` creation
+### 30. [x] Add `ru-server` creation
 
 - **Change:** When absent, make `test_env_host` create an Ubuntu VM named
   `ru-server` in the test network.
 
-### 31. Test `ru-server` creation
+### 31. [x] Test `ru-server` creation
 
 - **Test:** In Docker, verify the configured name, project, zone, Ubuntu
   image, and network are passed to GCP.

@@ -33,6 +33,12 @@ class OrchestratorPingTests(unittest.TestCase):
         self.outline_check_mock = self.outline_check.start()
         self.addCleanup(self.outline_deploy.stop)
         self.addCleanup(self.outline_check.stop)
+        self.ru_lookup = patch(
+            "fck_rkn.orchestration.test_environment.ensure_ru_server",
+            return_value=compute_v1.Instance(name="ru-server"),
+        )
+        self.ru_lookup_mock = self.ru_lookup.start()
+        self.addCleanup(self.ru_lookup.stop)
 
     def test_invokes_ping_only_after_project_and_vm_checks_pass(self) -> None:
         output = StringIO()
@@ -76,6 +82,7 @@ class OrchestratorPingTests(unittest.TestCase):
         load_config.assert_called_once_with()
         check_project.assert_called_once_with(self.settings)
         provision.assert_called_once_with(self.settings)
+        self.ru_lookup_mock.assert_called_once_with(self.settings)
         ping.assert_called_once_with(self.settings)
         deploy.assert_called_once_with(self.settings)
         squid_check.assert_called_once_with(self.settings)

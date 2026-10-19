@@ -23,6 +23,7 @@ from fck_rkn.agents.eu_server_test import (
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import (
     ensure_eu_server,
+    ensure_ru_server,
     stop_test_project_vms,
     validate_project_access,
 )
@@ -252,5 +253,32 @@ def main() -> int:
         return 11
 
     logger.info("eu-server-test-agent Outline health check passed")
+    try:
+        ru_instance = ensure_ru_server(settings)
+    except GoogleAPICallError as error:
+        logger.error("GCP ru-server provisioning failed")
+        print("GCP ru-server provisioning failed.", file=sys.stderr)
+        print(f"  Error type: {type(error).__name__}", file=sys.stderr)
+        if error.code is not None:
+            print(f"  HTTP status: {error.code}", file=sys.stderr)
+        print(f"  Details: {error.message or error}", file=sys.stderr)
+        return 12
+    except GoogleAuthError:
+        logger.error("GCP authentication failed during ru-server provisioning")
+        print(
+            "GCP authentication failed during ru-server provisioning. "
+            "Verify the active gcloud account and ADC credentials.",
+            file=sys.stderr,
+        )
+        return 12
+    except (OSError, RuntimeError, TimeoutError) as error:
+        logger.error("ru-server provisioning failed: %s", error)
+        print(f"ru-server provisioning failed: {error}", file=sys.stderr)
+        return 12
+
+    print(
+        f"{ru_instance.name} is available in project "
+        f"{settings.GCP_PROJECT_ID}, zone {settings.GCP_ZONE}."
+    )
     logger.info("Test environment preflight and provisioning completed")
     return 0

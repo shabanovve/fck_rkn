@@ -29,10 +29,13 @@ from fck_rkn.gcp.compute import (
     _wait_for_ssh,
     _validate_instance_configuration,
     build_eu_server,
+    build_ru_server,
     build_cloud_router,
     build_ssh_firewall_rules,
     ensure_cloud_nat,
     ensure_eu_server,
+    ensure_ru_server,
+    lookup_ru_server,
 )
 from fck_rkn.orchestration.test_environment import main as orchestrator_main
 
@@ -51,6 +54,98 @@ class ComputeProvisioningTests(unittest.TestCase):
         instance = build_eu_server(make_settings())
         instance.status = "RUNNING"
         return instance
+
+    def test_ru_server_lookup_returns_existing_instance_in_configured_network(
+        self,
+    ) -> None:
+        settings = make_settings()
+        instance = compute_v1.Instance(
+            name="ru-server",
+            network_interfaces=[
+                compute_v1.NetworkInterface(
+                    network="projects/fck-rkn-test/global/networks/default"
+                )
+            ],
+        )
+        instances_client = Mock()
+        instances_client.get.return_value = instance
+
+        result = lookup_ru_server(settings, instances_client)
+
+        self.assertIs(result, instance)
+        instances_client.get.assert_called_once_with(
+            project="fck-rkn-test",
+            zone="europe-north1-a",
+            instance="ru-server",
+        )
+        instances_client.insert.assert_not_called()
+
+    def test_ru_server_lookup_returns_none_when_instance_is_absent(self) -> None:
+        instances_client = Mock()
+        instances_client.get.side_effect = NotFound("instance missing")
+
+        result = lookup_ru_server(make_settings(), instances_client)
+
+        self.assertIsNone(result)
+        instances_client.get.assert_called_once_with(
+            project="fck-rkn-test",
+            zone="europe-north1-a",
+            instance="ru-server",
+        )
+        instances_client.insert.assert_not_called()
+
+    def test_ru_server_lookup_rejects_instance_on_unconfigured_network(self) -> None:
+        instance = compute_v1.Instance(
+            name="ru-server",
+            network_interfaces=[
+                compute_v1.NetworkInterface(
+                    network="projects/fck-rkn-test/global/networks/other"
+                )
+            ],
+        )
+        instances_client = Mock()
+        instances_client.get.return_value = instance
+
+        with self.assertRaisesRegex(RuntimeError, "not connected"):
+            lookup_ru_server(make_settings(), instances_client)
+
+        instances_client.insert.assert_not_called()
+
+    def test_ru_server_creation_passes_expected_resource_to_gcp(self) -> None:
+        settings = make_settings()
+        created_instance = build_ru_server(settings)
+        instances_client = Mock()
+        instances_client.get.side_effect = [
+            NotFound("instance missing"),
+            created_instance,
+        ]
+        operation = Mock()
+        instances_client.insert.return_value = operation
+
+        result = ensure_ru_server(settings, instances_client)
+
+        self.assertIs(result, created_instance)
+        operation.result.assert_called_once()
+        instances_client.insert.assert_called_once()
+        insert_args = instances_client.insert.call_args.kwargs
+        self.assertEqual(insert_args["project"], "fck-rkn-test")
+        self.assertEqual(insert_args["zone"], "europe-north1-a")
+        resource = insert_args["instance_resource"]
+        self.assertEqual(resource.name, "ru-server")
+        self.assertEqual(
+            resource.disks[0].initialize_params.source_image,
+            "projects/ubuntu-os-cloud/global/images/family/"
+            "ubuntu-2404-lts-amd64",
+        )
+        self.assertEqual(
+            resource.network_interfaces[0].network,
+            "projects/fck-rkn-test/global/networks/default",
+        )
+        self.assertEqual(
+            resource.network_interfaces[0].subnetwork,
+            "projects/fck-rkn-test/regions/europe-north1/subnetworks/default",
+        )
+        self.assertFalse(resource.network_interfaces[0].access_configs)
 
     def test_instance_uses_approved_vm_image_network_and_os_login(self) -> None:
         instance = build_eu_server(make_settings())

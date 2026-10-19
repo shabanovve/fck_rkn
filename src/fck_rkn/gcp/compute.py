@@ -16,6 +16,7 @@ from fck_rkn.config import TestEnvironmentSettings
 
 
 INSTANCE_NAME = "eu-server"
+RU_INSTANCE_NAME = "ru-server"
 NAT_ROUTER_NAME = "fck-rkn-test-nat-router"
 NAT_CONFIG_NAME = "fck-rkn-test-cloud-nat"
 INSTANCE_OPERATION_TIMEOUT_SECONDS = 300
@@ -378,7 +379,19 @@ def ensure_cloud_nat(
 
 def build_eu_server(settings: TestEnvironmentSettings) -> compute_v1.Instance:
     """Build the Ubuntu VM resource for the approved test configuration."""
-    logger.info("Building eu-server VM resource")
+    return _build_test_server(settings, INSTANCE_NAME)
+
+
+def build_ru_server(settings: TestEnvironmentSettings) -> compute_v1.Instance:
+    """Build the Ubuntu VM resource for ru-server."""
+    return _build_test_server(settings, RU_INSTANCE_NAME)
+
+
+def _build_test_server(
+    settings: TestEnvironmentSettings,
+    instance_name: str,
+) -> compute_v1.Instance:
+    logger.info("Building %s VM resource", instance_name)
     region = _region_for_zone(settings)
     network_path = (
         f"projects/{settings.GCP_PROJECT_ID}/global/networks/"
@@ -389,7 +402,7 @@ def build_eu_server(settings: TestEnvironmentSettings) -> compute_v1.Instance:
         f"{settings.GCP_SUBNETWORK}"
     )
     return compute_v1.Instance(
-        name=INSTANCE_NAME,
+        name=instance_name,
         machine_type=(
             f"zones/{settings.GCP_ZONE}/machineTypes/"
             f"{settings.GCP_MACHINE_TYPE}"
@@ -426,13 +439,14 @@ def build_eu_server(settings: TestEnvironmentSettings) -> compute_v1.Instance:
     )
 
 
-def _get_or_create_eu_server(
+def _lookup_instance(
     settings: TestEnvironmentSettings,
+    instance_name: str,
     instances_client: compute_v1.InstancesClient,
-) -> compute_v1.Instance:
+) -> compute_v1.Instance | None:
     logger.info(
         "Looking up %s in project %s, zone %s",
-        INSTANCE_NAME,
+        instance_name,
         settings.GCP_PROJECT_ID,
         settings.GCP_ZONE,
     )
@@ -440,32 +454,120 @@ def _get_or_create_eu_server(
         instance = instances_client.get(
             project=settings.GCP_PROJECT_ID,
             zone=settings.GCP_ZONE,
-            instance=INSTANCE_NAME,
+            instance=instance_name,
         )
-        logger.info("Found existing VM %s", INSTANCE_NAME)
-        return instance
     except NotFound:
-        logger.info("VM %s does not exist; creating it", INSTANCE_NAME)
-        instance = build_eu_server(settings)
-        try:
-            logger.info("Waiting for VM creation operation to complete")
-            operation = instances_client.insert(
-                project=settings.GCP_PROJECT_ID,
-                zone=settings.GCP_ZONE,
-                instance_resource=instance,
-            )
-            operation.result(timeout=INSTANCE_OPERATION_TIMEOUT_SECONDS)
-            logger.info("VM creation operation completed for %s", INSTANCE_NAME)
-        except AlreadyExists:
-            logger.info(
-                "Another provisioning run created %s; retrieving it",
-                INSTANCE_NAME,
-            )
-        return instances_client.get(
+        logger.info("%s does not exist in the configured zone", instance_name)
+        return None
+    logger.info("Found existing VM %s", instance_name)
+    return instance
+
+
+def _get_or_create_instance(
+    settings: TestEnvironmentSettings,
+    desired_instance: compute_v1.Instance,
+    instances_client: compute_v1.InstancesClient,
+) -> compute_v1.Instance:
+    instance_name = desired_instance.name
+    instance = _lookup_instance(settings, instance_name, instances_client)
+    if instance is not None:
+        return instance
+
+    logger.info("VM %s does not exist; creating it", instance_name)
+    try:
+        logger.info("Waiting for VM creation operation to complete")
+        operation = instances_client.insert(
             project=settings.GCP_PROJECT_ID,
             zone=settings.GCP_ZONE,
-            instance=INSTANCE_NAME,
+            instance_resource=desired_instance,
         )
+        operation.result(timeout=INSTANCE_OPERATION_TIMEOUT_SECONDS)
+        logger.info("VM creation operation completed for %s", instance_name)
+    except AlreadyExists:
+        logger.info(
+            "Another provisioning run created %s; retrieving it",
+            instance_name,
+        )
+    return instances_client.get(
+        project=settings.GCP_PROJECT_ID,
+        zone=settings.GCP_ZONE,
+        instance=instance_name,
+    )
+
+
+def lookup_ru_server(
+    settings: TestEnvironmentSettings,
+    instances_client: compute_v1.InstancesClient | None = None,
+) -> compute_v1.Instance | None:
+    """Look up ru-server in the configured project and zone without creating it."""
+    logger.info(
+        "Looking up %s in project %s, zone %s",
+        RU_INSTANCE_NAME,
+        settings.GCP_PROJECT_ID,
+        settings.GCP_ZONE,
+    )
+    if instances_client is None:
+        credentials, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        instances_client = compute_v1.InstancesClient(credentials=credentials)
+
+    instance = _lookup_instance(settings, RU_INSTANCE_NAME, instances_client)
+    if instance is None:
+        return None
+
+    _validate_ru_server_network(instance, settings)
+    logger.info("%s exists in the configured test network", RU_INSTANCE_NAME)
+    return instance
+
+
+def _validate_ru_server_network(
+    instance: compute_v1.Instance,
+    settings: TestEnvironmentSettings,
+) -> None:
+    expected_network = (
+        f"projects/{settings.GCP_PROJECT_ID}/global/networks/"
+        f"{settings.GCP_NETWORK}"
+    )
+    if not instance.network_interfaces or not any(
+        (interface.network or "").endswith(expected_network)
+        for interface in instance.network_interfaces
+    ):
+        raise RuntimeError(
+            f"Existing {RU_INSTANCE_NAME} is not connected to the configured "
+            f"test network {settings.GCP_NETWORK!r}; it was not modified"
+        )
+
+
+def ensure_ru_server(
+    settings: TestEnvironmentSettings,
+    instances_client: compute_v1.InstancesClient | None = None,
+) -> compute_v1.Instance:
+    """Create or reuse ru-server in the configured test project and network."""
+    if instances_client is None:
+        credentials, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        instances_client = compute_v1.InstancesClient(credentials=credentials)
+
+    instance = _get_or_create_instance(
+        settings,
+        build_ru_server(settings),
+        instances_client,
+    )
+    _validate_ru_server_network(instance, settings)
+    return instance
+
+
+def _get_or_create_eu_server(
+    settings: TestEnvironmentSettings,
+    instances_client: compute_v1.InstancesClient,
+) -> compute_v1.Instance:
+    return _get_or_create_instance(
+        settings,
+        build_eu_server(settings),
+        instances_client,
+    )
 
 
 def _validate_instance_configuration(
