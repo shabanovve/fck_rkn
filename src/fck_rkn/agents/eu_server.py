@@ -20,7 +20,26 @@ SQUID_CONTAINER_NAME = "fck-rkn-squid"
 SQUID_IMAGE = "ubuntu/squid:latest"
 SQUID_PORT = 3128
 OUTLINE_CONTAINER_NAME = "fck-rkn-outline-shadowbox"
-OUTLINE_IMAGE = "quay.io/outline/shadowbox:stable"
+OUTLINE_BASE_IMAGE = "quay.io/outline/shadowbox:stable"
+OUTLINE_IMAGE = "fck-rkn-shadowbox:no-public-ip-check"
+OUTLINE_SS_SERVER_VERSION = "v1.7.3"
+# Test environment only: the patched outline-ss-server accepts private target
+# addresses so the RU route can reach eu-server's private Squid endpoint.
+OUTLINE_IMAGE_DOCKERFILE = "\n".join(
+    (
+        "FROM golang:1.24 AS build",
+        "RUN git clone -q --depth 1 --branch "
+        f"{OUTLINE_SS_SERVER_VERSION} "
+        "https://github.com/Jigsaw-Code/outline-ss-server /src",
+        "WORKDIR /src",
+        "RUN sed -i 's/^\\(func RequirePublicIP(ip net.IP) error {\\)$/\\1\\n\\treturn nil/' "
+        "net/private_net.go \\",
+        " && grep -A1 'func RequirePublicIP' net/private_net.go | grep -q 'return nil' \\",
+        " && CGO_ENABLED=0 go build -o /outline-ss-server ./cmd/outline-ss-server",
+        f"FROM {OUTLINE_BASE_IMAGE}",
+        "COPY --from=build /outline-ss-server /opt/outline-server/bin/outline-ss-server",
+    )
+)
 OUTLINE_INSTALLER_URL = (
     "https://raw.githubusercontent.com/Jigsaw-Code/outline-server/"
     "master/src/server_manager/install_scripts/install_server.sh"
@@ -203,8 +222,13 @@ def deploy_outline(settings: TestEnvironmentSettings) -> int:
             '    echo "Outline Server container is already running; leaving it unchanged"',
             "    exit 0",
             "  fi",
-            '  echo "Existing Outline Server container differs; refusing to replace it" >&2',
-            "  exit 1",
+            f'  if [ "$actual_image" = {OUTLINE_BASE_IMAGE} ]; then',
+            '    echo "Replacing the stock Outline Server container with the patched image"',
+            '    sudo docker rm -f "$container_name" watchtower >/dev/null 2>&1 || true',
+            "  else",
+            '    echo "Existing Outline Server container differs; refusing to replace it" >&2',
+            "    exit 1",
+            "  fi",
             "fi",
             'if sudo docker container inspect watchtower >/dev/null 2>&1; then',
             '  echo "A watchtower container already exists; refusing to replace it" >&2',
@@ -215,6 +239,11 @@ def deploy_outline(settings: TestEnvironmentSettings) -> int:
             "  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io curl",
             "fi",
             "sudo systemctl enable --now docker",
+            'echo "Building the Outline Server image without the public-IP target check"',
+            "sudo docker build -t "
+            f"{OUTLINE_IMAGE} -f - \"$(mktemp -d)\" <<'FCK_RKN_DOCKERFILE'",
+            OUTLINE_IMAGE_DOCKERFILE,
+            "FCK_RKN_DOCKERFILE",
             'private_ip="$(curl --fail --silent --show-error '
             "-H 'Metadata-Flavor: Google' "
             "'http://metadata.google.internal/computeMetadata/v1/"

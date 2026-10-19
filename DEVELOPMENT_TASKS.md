@@ -223,6 +223,12 @@ behavior that requires them.
 - **Orchestration:** Make `test_env_host` deploy forwarding and run the
   forwarding test.
 
+### 42a. [x] Allow private targets in the test Outline Server
+
+- **Change:** `eu-server-agent` builds a derived Outline Server image whose
+  `outline-ss-server` accepts private target addresses (test environment only),
+  so the RU forward can reach the private Squid endpoint.
+
 ### 46. Add tunnel-loss recovery to `ru-server-agent`
 
 - **Change:** Add retry behavior after Outline connection loss while keeping

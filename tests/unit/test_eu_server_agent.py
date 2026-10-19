@@ -13,7 +13,9 @@ from fck_rkn.agents.eu_server import (
     OUTLINE_API_PORT,
     OUTLINE_CONTAINER_NAME,
     OUTLINE_DEPLOY_TIMEOUT_SECONDS,
+    OUTLINE_BASE_IMAGE,
     OUTLINE_IMAGE,
+    OUTLINE_IMAGE_DOCKERFILE,
     OUTLINE_INSTALLER_URL,
     OUTLINE_STATE_DIRECTORY,
     SQUID_CONTAINER_NAME,
@@ -240,6 +242,13 @@ class EuServerAgentTests(unittest.TestCase):
         self.assertIn(f"--api-port {OUTLINE_API_PORT}", remote_command)
         self.assertIn(f"--keys-port {OUTLINE_ACCESS_KEY_PORT}", remote_command)
         self.assertIn(">/dev/null 2>&1", remote_command)
+        self.assertIn(OUTLINE_IMAGE_DOCKERFILE, remote_command)
+        self.assertIn(f"FROM {OUTLINE_BASE_IMAGE}", remote_command)
+        self.assertIn("Replacing the stock Outline Server container", remote_command)
+        self.assertLess(
+            remote_command.index("FCK_RKN_DOCKERFILE"),
+            remote_command.index(OUTLINE_INSTALLER_URL),
+        )
         self.assertIn("Metadata-Flavor: Google", remote_command)
         self.assertIn("refusing to replace it", remote_command)
         self.assertIn(
