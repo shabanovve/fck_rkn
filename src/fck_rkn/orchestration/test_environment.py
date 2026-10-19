@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import (
+    create_outline_user,
     deploy_outline,
     deploy_squid,
     run_youtube_ping,
@@ -22,6 +23,8 @@ from fck_rkn.agents.eu_server_test import (
     check_squid_http,
     check_squid_startup,
 )
+from fck_rkn.agents.ru_server import run_outline_squid_probe
+from fck_rkn.agents.ru_server_test import check_outline_squid_route
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import (
     ensure_eu_server,
@@ -32,6 +35,7 @@ from fck_rkn.gcp.compute import (
 
 
 logger = logging.getLogger(__name__)
+RU_PROBE_OUTLINE_USER = "ru-server-feasibility-probe"
 
 
 def _shutdown_vms(settings: TestEnvironmentSettings) -> int:
@@ -276,6 +280,43 @@ def main() -> int:
     if ru_instance is None:
         return exit_code
 
+    logger.info("Creating the Outline access key for the RU feasibility probe")
+    access_url = create_outline_user(settings, RU_PROBE_OUTLINE_USER)
+    if access_url is None:
+        logger.error("Could not create the Outline access key for ru-server")
+        print("Could not create the Outline access key for ru-server.", file=sys.stderr)
+        return 13
+
+    logger.info("Invoking ru-server-agent Outline feasibility probe")
+    probe_exit_code = run_outline_squid_probe(settings, access_url)
+    if probe_exit_code != 0:
+        logger.error(
+            "ru-server-agent Outline probe failed with exit status %d",
+            probe_exit_code,
+        )
+        print(
+            "ru-server-agent Outline probe failed with exit status "
+            f"{probe_exit_code}.",
+            file=sys.stderr,
+        )
+        return 14
+
+    logger.info("Invoking ru-server-test-agent Outline route check")
+    route_exit_code = check_outline_squid_route(settings, access_url)
+    if route_exit_code != 0:
+        logger.error(
+            "ru-server-test-agent Outline route check failed with exit "
+            "status %d",
+            route_exit_code,
+        )
+        print(
+            "ru-server-test-agent Outline route check failed with exit "
+            f"status {route_exit_code}.",
+            file=sys.stderr,
+        )
+        return 15
+
+    logger.info("RU Outline route to EU Squid verified")
     print(
         f"{ru_instance.name} is available in project "
         f"{settings.GCP_PROJECT_ID}, zone {settings.GCP_ZONE}."

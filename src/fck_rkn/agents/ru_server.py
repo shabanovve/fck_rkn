@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 PROBE_CONTAINER_NAME = "fck-rkn-outline-probe"
 PROBE_IMAGE = "shadowsocks/shadowsocks-libev:latest"
 PROBE_LOCAL_PORT = 13128
-PROBE_TARGET_URL = "http://example.com/"
+PROBE_TARGET_URL = "http://youtube.com/"
 PROBE_TIMEOUT_SECONDS = 600
 
 
@@ -69,8 +69,15 @@ def build_tunnel_command(probe_lines: tuple[str, ...]) -> str:
             "--entrypoint ss-tunnel "
             f"{PROBE_IMAGE} "
             '-s "$host" -p "$port" -k "$password" -m "$method" '
-            f'-l {PROBE_LOCAL_PORT} -L "$host:{SQUID_PORT}" >/dev/null',
+            f'-l {PROBE_LOCAL_PORT} -L "$host:{SQUID_PORT}" -v >/dev/null',
             "sleep 3",
+            "diagnose() {",
+            '  echo "--- ss-tunnel container state and logs ---"',
+            f"  sudo docker ps -a --filter name={PROBE_CONTAINER_NAME} "
+            "--format '{{.Status}}'",
+            f"  sudo docker logs --tail 30 {PROBE_CONTAINER_NAME} 2>&1 | "
+            "while IFS= read -r line; do echo \"${line//\"$password\"/[redacted]}\"; done",
+            "}",
             *probe_lines,
         )
     )
@@ -140,11 +147,17 @@ def run_outline_squid_probe(
     """Try to reach the EU Squid endpoint from ru-server through EU Outline."""
     remote_command = build_tunnel_command(
         (
-            "status=$(curl --silent --show-error --output /dev/null "
+            "curl_err=$(mktemp)",
+            "if ! status=$(curl --verbose --silent --output /dev/null "
             "--max-time 30 --write-out '%{http_code}' "
-            f"--proxy http://127.0.0.1:{PROBE_LOCAL_PORT} {PROBE_TARGET_URL})",
+            f"--proxy http://127.0.0.1:{PROBE_LOCAL_PORT} {PROBE_TARGET_URL} "
+            '2>"$curl_err"); then',
+            '  echo "--- curl output ---"',
+            '  cat "$curl_err"',
+            "  diagnose",
+            "  exit 1",
+            "fi",
             'echo "EU Squid answered through the Outline tunnel with HTTP $status"',
-            '[ "$status" != 000 ]',
         )
     )
     result = run_remote_with_key(

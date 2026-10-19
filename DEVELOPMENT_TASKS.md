@@ -181,14 +181,15 @@ behavior that requires them.
 - **Test:** Add a test-agent check for the actual route to EU TCP/3128 using
   the real Outline client/server, not a simulated route.
 
-### 36. Run the Outline feasibility test
+### 36. [x] Run the Outline feasibility test
 
 - **Orchestration:** Make `test_env_host` invoke the RU probe and its
   test-agent check on isolated Ubuntu VMs. Do not proceed with forwarding
   unless the real path works.
-- **Blocked by:** An approved Outline client version and explicitly approved
-  forwarding design. Outline/Shadowsocks alone does not provide general
-  layer-3 routing.
+- **Approved:** The client is `ss-tunnel` from the `shadowsocks-libev` Docker
+  image, and the forwarding design is a TCP forward through EU Outline to EU
+  Squid TCP/3128. Outline/Shadowsocks alone does not provide general layer-3
+  routing, so later forwarding tasks must stay within this approved design.
 
 ### 37. Add Outline client deployment to `ru-server-agent`
 
