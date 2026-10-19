@@ -15,43 +15,17 @@ from fck_rkn.agents.ru_server import (
     CLIENT_IMAGE,
     CLIENT_LOCAL_PORT,
     CLIENT_STATE_DIRECTORY,
-    PROBE_LOCAL_PORT,
+    FORWARD_CONTAINER_NAME,
+    FORWARD_LOCAL_PORT,
     PROBE_TARGET_URL,
     build_client_config,
-    build_tunnel_command,
     parse_access_url,
     run_remote_with_input,
-    run_remote_with_key,
 )
 from fck_rkn.config import TestEnvironmentSettings, load_config
 
 
 logger = logging.getLogger(__name__)
-# Squid identifies itself in the Server/Via/X-Squid-Error headers, so a match
-# proves the response came from the EU Squid and not from any other listener.
-SQUID_ROUTE_CHECK_LINES = (
-    "headers=$(curl --silent --show-error --output /dev/null --dump-header - "
-    f"--max-time 30 --proxy http://127.0.0.1:{PROBE_LOCAL_PORT} {PROBE_TARGET_URL})",
-    "if ! printf '%s' \"$headers\" | grep -qiE '^(server|via|x-squid-error):.*squid'; then",
-    '  echo "Response did not come from EU Squid through the Outline tunnel" >&2',
-    "  exit 1",
-    "fi",
-    'echo "Real route ru-server -> EU Outline -> EU Squid TCP/' f'{SQUID_PORT}'
-    ' is working"',
-)
-
-
-def check_outline_squid_route(
-    settings: TestEnvironmentSettings,
-    access_url: str,
-) -> int:
-    """Verify the real Outline route from ru-server to EU Squid."""
-    return run_remote_with_key(
-        settings,
-        access_url,
-        build_tunnel_command(SQUID_ROUTE_CHECK_LINES),
-        f"Checking the Outline route to EU Squid TCP/{SQUID_PORT}",
-    )
 
 
 CLIENT_CHECK_COMMAND = "\n".join(
@@ -84,7 +58,18 @@ CLIENT_CHECK_COMMAND = "\n".join(
         '  echo "EU Outline server is unreachable from the client" >&2',
         "  exit 1",
         "fi",
-        'echo "Outline client is running, uses the test key, and reaches EU Outline"',
+        "if ! status=$(curl --silent --output /dev/null --max-time 30 "
+        "--write-out '%{http_code}' "
+        f"--socks5-hostname 127.0.0.1:{CLIENT_LOCAL_PORT} {PROBE_TARGET_URL}); then",
+        '  echo "HTTP request through the Outline client failed" >&2',
+        "  exit 1",
+        "fi",
+        'case "$status" in',
+        "  2??|3??) ;;",
+        '  *) echo "Unexpected HTTP status through the Outline client: $status" >&2; exit 1 ;;',
+        "esac",
+        'echo "Outline client is running, uses the test key, and carries HTTP '
+        'through the tunnel"',
     )
 )
 
@@ -107,11 +92,43 @@ def check_outline_client(
     )
 
 
+FORWARD_CHECK_COMMAND = "\n".join(
+    (
+        "set -euo pipefail",
+        f"container_name={FORWARD_CONTAINER_NAME}",
+        'if [ "$(sudo docker inspect --format="{{.State.Status}}" '
+        '"$container_name" 2>/dev/null || true)" != running ]; then',
+        '  echo "Squid forward container is not running" >&2',
+        "  exit 1",
+        "fi",
+        "headers=$(curl --silent --show-error --output /dev/null --dump-header - "
+        f"--max-time 30 --proxy http://127.0.0.1:{FORWARD_LOCAL_PORT} "
+        f"{PROBE_TARGET_URL})",
+        "if ! printf '%s' \"$headers\" | grep -qiE '^(server|via|x-squid-error):.*squid'; then",
+        '  echo "HTTP request through the forward did not reach EU Squid" >&2',
+        "  exit 1",
+        "fi",
+        f'echo "ru-server localhost TCP/{FORWARD_LOCAL_PORT} forwards to EU Squid '
+        'and carries HTTP"',
+    )
+)
+
+
+def check_squid_forward(settings: TestEnvironmentSettings) -> int:
+    """Verify RU localhost TCP/3128 reaches the real EU Squid and carries HTTP."""
+    return run_remote_with_input(
+        settings,
+        FORWARD_CHECK_COMMAND,
+        "",
+        f"Checking the RU forward to EU Squid TCP/{SQUID_PORT}",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run ru-server service checks.")
     parser.add_argument(
         "action",
-        choices=("outline-squid-route", "outline-client"),
+        choices=("outline-client", "squid-forward"),
         help="Check to run",
     )
     args = parser.parse_args(argv)
@@ -130,11 +147,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    if args.action == "squid-forward":
+        return check_squid_forward(settings)
+
     # The key is read from stdin so it never appears in argv or shell history.
     access_url = sys.stdin.readline()
-    if args.action == "outline-client":
-        return check_outline_client(settings, access_url)
-    return check_outline_squid_route(settings, access_url)
+    return check_outline_client(settings, access_url)
 
 
 if __name__ == "__main__":

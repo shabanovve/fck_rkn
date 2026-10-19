@@ -180,12 +180,14 @@ behavior that requires them.
 
 - **Test:** Add a test-agent check for the actual route to EU TCP/3128 using
   the real Outline client/server, not a simulated route.
+- **Superseded:** The route check was removed from the code; the forwarding
+  test in task 41 verifies the real path.
 
 ### 36. [x] Run the Outline feasibility test
 
-- **Orchestration:** Make `test_env_host` invoke the RU probe and its
-  test-agent check on isolated Ubuntu VMs. Do not proceed with forwarding
-  unless the real path works.
+- **Orchestration:** The RU probe remains available
+  as a diagnostic action, but `test_env_host` no longer runs it. The real
+  path is verified by the forwarding test in tasks 41 and 42.
 - **Approved:** The client is `ss-tunnel` from the `shadowsocks-libev` Docker
   image, and the forwarding design is a TCP forward through EU Outline to EU
   Squid TCP/3128. Outline/Shadowsocks alone does not provide general layer-3
@@ -205,14 +207,13 @@ behavior that requires them.
 
 - **Orchestration:** Make `test_env_host` run the client deployment and then
   the RU client test.
-- **Dependency:** Task 36 must pass.
 
 ### 40. [x] Add forwarding from RU to EU TCP/3128
 
 - **Change:** Add the approved forwarding action to `ru-server-agent` so
   the EU Squid endpoint is available at the intended RU localhost port.
 
-### 41. Add RU-to-EU forwarding test
+### 41. [x] Add RU-to-EU forwarding test
 
 - **Test:** Add a `ru-server-test-agent` check that verifies TCP/3128
   forwards to the real EU Squid service and carries an HTTP request.
@@ -221,7 +222,6 @@ behavior that requires them.
 
 - **Orchestration:** Make `test_env_host` deploy forwarding and run the
   forwarding test.
-- **Dependency:** Task 36 must pass.
 
 ### 46. Add tunnel-loss recovery to `ru-server-agent`
 

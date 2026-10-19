@@ -119,6 +119,8 @@ class RuServerClientDeployTests(unittest.TestCase):
         self.assertIn("umask 077", script)
         self.assertIn("leaving it unchanged", script)
         self.assertIn("refusing to replace it", script)
+        self.assertIn("--user root", script)
+        self.assertIn("is not running; recreating it", script)
         self.assertNotIn("test-secret", script)
 
     def test_deploy_fails_on_remote_error_without_leaking_output(self) -> None:
@@ -169,6 +171,8 @@ class RuServerSquidForwardTests(unittest.TestCase):
         self.assertIn("install -d -m 700", script)
         self.assertIn("umask 077", script)
         self.assertIn("leaving it unchanged", script)
+        self.assertIn("--user root", script)
+        self.assertIn("is not running; recreating it", script)
         self.assertNotIn("test-secret", script)
 
     def test_forward_and_client_use_separate_containers(self) -> None:

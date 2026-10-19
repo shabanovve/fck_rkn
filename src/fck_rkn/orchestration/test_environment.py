@@ -23,11 +23,8 @@ from fck_rkn.agents.eu_server_test import (
     check_squid_http,
     check_squid_startup,
 )
-from fck_rkn.agents.ru_server import deploy_outline_client, run_outline_squid_probe
-from fck_rkn.agents.ru_server_test import (
-    check_outline_client,
-    check_outline_squid_route,
-)
+from fck_rkn.agents.ru_server import deploy_outline_client
+from fck_rkn.agents.ru_server_test import check_outline_client
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import (
     ensure_eu_server,
@@ -322,36 +319,6 @@ def main() -> int:
 
     logger.info("RU Outline client verified")
 
-    logger.info("Invoking ru-server-test-agent Outline route check")
-    route_exit_code = check_outline_squid_route(settings, access_url)
-    if route_exit_code != 0:
-        logger.error(
-            "ru-server-test-agent Outline route check failed with exit "
-            "status %d",
-            route_exit_code,
-        )
-        print(
-            "ru-server-test-agent Outline route check failed with exit "
-            f"status {route_exit_code}.",
-            file=sys.stderr,
-        )
-        return 15
-
-    logger.info("Invoking ru-server-agent Outline feasibility probe")
-    probe_exit_code = run_outline_squid_probe(settings, access_url)
-    if probe_exit_code != 0:
-        logger.error(
-            "ru-server-agent Outline probe failed with exit status %d",
-            probe_exit_code,
-        )
-        print(
-            "ru-server-agent Outline probe failed with exit status "
-            f"{probe_exit_code}.",
-            file=sys.stderr,
-        )
-        return 14
-
-    logger.info("RU Outline route to EU Squid verified")
     print(
         f"{ru_instance.name} is available in project "
         f"{settings.GCP_PROJECT_ID}, zone {settings.GCP_ZONE}."

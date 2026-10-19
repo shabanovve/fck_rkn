@@ -199,15 +199,19 @@ def _build_container_deploy_command(
             f'    echo "{title} container is already running; leaving it unchanged"',
             "    exit 0",
             "  fi",
-            f'  echo "Existing {title} container differs; refusing to replace it" >&2',
-            "  exit 1",
+            '  if [ "$actual_state" = running ]; then',
+            f'    echo "Existing {title} container uses a different image; refusing to replace it" >&2',
+            "    exit 1",
+            "  fi",
+            f'  echo "Existing {title} container is not running; recreating it"',
+            '  sudo docker rm -f "$container_name" >/dev/null',
             "fi",
             f"sudo install -d -m 700 {state_directory}",
             f"printf '%s' \"$config\" | sudo sh -c 'umask 077; cat > {state_directory}/config.json'",
             'sudo docker pull "$expected_image" >/dev/null',
             "sudo docker run --detach "
             '--name "$container_name" '
-            "--restart unless-stopped --network host "
+            "--restart unless-stopped --network host --user root "
             f"--volume {state_directory}:/etc/shadowsocks:ro "
             f"--entrypoint {entrypoint} "
             '"$expected_image" -c /etc/shadowsocks/config.json >/dev/null',
