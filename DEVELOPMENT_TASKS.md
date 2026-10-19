@@ -201,7 +201,7 @@ behavior that requires them.
 - **Test:** Add a `ru-server-test-agent` check that verifies the client is
   connected using the test key.
 
-### 39. Deploy and test the RU Outline client
+### 39. [x] Deploy and test the RU Outline client
 
 - **Orchestration:** Make `test_env_host` run the client deployment and then
   the RU client test.

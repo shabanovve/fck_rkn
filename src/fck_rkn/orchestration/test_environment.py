@@ -23,8 +23,11 @@ from fck_rkn.agents.eu_server_test import (
     check_squid_http,
     check_squid_startup,
 )
-from fck_rkn.agents.ru_server import run_outline_squid_probe
-from fck_rkn.agents.ru_server_test import check_outline_squid_route
+from fck_rkn.agents.ru_server import deploy_outline_client, run_outline_squid_probe
+from fck_rkn.agents.ru_server_test import (
+    check_outline_client,
+    check_outline_squid_route,
+)
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import (
     ensure_eu_server,
@@ -287,19 +290,37 @@ def main() -> int:
         print("Could not create the Outline access key for ru-server.", file=sys.stderr)
         return 13
 
-    logger.info("Invoking ru-server-agent Outline feasibility probe")
-    probe_exit_code = run_outline_squid_probe(settings, access_url)
-    if probe_exit_code != 0:
+    logger.info("Invoking ru-server-agent Outline client deployment")
+    client_deploy_exit_code = deploy_outline_client(settings, access_url)
+    if client_deploy_exit_code != 0:
         logger.error(
-            "ru-server-agent Outline probe failed with exit status %d",
-            probe_exit_code,
+            "ru-server-agent Outline client deployment failed with exit "
+            "status %d",
+            client_deploy_exit_code,
         )
         print(
-            "ru-server-agent Outline probe failed with exit status "
-            f"{probe_exit_code}.",
+            "ru-server-agent Outline client deployment failed with exit "
+            f"status {client_deploy_exit_code}.",
             file=sys.stderr,
         )
-        return 14
+        return 16
+
+    logger.info("Invoking ru-server-test-agent Outline client check")
+    client_check_exit_code = check_outline_client(settings, access_url)
+    if client_check_exit_code != 0:
+        logger.error(
+            "ru-server-test-agent Outline client check failed with exit "
+            "status %d",
+            client_check_exit_code,
+        )
+        print(
+            "ru-server-test-agent Outline client check failed with exit "
+            f"status {client_check_exit_code}.",
+            file=sys.stderr,
+        )
+        return 17
+
+    logger.info("RU Outline client verified")
 
     logger.info("Invoking ru-server-test-agent Outline route check")
     route_exit_code = check_outline_squid_route(settings, access_url)
@@ -315,6 +336,20 @@ def main() -> int:
             file=sys.stderr,
         )
         return 15
+
+    logger.info("Invoking ru-server-agent Outline feasibility probe")
+    probe_exit_code = run_outline_squid_probe(settings, access_url)
+    if probe_exit_code != 0:
+        logger.error(
+            "ru-server-agent Outline probe failed with exit status %d",
+            probe_exit_code,
+        )
+        print(
+            "ru-server-agent Outline probe failed with exit status "
+            f"{probe_exit_code}.",
+            file=sys.stderr,
+        )
+        return 14
 
     logger.info("RU Outline route to EU Squid verified")
     print(

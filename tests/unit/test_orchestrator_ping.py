@@ -51,6 +51,18 @@ class OrchestratorPingTests(unittest.TestCase):
             "fck_rkn.orchestration.test_environment.check_outline_squid_route",
             return_value=0,
         )
+        self.ru_client_deploy = patch(
+            "fck_rkn.orchestration.test_environment.deploy_outline_client",
+            return_value=0,
+        )
+        self.ru_client_check = patch(
+            "fck_rkn.orchestration.test_environment.check_outline_client",
+            return_value=0,
+        )
+        self.ru_client_deploy_mock = self.ru_client_deploy.start()
+        self.ru_client_check_mock = self.ru_client_check.start()
+        self.addCleanup(self.ru_client_deploy.stop)
+        self.addCleanup(self.ru_client_check.stop)
         self.ru_key_mock = self.ru_key.start()
         self.ru_probe_mock = self.ru_probe.start()
         self.ru_route_mock = self.ru_route.start()
@@ -105,6 +117,12 @@ class OrchestratorPingTests(unittest.TestCase):
             self.settings, "ss://configured-key"
         )
         self.ru_route_mock.assert_called_once_with(
+            self.settings, "ss://configured-key"
+        )
+        self.ru_client_deploy_mock.assert_called_once_with(
+            self.settings, "ss://configured-key"
+        )
+        self.ru_client_check_mock.assert_called_once_with(
             self.settings, "ss://configured-key"
         )
         ping.assert_called_once_with(self.settings)
@@ -415,7 +433,6 @@ class OrchestratorPingTests(unittest.TestCase):
         result, stderr = self.run_main_with_healthy_eu()
 
         self.assertEqual(result, 14)
-        self.ru_route_mock.assert_not_called()
         self.assertIn("Outline probe failed", stderr.getvalue())
         self.assertNotIn("ss://configured-key", stderr.getvalue())
 
@@ -425,7 +442,30 @@ class OrchestratorPingTests(unittest.TestCase):
         result, stderr = self.run_main_with_healthy_eu()
 
         self.assertEqual(result, 15)
+        self.ru_probe_mock.assert_not_called()
         self.assertIn("Outline route check failed", stderr.getvalue())
+
+    def test_stops_when_ru_outline_client_deployment_fails(self) -> None:
+        self.ru_client_deploy_mock.return_value = 1
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 16)
+        self.ru_client_check_mock.assert_not_called()
+        self.ru_probe_mock.assert_not_called()
+        self.ru_route_mock.assert_not_called()
+        self.assertIn("client deployment failed", stderr.getvalue())
+        self.assertNotIn("ss://configured-key", stderr.getvalue())
+
+    def test_fails_when_ru_outline_client_check_fails(self) -> None:
+        self.ru_client_check_mock.return_value = 1
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 17)
+        self.ru_probe_mock.assert_not_called()
+        self.ru_route_mock.assert_not_called()
+        self.assertIn("client check failed", stderr.getvalue())
 
     def test_does_not_run_ping_if_vm_provisioning_fails(self) -> None:
         with (
