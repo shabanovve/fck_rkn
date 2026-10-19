@@ -115,7 +115,7 @@ def build_ssh_firewall_rules(
     )
     allow_rule = compute_v1.Firewall(
         name=settings.GCP_SSH_FIREWALL_RULE,
-        description="Allow IAP TCP forwarding to eu-server over SSH.",
+        description="Allow IAP TCP forwarding to test VMs over SSH.",
         network=network,
         direction="INGRESS",
         priority=900,
@@ -125,7 +125,7 @@ def build_ssh_firewall_rules(
     )
     deny_rule = compute_v1.Firewall(
         name=f"{settings.GCP_SSH_FIREWALL_RULE}-deny",
-        description="Deny SSH to eu-server from all non-IAP IPv4 sources.",
+        description="Deny SSH to test VMs from all non-IAP IPv4 sources.",
         network=network,
         direction="INGRESS",
         priority=1000,
@@ -439,6 +439,29 @@ def _build_test_server(
     )
 
 
+def _resolve_clients(
+    instances_client: compute_v1.InstancesClient | None = None,
+    firewalls_client: compute_v1.FirewallsClient | None = None,
+    routers_client: compute_v1.RoutersClient | None = None,
+) -> tuple[
+    compute_v1.InstancesClient,
+    compute_v1.FirewallsClient,
+    compute_v1.RoutersClient,
+]:
+    """Return the supplied Compute clients, creating any that are missing."""
+    if instances_client and firewalls_client and routers_client:
+        return instances_client, firewalls_client, routers_client
+    logger.info("Creating authenticated Compute Engine API clients")
+    credentials, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    return (
+        instances_client or compute_v1.InstancesClient(credentials=credentials),
+        firewalls_client or compute_v1.FirewallsClient(credentials=credentials),
+        routers_client or compute_v1.RoutersClient(credentials=credentials),
+    )
+
+
 def _lookup_instance(
     settings: TestEnvironmentSettings,
     instance_name: str,
@@ -507,10 +530,7 @@ def lookup_ru_server(
         settings.GCP_ZONE,
     )
     if instances_client is None:
-        credentials, _ = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
-        instances_client = compute_v1.InstancesClient(credentials=credentials)
+        instances_client, _, _ = _resolve_clients()
 
     instance = _lookup_instance(settings, RU_INSTANCE_NAME, instances_client)
     if instance is None:
@@ -539,57 +559,27 @@ def _validate_ru_server_network(
         )
 
 
-def ensure_ru_server(
-    settings: TestEnvironmentSettings,
-    instances_client: compute_v1.InstancesClient | None = None,
-) -> compute_v1.Instance:
-    """Create or reuse ru-server in the configured test project and network."""
-    if instances_client is None:
-        credentials, _ = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
-        instances_client = compute_v1.InstancesClient(credentials=credentials)
-
-    instance = _get_or_create_instance(
-        settings,
-        build_ru_server(settings),
-        instances_client,
-    )
-    _validate_ru_server_network(instance, settings)
-    return instance
-
-
-def _get_or_create_eu_server(
-    settings: TestEnvironmentSettings,
-    instances_client: compute_v1.InstancesClient,
-) -> compute_v1.Instance:
-    return _get_or_create_instance(
-        settings,
-        build_eu_server(settings),
-        instances_client,
-    )
-
-
 def _validate_instance_configuration(
     instance: compute_v1.Instance,
     settings: TestEnvironmentSettings,
+    instance_name: str = INSTANCE_NAME,
 ) -> None:
     """Refuse to use a same-named VM that does not meet approved access settings."""
-    logger.info("Validating existing %s configuration", INSTANCE_NAME)
-    expected = build_eu_server(settings)
+    logger.info("Validating existing %s configuration", instance_name)
+    expected = _build_test_server(settings, instance_name)
     if not instance.machine_type.endswith(expected.machine_type):
         raise RuntimeError(
-            f"Existing {INSTANCE_NAME} has a machine type different from the "
+            f"Existing {instance_name} has a machine type different from the "
             "configured test VM; it was not modified"
         )
     if not instance.tags or settings.GCP_SSH_NETWORK_TAG not in instance.tags.items:
         raise RuntimeError(
-            f"Existing {INSTANCE_NAME} lacks the dedicated SSH firewall tag; "
+            f"Existing {instance_name} lacks the dedicated SSH firewall tag; "
             "it was not modified"
         )
     if len(instance.network_interfaces) != 1:
         raise RuntimeError(
-            f"Existing {INSTANCE_NAME} must have exactly one network interface; "
+            f"Existing {instance_name} must have exactly one network interface; "
             "it was not modified"
         )
     actual_interface = instance.network_interfaces[0]
@@ -605,7 +595,7 @@ def _validate_instance_configuration(
         or actual_interface.ipv6_access_type == "EXTERNAL"
     ):
         raise RuntimeError(
-            f"Existing {INSTANCE_NAME} has a network configuration different "
+            f"Existing {instance_name} has a network configuration different "
             "from the approved VM without external IPs; it was not modified"
         )
     if not instance.metadata or not any(
@@ -613,49 +603,53 @@ def _validate_instance_configuration(
         for item in instance.metadata.items
     ):
         raise RuntimeError(
-            f"Existing {INSTANCE_NAME} does not have OS Login enabled; "
+            f"Existing {instance_name} does not have OS Login enabled; "
             "it was not modified"
         )
     if not instance.disks or not any(disk.boot for disk in instance.disks):
         raise RuntimeError(
-            f"Existing {INSTANCE_NAME} has no boot disk; it was not modified"
+            f"Existing {instance_name} has no boot disk; it was not modified"
         )
-    logger.info("%s configuration matches the approved settings", INSTANCE_NAME)
+    logger.info("%s configuration matches the approved settings", instance_name)
 
 
 def _wait_for_running(
     settings: TestEnvironmentSettings,
     instances_client: compute_v1.InstancesClient,
+    instance_name: str = INSTANCE_NAME,
 ) -> compute_v1.Instance:
-    logger.info("Waiting for %s to reach RUNNING", INSTANCE_NAME)
+    logger.info("Waiting for %s to reach RUNNING", instance_name)
     deadline = time.monotonic() + INSTANCE_READY_TIMEOUT_SECONDS
     last_status: str | None = None
     while True:
         instance = instances_client.get(
             project=settings.GCP_PROJECT_ID,
             zone=settings.GCP_ZONE,
-            instance=INSTANCE_NAME,
+            instance=instance_name,
         )
         if instance.status == "RUNNING":
-            logger.info("%s is RUNNING", INSTANCE_NAME)
+            logger.info("%s is RUNNING", instance_name)
             return instance
         if instance.status != last_status:
-            logger.info("%s status: %s", INSTANCE_NAME, instance.status)
+            logger.info("%s status: %s", instance_name, instance.status)
             last_status = instance.status
         if instance.status in {"TERMINATED", "SUSPENDED"}:
             raise RuntimeError(
-                f"{INSTANCE_NAME} entered unexpected state {instance.status}"
+                f"{instance_name} entered unexpected state {instance.status}"
             )
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError(
-                f"{INSTANCE_NAME} did not reach RUNNING within "
+                f"{instance_name} did not reach RUNNING within "
                 f"{INSTANCE_READY_TIMEOUT_SECONDS} seconds"
             )
         time.sleep(min(POLL_INTERVAL_SECONDS, remaining))
 
 
-def _wait_for_ssh(settings: TestEnvironmentSettings) -> None:
+def _wait_for_ssh(
+    settings: TestEnvironmentSettings,
+    instance_name: str = INSTANCE_NAME,
+) -> None:
     logger.info("Waiting for OS Login SSH readiness through IAP")
     deadline = time.monotonic() + SSH_READY_TIMEOUT_SECONDS
     last_attempt = "no SSH attempt completed"
@@ -664,7 +658,7 @@ def _wait_for_ssh(settings: TestEnvironmentSettings) -> None:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError(
-                f"Could not authenticate to {INSTANCE_NAME} over SSH within "
+                f"Could not authenticate to {instance_name} over SSH within "
                 f"{SSH_READY_TIMEOUT_SECONDS} seconds. Last attempt: "
                 f"{last_attempt}."
             )
@@ -675,7 +669,7 @@ def _wait_for_ssh(settings: TestEnvironmentSettings) -> None:
                     "gcloud",
                     "compute",
                     "ssh",
-                    INSTANCE_NAME,
+                    instance_name,
                     f"--project={settings.GCP_PROJECT_ID}",
                     f"--zone={settings.GCP_ZONE}",
                     "--tunnel-through-iap",
@@ -712,28 +706,54 @@ def ensure_eu_server(
     routers_client: compute_v1.RoutersClient | None = None,
 ) -> compute_v1.Instance:
     """Create or reuse eu-server, then wait for authenticated SSH readiness."""
-    logger.info("Starting eu-server provisioning")
+    return _ensure_server(
+        settings,
+        build_eu_server(settings),
+        instances_client,
+        firewalls_client,
+        routers_client,
+    )
+
+
+def ensure_ru_server(
+    settings: TestEnvironmentSettings,
+    instances_client: compute_v1.InstancesClient | None = None,
+    firewalls_client: compute_v1.FirewallsClient | None = None,
+    routers_client: compute_v1.RoutersClient | None = None,
+) -> compute_v1.Instance:
+    """Create or reuse ru-server, then wait for authenticated SSH readiness."""
+    return _ensure_server(
+        settings,
+        build_ru_server(settings),
+        instances_client,
+        firewalls_client,
+        routers_client,
+    )
+
+
+def _ensure_server(
+    settings: TestEnvironmentSettings,
+    desired_instance: compute_v1.Instance,
+    instances_client: compute_v1.InstancesClient | None,
+    firewalls_client: compute_v1.FirewallsClient | None,
+    routers_client: compute_v1.RoutersClient | None,
+) -> compute_v1.Instance:
+    instance_name = desired_instance.name
+    logger.info("Starting %s provisioning", instance_name)
     _require_gcloud_cli()
-    if instances_client is None or firewalls_client is None or routers_client is None:
-        logger.info("Creating authenticated Compute Engine API clients")
-        credentials, _ = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
-        instances_client = instances_client or compute_v1.InstancesClient(
-            credentials=credentials
-        )
-        firewalls_client = firewalls_client or compute_v1.FirewallsClient(
-            credentials=credentials
-        )
-        routers_client = routers_client or compute_v1.RoutersClient(
-            credentials=credentials
-        )
+    instances_client, firewalls_client, routers_client = _resolve_clients(
+        instances_client, firewalls_client, routers_client
+    )
 
     ensure_cloud_nat(settings, routers_client)
     _ensure_ssh_firewall_rule(settings, firewalls_client)
-    instance = _get_or_create_eu_server(settings, instances_client)
-    _validate_instance_configuration(instance, settings)
-    instance = _wait_for_running(settings, instances_client)
-    _wait_for_ssh(settings)
-    logger.info("eu-server is provisioned, running, and SSH-ready")
+    instance = _get_or_create_instance(settings, desired_instance, instances_client)
+    _validate_instance_configuration(
+        instance, settings, instance_name=instance_name
+    )
+    instance = _wait_for_running(
+        settings, instances_client, instance_name=instance_name
+    )
+    _wait_for_ssh(settings, instance_name=instance_name)
+    logger.info("%s is provisioned, running, and SSH-ready", instance_name)
     return instance

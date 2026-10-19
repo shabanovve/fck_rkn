@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import Callable
 
 from google.api_core.exceptions import GoogleAPICallError
 from google.auth.exceptions import GoogleAuthError
+from google.cloud import compute_v1
 from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
@@ -51,6 +53,38 @@ def _shutdown_vms(settings: TestEnvironmentSettings) -> int:
         return 14
     print(f"Stopped {len(stopped)} running VM(s) in {settings.GCP_PROJECT_ID}.")
     return 0
+
+
+def _provision_server(
+    name: str,
+    ensure_server: Callable[[TestEnvironmentSettings], compute_v1.Instance],
+    settings: TestEnvironmentSettings,
+    failure_code: int,
+    auth_code: int,
+) -> tuple[compute_v1.Instance | None, int]:
+    """Provision a VM; on failure report it and return (None, exit code)."""
+    try:
+        return ensure_server(settings), 0
+    except GoogleAPICallError as error:
+        logger.error("GCP %s provisioning failed", name)
+        print(f"GCP {name} provisioning failed.", file=sys.stderr)
+        print(f"  Error type: {type(error).__name__}", file=sys.stderr)
+        if error.code is not None:
+            print(f"  HTTP status: {error.code}", file=sys.stderr)
+        print(f"  Details: {error.message or error}", file=sys.stderr)
+        return None, failure_code
+    except GoogleAuthError:
+        logger.error("GCP authentication failed during %s provisioning", name)
+        print(
+            f"GCP authentication failed during {name} provisioning. "
+            "Verify the active gcloud account and ADC credentials.",
+            file=sys.stderr,
+        )
+        return None, auth_code
+    except (OSError, RuntimeError, TimeoutError) as error:
+        logger.error("%s provisioning failed: %s", name, error)
+        print(f"{name} provisioning failed: {error}", file=sys.stderr)
+        return None, failure_code
 
 
 def main() -> int:
@@ -134,28 +168,11 @@ def main() -> int:
     if sys.argv[1:2] == ["shutdown-vms"]:
         return _shutdown_vms(settings)
 
-    try:
-        instance = ensure_eu_server(settings)
-    except GoogleAPICallError as error:
-        logger.error("GCP eu-server provisioning failed")
-        print("GCP eu-server provisioning failed.", file=sys.stderr)
-        print(f"  Error type: {type(error).__name__}", file=sys.stderr)
-        if error.code is not None:
-            print(f"  HTTP status: {error.code}", file=sys.stderr)
-        print(f"  Details: {error.message or error}", file=sys.stderr)
-        return 5
-    except GoogleAuthError:
-        logger.error("GCP authentication failed during VM provisioning")
-        print(
-            "GCP authentication failed during eu-server provisioning. "
-            "Verify the active gcloud account and ADC credentials.",
-            file=sys.stderr,
-        )
-        return 3
-    except (OSError, RuntimeError, TimeoutError) as error:
-        logger.error("eu-server provisioning failed: %s", error)
-        print(f"eu-server provisioning failed: {error}", file=sys.stderr)
-        return 5
+    instance, exit_code = _provision_server(
+        "eu-server", ensure_eu_server, settings, failure_code=5, auth_code=3
+    )
+    if instance is None:
+        return exit_code
 
     print(
         f"GCP access is valid; {instance.name} is running and SSH-ready "
@@ -253,28 +270,11 @@ def main() -> int:
         return 11
 
     logger.info("eu-server-test-agent Outline health check passed")
-    try:
-        ru_instance = ensure_ru_server(settings)
-    except GoogleAPICallError as error:
-        logger.error("GCP ru-server provisioning failed")
-        print("GCP ru-server provisioning failed.", file=sys.stderr)
-        print(f"  Error type: {type(error).__name__}", file=sys.stderr)
-        if error.code is not None:
-            print(f"  HTTP status: {error.code}", file=sys.stderr)
-        print(f"  Details: {error.message or error}", file=sys.stderr)
-        return 12
-    except GoogleAuthError:
-        logger.error("GCP authentication failed during ru-server provisioning")
-        print(
-            "GCP authentication failed during ru-server provisioning. "
-            "Verify the active gcloud account and ADC credentials.",
-            file=sys.stderr,
-        )
-        return 12
-    except (OSError, RuntimeError, TimeoutError) as error:
-        logger.error("ru-server provisioning failed: %s", error)
-        print(f"ru-server provisioning failed: {error}", file=sys.stderr)
-        return 12
+    ru_instance, exit_code = _provision_server(
+        "ru-server", ensure_ru_server, settings, failure_code=12, auth_code=12
+    )
+    if ru_instance is None:
+        return exit_code
 
     print(
         f"{ru_instance.name} is available in project "

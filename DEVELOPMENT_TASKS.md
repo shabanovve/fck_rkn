@@ -159,12 +159,12 @@ behavior that requires them.
 - **Test:** In Docker, verify the configured name, project, zone, Ubuntu
   image, and network are passed to GCP.
 
-### 32. Add `ru-server` readiness wait
+### 32. [x] Add `ru-server` readiness wait
 
 - **Change:** Make `test_env_host` wait until `ru-server` is running and
   reachable over SSH.
 
-### 33. Test `ru-server` readiness wait
+### 33. [x] Test `ru-server` readiness wait
 
 - **Test:** In Docker, verify ready, provisioning failure, and timeout
   outcomes.

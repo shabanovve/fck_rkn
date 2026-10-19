@@ -26,6 +26,7 @@ from fck_rkn.gcp.compute import (
     _firewall_rule_matches,
     _firewall_rule_mismatches,
     _require_gcloud_cli,
+    _wait_for_running,
     _wait_for_ssh,
     _validate_instance_configuration,
     build_eu_server,
@@ -122,9 +123,36 @@ class ComputeProvisioningTests(unittest.TestCase):
         operation = Mock()
         instances_client.insert.return_value = operation
 
-        result = ensure_ru_server(settings, instances_client)
+        with (
+            patch("fck_rkn.gcp.compute._require_gcloud_cli") as require_gcloud,
+            patch("fck_rkn.gcp.compute.ensure_cloud_nat") as ensure_nat,
+            patch("fck_rkn.gcp.compute._ensure_ssh_firewall_rule") as ensure_fw,
+            patch(
+                "fck_rkn.gcp.compute._wait_for_running",
+                return_value=created_instance,
+            ) as wait_for_running,
+            patch("fck_rkn.gcp.compute._wait_for_ssh") as wait_for_ssh,
+        ):
+            result = ensure_ru_server(
+                settings,
+                instances_client,
+                firewalls_client=Mock(),
+                routers_client=Mock(),
+            )
 
         self.assertIs(result, created_instance)
+        require_gcloud.assert_called_once_with()
+        ensure_nat.assert_called_once()
+        ensure_fw.assert_called_once()
+        wait_for_running.assert_called_once_with(
+            settings,
+            instances_client,
+            instance_name="ru-server",
+        )
+        wait_for_ssh.assert_called_once_with(
+            settings,
+            instance_name="ru-server",
+        )
         operation.result.assert_called_once()
         instances_client.insert.assert_called_once()
         insert_args = instances_client.insert.call_args.kwargs
@@ -146,6 +174,79 @@ class ComputeProvisioningTests(unittest.TestCase):
             "projects/fck-rkn-test/regions/europe-north1/subnetworks/default",
         )
         self.assertFalse(resource.network_interfaces[0].access_configs)
+
+    def make_running_ru_instance(self) -> compute_v1.Instance:
+        instance = build_ru_server(make_settings())
+        instance.status = "RUNNING"
+        return instance
+
+    def test_ru_server_is_ready_after_running_and_ssh_checks(self) -> None:
+        instance = self.make_running_ru_instance()
+        instances_client = Mock()
+        instances_client.get.return_value = instance
+        completed = subprocess.CompletedProcess(args=[], returncode=0)
+
+        with (
+            patch("fck_rkn.gcp.compute._require_gcloud_cli"),
+            patch("fck_rkn.gcp.compute.ensure_cloud_nat"),
+            patch("fck_rkn.gcp.compute._ensure_ssh_firewall_rule"),
+            patch(
+                "fck_rkn.gcp.compute.subprocess.run", return_value=completed
+            ) as run,
+        ):
+            result = ensure_ru_server(
+                make_settings(),
+                instances_client,
+                firewalls_client=Mock(),
+                routers_client=Mock(),
+            )
+
+        self.assertIs(result, instance)
+        self.assertEqual(run.call_args.args[0][3], "ru-server")
+
+    def test_ru_server_provisioning_failure_is_not_masked(self) -> None:
+        instances_client = Mock()
+        instances_client.get.side_effect = NotFound("instance missing")
+        instances_client.insert.side_effect = RuntimeError("quota exceeded")
+
+        with (
+            patch("fck_rkn.gcp.compute._require_gcloud_cli"),
+            patch("fck_rkn.gcp.compute.ensure_cloud_nat"),
+            patch("fck_rkn.gcp.compute._ensure_ssh_firewall_rule"),
+            patch("fck_rkn.gcp.compute._wait_for_ssh") as wait_for_ssh,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "quota exceeded"):
+                ensure_ru_server(
+                    make_settings(),
+                    instances_client,
+                    firewalls_client=Mock(),
+                    routers_client=Mock(),
+                )
+
+        wait_for_ssh.assert_not_called()
+
+    def test_ru_server_running_wait_times_out(self) -> None:
+        instance = build_ru_server(make_settings())
+        instance.status = "PROVISIONING"
+        instances_client = Mock()
+        instances_client.get.return_value = instance
+
+        with (
+            patch("fck_rkn.gcp.compute.INSTANCE_READY_TIMEOUT_SECONDS", 0),
+            self.assertRaisesRegex(TimeoutError, "ru-server did not reach RUNNING"),
+        ):
+            _wait_for_running(
+                make_settings(), instances_client, instance_name="ru-server"
+            )
+
+    def test_ru_server_ssh_wait_times_out(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=255)
+        with (
+            patch("fck_rkn.gcp.compute.SSH_READY_TIMEOUT_SECONDS", 0),
+            patch("fck_rkn.gcp.compute.subprocess.run", return_value=completed),
+            self.assertRaisesRegex(TimeoutError, "authenticate to ru-server"),
+        ):
+            _wait_for_ssh(make_settings(), instance_name="ru-server")
 
     def test_instance_uses_approved_vm_image_network_and_os_login(self) -> None:
         instance = build_eu_server(make_settings())
@@ -466,7 +567,7 @@ class ComputeProvisioningTests(unittest.TestCase):
             "instance_resource"
         ]
         self.assertEqual(created_instance.name, INSTANCE_NAME)
-        wait_for_ssh.assert_called_once_with(settings)
+        wait_for_ssh.assert_called_once_with(settings, instance_name=INSTANCE_NAME)
 
     def test_ensures_cloud_nat_before_firewall_and_vm(self) -> None:
         settings = make_settings()
@@ -483,7 +584,7 @@ class ComputeProvisioningTests(unittest.TestCase):
                 side_effect=lambda *_: order.append("firewall"),
             ),
             patch(
-                "fck_rkn.gcp.compute._get_or_create_eu_server",
+                "fck_rkn.gcp.compute._get_or_create_instance",
                 side_effect=lambda *_: order.append("vm") or instance,
             ),
             patch("fck_rkn.gcp.compute._validate_instance_configuration"),
