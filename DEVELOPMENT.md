@@ -42,6 +42,13 @@
 - Re-running Outline Server deployment must leave an already-running,
   correctly configured Outline container untouched. Refuse to replace an
   existing Outline container with unexpected configuration.
+- The EU Outline Server image must be rebuilt from the official image with
+  `outline-ss-server` patched to accept private target addresses. Use it only
+  in the isolated test environment because it removes the server's protection
+  against requests to private networks. Production must not use it: production
+  servers have real public IP addresses, so private targets are not an issue,
+  and production uses the standard Outline Docker image from the public
+  registry.
 - Provide a manual `test-env-host shutdown-vms` action that validates access
   to the isolated `fck-rkn-test` project, finds running Compute Engine VMs
   across all zones, stops them, and waits for the stop operations to complete.

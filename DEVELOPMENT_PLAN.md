@@ -105,6 +105,14 @@ the proxy.
 - Extend `eu-server-agent` to deploy the approved Outline Server container
   configuration on `eu-server`. Reuse an already-running container when its
   image and running state match the approved configuration; do not restart it.
+- The EU Outline Server must be rebuilt from the official image with
+  `outline-ss-server` patched so it accepts private target addresses (the stock
+  server rejects them). This lets RU clients reach the private EU Squid
+  endpoint through Outline. This is a test-environment-only requirement: it
+  removes the server's protection against requests to private networks.
+  Production does not need it: production servers use real public IP
+  addresses, so private targets are not an issue, and production uses the
+  standard Outline Docker image from the public registry.
 - Provide and invoke a script to create a VPN user/access key after Outline
   Server is deployed and running, before client connectivity testing.
 - Extend `eu-server-test-agent` to verify Outline Server health and test a
@@ -237,7 +245,8 @@ milestones:
    Squid request to `youtube.com`?
 9. Should Squid and the Outline endpoints be reachable only over private
    addresses, or is any narrowly restricted public ingress required?
-10. The EU Outline Server uses the official stable image. Which Outline
+10. The EU Outline Server uses the official stable image rebuilt with the
+    private-target patch. Which Outline
     client version and protected test-key provisioning method should be used?
 11. For the requested “router IP,” do you mean the test client's default
     gateway, its Outline local proxy listener, or another address? Outline
