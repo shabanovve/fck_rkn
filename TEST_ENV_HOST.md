@@ -120,6 +120,11 @@ The remaining template defaults specify the VM zone, machine type, Ubuntu
 image family, VPC/subnet, and SSH network tag/firewall rule names. Local
 configuration is ignored by Git and must not be committed or shared.
 
+`test_env_host` is the only place that uses GCP, IAP and `gcloud`. It hands
+the agents a `GcloudIapRunner` and the VM private addresses; the agents
+themselves are platform-independent and in production run over SSH with
+`config/agents.env` (see [Development Guidelines](DEVELOPMENT.md#platform-independence-and-firewall)).
+
 ## Run
 
 From the repository root, run either the preferred package entry point:

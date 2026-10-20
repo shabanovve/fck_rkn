@@ -71,6 +71,21 @@
 
 - Keep the production deployment independent of any specific cloud provider.
   GCP is the platform for the test environment only.
+- GCP, IAP and `gcloud` belong only to the test layer (`fck_rkn/gcp/` and
+  `orchestration/`). Agents under `fck_rkn/agents/` must not import them or
+  name a cloud provider; a test enforces this. Remote scripts under
+  `remote/scripts/` must not reference a cloud provider either.
+- Agents run commands through the `RemoteRunner` protocol
+  (`fck_rkn/remote/`). The test environment selects `GcloudIapRunner`
+  (`fck_rkn/gcp/runner.py`); production selects `SshRunner` from
+  `config/agents.env` (`EU_SERVER_HOST`, `RU_SERVER_HOST`, `SSH_USER`,
+  `SSH_KEY_PATH`, `SSH_PORT`, `EU_SERVER_PRIVATE_ADDRESS`,
+  `RU_SERVER_PRIVATE_ADDRESS`). Copy `config/agents.env.example` to the
+  ignored `config/agents.env` and fill it in locally. Production agents run
+  from a controller over SSH.
+- Agents receive provider-specific values (such as a VM's private address) as
+  parameters; the orchestrator resolves them in the test environment and
+  `agents.env` supplies them in production.
 - Implement required firewall rules inside each VM's Ubuntu operating system.
   Do not rely on a cloud-provider firewall as the only enforcement layer.
 - Cloud-provider firewall rules may be used as an additional defense, but the
@@ -131,9 +146,13 @@ src/
     __init__.py
     __main__.py
     config.py
+    agent_config.py
+    agents/
+    remote/
     gcp/
       __init__.py
       compute.py
+      runner.py
     orchestration/
       __init__.py
       test_environment.py

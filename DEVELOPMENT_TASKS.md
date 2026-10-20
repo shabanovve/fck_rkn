@@ -346,7 +346,7 @@ behavior that requires them.
   `RU_SERVER_PRIVATE_ADDRESS` from `config/agents.env`; the orchestrator uses
   `gcp.compute.private_address_of(instance)` (exit code 5 if missing).
 
-### 49g. Document the platform boundary
+### 49g. [x] Document the platform boundary
 
 - **Docs:** Update `DEVELOPMENT.md`, `DEVELOPMENT_PLAN.md` and
   `TEST_ENV_HOST.md`: GCP, IAP and `gcloud` belong only to the test layer;
@@ -355,6 +355,9 @@ behavior that requires them.
 - **Open decision:** whether production agents run remotely over SSH from the
   controller (`SshRunner`) or locally on each server; the runner interface
   supports both.
+- **Done:** documented in `DEVELOPMENT.md`, `DEVELOPMENT_PLAN.md` and
+  `TEST_ENV_HOST.md`. Decision recorded: production agents run from a
+  controller over SSH (`SshRunner`).
 
 ### 50. Add RU Outline health test
 

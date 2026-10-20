@@ -49,7 +49,9 @@ all part of the orchestrated workflow.
   budget in local operator configuration; never commit credentials.
 - Keep GCP-specific provisioning and API calls in the test-environment
   orchestration layer; production service deployment and network policy must
-  not require GCP.
+  not require GCP. Agents depend only on the `RemoteRunner` interface; the
+  test environment uses a GCP IAP runner, and production uses an SSH runner
+  configured in `config/agents.env` (see `DEVELOPMENT.md`).
 
 **Acceptance:** the operator can authenticate to the selected project, and
 the required APIs, permissions, and network are confirmed without creating
