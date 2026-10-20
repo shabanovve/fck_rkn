@@ -294,12 +294,18 @@ behavior that requires them.
 - **Rule:** `GcloudIapRunner` and everything under `fck_rkn/gcp/` may be used
   only by `test_env_host` and test-only code.
 
-### 49c. Split configuration into agent and test-environment parts
+### 49c. [x] Split configuration into agent and test-environment parts
 
 - **Change:** Keep the `GCP_*` settings in a test-environment settings class
   used only by `test_env_host` and `fck_rkn/gcp/`. Add platform-neutral agent
   settings (target host and runner selection). Agents must not import
   `fck_rkn.gcp` or `TestEnvironmentSettings`.
+- **Done:** `fck_rkn/agent_config.py` (`AgentSettings` from `config/agents.env`:
+  `EU_SERVER_HOST`, `RU_SERVER_HOST`, `SSH_USER`, `SSH_KEY_PATH`, `SSH_PORT`)
+  with `eu_server_runner` / `ru_server_runner` building `SshRunner`. Production
+  agents run remotely over SSH from a controller. `TestEnvironmentSettings`
+  stays in `config.py` for `test_env_host` and `fck_rkn/gcp/`; agents still
+  import it until 49d and 49e.
 
 ### 49d. Make `ru-server-agent` and `ru-server-test-agent` use `RemoteRunner`
 

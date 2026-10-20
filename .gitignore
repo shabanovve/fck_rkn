@@ -1,5 +1,6 @@
 /config/**
 !/config/test.env.example
+!/config/agents.env.example
 __pycache__/
 *.py[cod]
 .venv/
