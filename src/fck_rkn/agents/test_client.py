@@ -13,8 +13,11 @@ from fck_rkn.agent_config import load_agent_settings, test_client_runner
 from fck_rkn.agents.ru_server import (
     CLIENT_DEPLOY_TIMEOUT_SECONDS,
     CLIENT_IMAGE,
+    CLIENT_LOCAL_PORT,
+    PROBE_TARGET_URL,
     build_client_config,
     parse_access_url,
+    run_remote_with_input,
 )
 from fck_rkn.remote import render
 from fck_rkn.remote.runner import RemoteRunner, execute
@@ -41,6 +44,31 @@ def build_connection_deploy_command() -> str:
     )
 
 
+CONNECTION_CHECK_COMMAND = render(
+    "outline_client_check.sh",
+    container_name=CONNECTION_CONTAINER_NAME,
+    image=CLIENT_IMAGE,
+    state_directory=CONNECTION_STATE_DIRECTORY,
+    local_port=CLIENT_LOCAL_PORT,
+    target_url=PROBE_TARGET_URL,
+)
+
+
+def check_outline_connection(runner: RemoteRunner, access_url: str) -> int:
+    """Verify test-client is connected to RU Outline with the test key."""
+    try:
+        method, password, host, port = parse_access_url(access_url)
+    except ValueError as error:
+        logger.error("%s", error)
+        return 1
+    return run_remote_with_input(
+        runner,
+        CONNECTION_CHECK_COMMAND,
+        build_client_config(method, password, host, port),
+        "Checking the test-client connection to RU Outline",
+    )
+
+
 def connect_to_outline(runner: RemoteRunner, access_url: str) -> int:
     """Run the Outline client (ss-local) on test-client with the RU test key."""
     try:
@@ -64,7 +92,7 @@ def connect_to_outline(runner: RemoteRunner, access_url: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run test-client actions.")
-    parser.add_argument("action", choices=("connect-outline",), help="Action to run")
+    parser.add_argument("action", choices=("connect-outline", "check-outline"), help="Action to run")
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -81,7 +109,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # The key is read from stdin so it never appears in argv or shell history.
-    return connect_to_outline(runner, sys.stdin.readline())
+    access_url = sys.stdin.readline()
+    if args.action == "check-outline":
+        return check_outline_connection(runner, access_url)
+    return connect_to_outline(runner, access_url)
 
 
 if __name__ == "__main__":

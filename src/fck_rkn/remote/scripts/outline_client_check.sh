@@ -19,7 +19,7 @@ fi
 server_host=$(python3 -c "import json,sys; c=json.loads(sys.argv[1]); print(c['server'], c['server_port'])" "$expected")
 read -r server_host server_port <<<"$server_host"
 if ! timeout 10 bash -c 'echo > /dev/tcp/"$0"/"$1"' "$server_host" "$server_port"; then
-  echo "EU Outline server is unreachable from the client" >&2
+  echo "Outline server is unreachable from the client" >&2
   exit 1
 fi
 if ! status=$(curl --silent --output /dev/null --max-time 30 \

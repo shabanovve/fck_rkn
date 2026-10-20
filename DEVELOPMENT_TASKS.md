@@ -493,10 +493,16 @@ behavior that requires them.
   settings. The key is created on RU Outline by the orchestrator with
   `create_outline_user` through the RU runner (task 63).
 
-### 62. Add test-client Outline connection test
+### 62. [x] Add test-client Outline connection test
 
 - **Test:** Add a `test-client-agent` check for the authenticated RU Outline
   connection.
+- **Done:** `test-client-agent check-outline` reads the key from stdin
+  and runs the shared `outline_client_check.sh` against the
+  `fck-rkn-test-client-outline` container: image and running state, config
+  equal to the test key, local SOCKS listener, reachability of the Outline
+  server, and an HTTP request through the tunnel. The script's server message
+  is now neutral (no "EU").
 
 ### 63. Connect and test `test-client`
 

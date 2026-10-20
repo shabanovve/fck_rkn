@@ -10,7 +10,9 @@ from fake_runner import FakeRunner
 
 from fck_rkn.agent_config import AgentSettings, test_client_runner
 from fck_rkn.agents.test_client import (
+    CONNECTION_CHECK_COMMAND,
     build_connection_deploy_command,
+    check_outline_connection,
     connect_to_outline,
     main,
 )
@@ -68,6 +70,54 @@ class TestClientAgentTests(unittest.TestCase):
         with self.assertLogs("fck_rkn.remote.runner", "ERROR") as logs:
             self.assertEqual(connect_to_outline(runner, make_access_url()), 1)
         self.assertNotIn("test-secret", "\n".join(logs.output))
+
+    def test_check_verifies_the_connection_against_the_key_from_stdin(self) -> None:
+        runner = FakeRunner(stdout="ok\n")
+
+        self.assertEqual(check_outline_connection(runner, make_access_url()), 0)
+
+        self.assertEqual(runner.command, CONNECTION_CHECK_COMMAND)
+        self.assertNotIn("test-secret", runner.command)
+        expected = json.loads(runner.stdin)
+        self.assertEqual(expected["password"], "test-secret")
+        self.assertEqual(expected["server"], "configured-host")
+
+    def test_check_script_covers_container_key_listener_server_and_http(self) -> None:
+        script = CONNECTION_CHECK_COMMAND
+        self.assertIn("fck-rkn-test-client-outline", script)
+        self.assertIn("/opt/fck-rkn-test-client-outline/config.json", script)
+        self.assertIn("test key", script)
+        self.assertIn("/dev/tcp/127.0.0.1/1080", script)
+        self.assertIn("unreachable from the client", script)
+        self.assertIn("--socks5-hostname 127.0.0.1:1080", script)
+        self.assertNotIn("test-secret", script)
+
+    def test_check_fails_without_leaking_the_key(self) -> None:
+        runner = FakeRunner(exit_code=1, stdout="test-secret")
+        with self.assertLogs("fck_rkn.remote.runner", "ERROR") as logs:
+            self.assertEqual(check_outline_connection(runner, make_access_url()), 1)
+        self.assertNotIn("test-secret", "\n".join(logs.output))
+
+    def test_check_rejects_an_invalid_key_without_running_commands(self) -> None:
+        runner = FakeRunner()
+        with self.assertLogs("fck_rkn.agents.test_client", "ERROR"):
+            self.assertEqual(check_outline_connection(runner, "bad"), 1)
+        self.assertEqual(runner.calls, [])
+
+    def test_cli_dispatches_the_check_action(self) -> None:
+        with (
+            patch("fck_rkn.agents.test_client.load_agent_settings"),
+            patch("fck_rkn.agents.test_client.test_client_runner"),
+            patch("fck_rkn.agents.test_client.sys.stdin") as stdin,
+            patch(
+                "fck_rkn.agents.test_client.check_outline_connection", return_value=0
+            ) as check,
+            patch("fck_rkn.agents.test_client.connect_to_outline") as connect,
+        ):
+            stdin.readline.return_value = "ss://key\n"
+            self.assertEqual(main(["check-outline"]), 0)
+        check.assert_called_once()
+        connect.assert_not_called()
 
     def test_cli_reads_the_key_from_stdin(self) -> None:
         with (
