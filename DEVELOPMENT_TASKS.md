@@ -532,10 +532,14 @@ behavior that requires them.
   - Done: `test-client-agent check-squid` verifies that the tunnel container
     runs and localhost TCP/3128 accepts connections; it needs no key.
 
-### 66. Deploy and test client TCP/3128 access
+### 66. [x] Deploy and test client TCP/3128 access
 
 - **Orchestration:** Make `test_env_host` invoke the client check and verify
   that the path reaches EU Squid through RU.
+- **Done:** After the Outline connection, the orchestrator deploys the tunnel
+  with the EU private address (exit 33) and runs `check_squid_tunnel` (exit
+  34), which also sends an HTTP request through 127.0.0.1:3128 and requires a
+  Squid response.
 
 ### 67. Add HTTP request to `test-client-agent`
 

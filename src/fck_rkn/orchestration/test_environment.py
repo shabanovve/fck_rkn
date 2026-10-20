@@ -33,7 +33,12 @@ from fck_rkn.agents.ru_server import (
     recover_tunnel,
     stop_tunnel,
 )
-from fck_rkn.agents.test_client import check_outline_connection, connect_to_outline
+from fck_rkn.agents.test_client import (
+    check_outline_connection,
+    check_squid_tunnel,
+    connect_to_outline,
+    deploy_squid_tunnel,
+)
 from fck_rkn.agents.ru_server_test import (
     check_outline_client,
     check_outline_health as check_ru_outline_health,
@@ -525,6 +530,33 @@ def _run(image_directory: Path) -> int:
             )
             return failure_code
     logger.info("test-client is connected to RU Outline")
+
+    squid_tunnel_steps = (
+        (
+            "Squid tunnel deployment",
+            lambda: deploy_squid_tunnel(
+                client_runner, client_access_url, eu_private_address
+            ),
+            33,
+        ),
+        ("Squid tunnel check", lambda: check_squid_tunnel(client_runner), 34),
+    )
+    for description, step, failure_code in squid_tunnel_steps:
+        logger.info("Running test-client %s", description)
+        step_exit_code = step()
+        if step_exit_code != 0:
+            logger.error(
+                "test-client %s failed with exit status %d",
+                description,
+                step_exit_code,
+            )
+            print(
+                f"test-client {description} failed with exit status "
+                f"{step_exit_code}.",
+                file=sys.stderr,
+            )
+            return failure_code
+    logger.info("test-client localhost TCP/3128 reaches EU Squid through RU")
 
     print(
         f"{ru_instance.name} is available in project "

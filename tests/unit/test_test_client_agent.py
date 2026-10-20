@@ -201,6 +201,8 @@ class SquidTunnelCheckTests(unittest.TestCase):
     def test_script_checks_container_and_localhost_listener(self) -> None:
         self.assertIn("fck-rkn-test-client-squid", SQUID_TUNNEL_CHECK_COMMAND)
         self.assertIn("/dev/tcp/127.0.0.1/3128", SQUID_TUNNEL_CHECK_COMMAND)
+        self.assertIn("--proxy http://127.0.0.1:3128", SQUID_TUNNEL_CHECK_COMMAND)
+        self.assertIn("did not reach EU Squid", SQUID_TUNNEL_CHECK_COMMAND)
 
     def test_check_runs_the_script_without_a_key(self) -> None:
         runner = FakeRunner(stdout="ok\n")

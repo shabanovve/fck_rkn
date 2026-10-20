@@ -71,6 +71,18 @@ class OrchestratorPingTests(unittest.TestCase):
             "fck_rkn.orchestration.test_environment.check_outline_connection",
             return_value=0,
         )
+        self.squid_tunnel_deploy = patch(
+            "fck_rkn.orchestration.test_environment.deploy_squid_tunnel",
+            return_value=0,
+        )
+        self.squid_tunnel_check = patch(
+            "fck_rkn.orchestration.test_environment.check_squid_tunnel",
+            return_value=0,
+        )
+        self.squid_tunnel_deploy_mock = self.squid_tunnel_deploy.start()
+        self.squid_tunnel_check_mock = self.squid_tunnel_check.start()
+        self.addCleanup(self.squid_tunnel_deploy.stop)
+        self.addCleanup(self.squid_tunnel_check.stop)
         self.client_connect_mock = self.client_connect.start()
         self.client_check_mock = self.client_check.start()
         self.addCleanup(self.client_connect.stop)
@@ -557,6 +569,29 @@ class OrchestratorPingTests(unittest.TestCase):
                 self.assertEqual(result, expected)
                 self.assertIn("failed with exit status 1", stderr.getvalue())
         self.client_check_mock.assert_called_once()
+
+    def test_squid_tunnel_steps_fail_with_own_codes_and_stop(self) -> None:
+        for deploy_code, check_code, expected in ((1, 0, 33), (0, 1, 34)):
+            with self.subTest(expected=expected):
+                self.squid_tunnel_deploy_mock.reset_mock()
+                self.squid_tunnel_check_mock.reset_mock()
+                self.squid_tunnel_deploy_mock.return_value = deploy_code
+                self.squid_tunnel_check_mock.return_value = check_code
+
+                result, stderr = self.run_main_with_healthy_eu()
+
+                self.assertEqual(result, expected)
+                self.assertIn("failed with exit status 1", stderr.getvalue())
+        self.squid_tunnel_check_mock.assert_called_once()
+
+    def test_squid_tunnel_is_deployed_with_the_test_key_and_eu_address(self) -> None:
+        result, _ = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 0)
+        args = self.squid_tunnel_deploy_mock.call_args.args
+        self.assertEqual(args[1], "ss://configured-key")
+        self.assertTrue(args[2])
+        self.squid_tunnel_check_mock.assert_called_once()
 
     def test_stops_when_the_image_cannot_be_built_or_exported(self) -> None:
         for name, value in (

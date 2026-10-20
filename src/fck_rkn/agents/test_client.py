@@ -99,11 +99,12 @@ SQUID_TUNNEL_CHECK_COMMAND = render(
     "squid_tunnel_check.sh",
     container_name=SQUID_TUNNEL_CONTAINER_NAME,
     local_port=SQUID_TUNNEL_LOCAL_PORT,
+    target_url=PROBE_TARGET_URL,
 )
 
 
 def check_squid_tunnel(runner: RemoteRunner) -> int:
-    """Verify test-client listens on localhost TCP/3128 for the Squid tunnel."""
+    """Verify localhost TCP/3128 on test-client reaches EU Squid through RU."""
     return run_remote_with_input(
         runner,
         SQUID_TUNNEL_CHECK_COMMAND,
