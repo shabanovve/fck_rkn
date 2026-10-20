@@ -282,12 +282,15 @@ behavior that requires them.
   `RemoteStartError` and `execute()` live in `fck_rkn/remote/runner.py`.
   Agents are migrated in tasks 49d and 49e.
 
-### 49b. Add runner implementations
+### 49b. [x] Add runner implementations
 
 - **Change:** Add `GcloudIapRunner` (the only place that builds
   `gcloud compute ssh --tunnel-through-iap --project --zone`) and a generic
   `SshRunner` (plain `ssh` with host, user and key path from configuration)
   for production. Both pass secrets through stdin only.
+- **Done:** `fck_rkn/gcp/runner.py` (`GcloudIapRunner`) and
+  `fck_rkn/remote/ssh.py` (`SshRunner(host, user, key_path, port)`) share
+  `fck_rkn/remote/subprocess_runner.py`. Agents are not migrated yet (49d, 49e).
 - **Rule:** `GcloudIapRunner` and everything under `fck_rkn/gcp/` may be used
   only by `test_env_host` and test-only code.
 
