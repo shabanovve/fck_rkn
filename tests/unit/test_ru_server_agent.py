@@ -10,9 +10,12 @@ import json
 from fck_rkn.agents.ru_server import (
     build_client_deploy_command,
     build_forward_deploy_command,
+    build_recovery_command,
     deploy_outline_client,
     deploy_squid_forward,
+    main,
     parse_access_url,
+    recover_tunnel,
     run_outline_squid_probe,
 )
 from fck_rkn.config import TestEnvironmentSettings
@@ -174,6 +177,39 @@ class RuServerSquidForwardTests(unittest.TestCase):
         self.assertIn("--user root", script)
         self.assertIn("is not running; recreating it", script)
         self.assertNotIn("test-secret", script)
+
+    def test_recovery_script_restarts_tunnel_with_bounded_retries(self) -> None:
+        script = build_recovery_command()
+        self.assertIn("attempts=5", script)
+        self.assertIn("docker restart", script)
+        self.assertIn("fck-rkn-outline-client", script)
+        self.assertIn("fck-rkn-squid-forward", script)
+        self.assertIn("--proxy http://127.0.0.1:3128", script)
+        self.assertIn("client traffic stays blocked", script)
+        for forbidden in ("iptables", "ip route", "nft", "--noproxy"):
+            self.assertNotIn(forbidden, script)
+
+    def test_recover_tunnel_runs_script_without_stdin_secrets(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed) as run:
+            result = recover_tunnel(make_settings())
+
+        self.assertEqual(result, 0)
+        self.assertEqual(run.call_args.kwargs["input"], "")
+        self.assertIn(f"--command={build_recovery_command()}", run.call_args.args[0])
+
+    def test_recover_tunnel_fails_when_tunnel_does_not_return(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="x")
+        with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed):
+            self.assertEqual(recover_tunnel(make_settings()), 1)
+
+    def test_cli_dispatches_recover_tunnel(self) -> None:
+        with (
+            patch("fck_rkn.agents.ru_server.load_config", return_value=make_settings()),
+            patch("fck_rkn.agents.ru_server.recover_tunnel", return_value=0) as recover,
+        ):
+            self.assertEqual(main(["recover-tunnel"]), 0)
+        recover.assert_called_once()
 
     def test_forward_and_client_use_separate_containers(self) -> None:
         self.assertNotIn("fck-rkn-outline-client", build_forward_deploy_command())

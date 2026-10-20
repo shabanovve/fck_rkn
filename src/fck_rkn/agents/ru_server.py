@@ -34,6 +34,9 @@ CLIENT_DEPLOY_TIMEOUT_SECONDS = 900
 FORWARD_CONTAINER_NAME = "fck-rkn-squid-forward"
 FORWARD_STATE_DIRECTORY = "/opt/fck-rkn-squid-forward"
 FORWARD_LOCAL_PORT = SQUID_PORT
+RECOVERY_ATTEMPTS = 5
+RECOVERY_DELAY_SECONDS = 10
+RECOVERY_TIMEOUT_SECONDS = 600
 
 
 def parse_access_url(access_url: str) -> tuple[str, str, str, int]:
@@ -228,6 +231,32 @@ def deploy_outline_client(
     return result
 
 
+def build_recovery_command() -> str:
+    return render(
+        "recover_tunnel.sh",
+        attempts=RECOVERY_ATTEMPTS,
+        delay_seconds=RECOVERY_DELAY_SECONDS,
+        local_port=FORWARD_LOCAL_PORT,
+        target_url=PROBE_TARGET_URL,
+        client_container_name=CLIENT_CONTAINER_NAME,
+        forward_container_name=FORWARD_CONTAINER_NAME,
+    )
+
+
+def recover_tunnel(settings: TestEnvironmentSettings) -> int:
+    """Restore the Outline tunnel with bounded retries, never bypassing it."""
+    result = run_remote_with_input(
+        settings,
+        build_recovery_command(),
+        "",
+        "Recovering the Outline tunnel (client traffic stays blocked on failure)",
+        timeout=RECOVERY_TIMEOUT_SECONDS,
+    )
+    if result == 0:
+        logger.info("Outline tunnel is up on %s", RU_INSTANCE_NAME)
+    return result
+
+
 def run_outline_squid_probe(
     settings: TestEnvironmentSettings,
     access_url: str,
@@ -260,6 +289,7 @@ def main(argv: list[str] | None = None) -> int:
             "probe-outline-squid",
             "deploy-outline-client",
             "deploy-squid-forward",
+            "recover-tunnel",
         ),
         help="Action to run",
     )
@@ -286,6 +316,8 @@ def main(argv: list[str] | None = None) -> int:
         return deploy_outline_client(settings, sys.stdin.readline())
     if args.action == "deploy-squid-forward":
         return deploy_squid_forward(settings, sys.stdin.readline())
+    if args.action == "recover-tunnel":
+        return recover_tunnel(settings)
     return 1
 
 

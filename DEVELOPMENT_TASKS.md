@@ -235,10 +235,14 @@ behavior that requires them.
   `src/fck_rkn/remote/scripts/` and are loaded with `fck_rkn.remote.render`
   (`@NAME@` placeholders, `#include` fragments, strict unused/missing checks).
 
-### 46. Add tunnel-loss recovery to `ru-server-agent`
+### 46. [x] Add tunnel-loss recovery to `ru-server-agent`
 
 - **Change:** Add retry behavior after Outline connection loss while keeping
   client traffic blocked; do not fall back to direct Internet access.
+- **Done:** `ru-server-agent recover-tunnel` probes EU Squid through the
+  forward and, while it is down, restarts the client and forward containers
+  (5 attempts, 10 s apart). It never touches routes or firewall rules and
+  fails (exit 1) if the tunnel does not return.
 
 ### 47. Add tunnel-loss test to `ru-server-test-agent`
 
