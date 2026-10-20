@@ -41,10 +41,27 @@ class OrchestratorPingTests(unittest.TestCase):
         self.addCleanup(self.outline_check.stop)
         self.ru_lookup = patch(
             "fck_rkn.orchestration.test_environment.ensure_ru_server",
-            return_value=compute_v1.Instance(name="ru-server"),
+            return_value=compute_v1.Instance(
+                name="ru-server",
+                network_interfaces=[
+                    compute_v1.NetworkInterface(network_i_p="ru.internal")
+                ],
+            ),
         )
         self.ru_lookup_mock = self.ru_lookup.start()
         self.addCleanup(self.ru_lookup.stop)
+        self.ru_outline_deploy = patch(
+            "fck_rkn.orchestration.test_environment.deploy_outline_server",
+            return_value=0,
+        )
+        self.ru_outline_health = patch(
+            "fck_rkn.orchestration.test_environment.check_ru_outline_health",
+            return_value=0,
+        )
+        self.ru_outline_deploy_mock = self.ru_outline_deploy.start()
+        self.ru_outline_health_mock = self.ru_outline_health.start()
+        self.addCleanup(self.ru_outline_deploy.stop)
+        self.addCleanup(self.ru_outline_health.stop)
         self.ru_key = patch(
             "fck_rkn.orchestration.test_environment.create_outline_user",
             return_value="ss://configured-key",
@@ -134,6 +151,10 @@ class OrchestratorPingTests(unittest.TestCase):
         ru_runner = GcloudIapRunner(
             "ru-server", "fck-rkn-test", "europe-north1-a"
         )
+        self.ru_outline_deploy_mock.assert_called_once_with(
+            ru_runner, "ru.internal"
+        )
+        self.ru_outline_health_mock.assert_called_once_with(ru_runner)
         self.ru_client_deploy_mock.assert_called_once_with(
             ru_runner, "ss://configured-key"
         )
@@ -454,6 +475,25 @@ class OrchestratorPingTests(unittest.TestCase):
 
         self.assertEqual(result, 13)
         self.assertIn("Outline access key", stderr.getvalue())
+
+    def test_stops_when_ru_outline_deployment_fails(self) -> None:
+        self.ru_outline_deploy_mock.return_value = 1
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 24)
+        self.ru_outline_health_mock.assert_not_called()
+        self.ru_key_mock.assert_not_called()
+        self.assertIn("Outline Server deployment failed", stderr.getvalue())
+
+    def test_stops_when_ru_outline_health_check_fails(self) -> None:
+        self.ru_outline_health_mock.return_value = 1
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 25)
+        self.ru_key_mock.assert_not_called()
+        self.assertIn("Outline health check failed", stderr.getvalue())
 
     def test_stops_when_ru_outline_client_deployment_fails(self) -> None:
         self.ru_client_deploy_mock.return_value = 1

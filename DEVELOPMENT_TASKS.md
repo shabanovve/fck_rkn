@@ -368,10 +368,14 @@ behavior that requires them.
   built once in `agents/outline.py`) on ru-server. Not yet called by the
   orchestrator (task 51).
 
-### 51. Deploy and test RU Outline health
+### 51. [x] Deploy and test RU Outline health
 
 - **Orchestration:** Make `test_env_host` deploy RU Outline and run the new
   health test.
+- **Done:** After provisioning `ru-server`, the orchestrator passes its
+  private address to `deploy_outline_server`, then runs
+  `ru_server_test.check_outline_health`. Failures stop the workflow before
+  the Outline access key is created (exit codes 24 and 25).
 
 ### 52. Add RU VPN-user creation script
 

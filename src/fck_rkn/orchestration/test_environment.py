@@ -25,12 +25,14 @@ from fck_rkn.agents.eu_server_test import (
 )
 from fck_rkn.agents.ru_server import (
     deploy_outline_client,
+    deploy_outline_server,
     deploy_squid_forward,
     recover_tunnel,
     stop_tunnel,
 )
 from fck_rkn.agents.ru_server_test import (
     check_outline_client,
+    check_outline_health as check_ru_outline_health,
     check_squid_forward,
     check_tunnel_blocked,
 )
@@ -308,6 +310,46 @@ def main() -> int:
         RU_INSTANCE_NAME, settings.GCP_PROJECT_ID, settings.GCP_ZONE
     )
 
+    try:
+        ru_private_address = private_address_of(ru_instance)
+    except ValueError as error:
+        logger.error("%s", error)
+        print(str(error), file=sys.stderr)
+        return 12
+
+    logger.info("Invoking ru-server-agent Outline Server deployment")
+    ru_outline_deploy_exit_code = deploy_outline_server(
+        ru_runner, ru_private_address
+    )
+    if ru_outline_deploy_exit_code != 0:
+        logger.error(
+            "ru-server-agent Outline Server deployment failed with exit "
+            "status %d",
+            ru_outline_deploy_exit_code,
+        )
+        print(
+            "ru-server-agent Outline Server deployment failed with exit "
+            f"status {ru_outline_deploy_exit_code}.",
+            file=sys.stderr,
+        )
+        return 24
+
+    logger.info("Invoking ru-server-test-agent Outline health check")
+    ru_outline_health_exit_code = check_ru_outline_health(ru_runner)
+    if ru_outline_health_exit_code != 0:
+        logger.error(
+            "ru-server-test-agent Outline health check failed with exit "
+            "status %d",
+            ru_outline_health_exit_code,
+        )
+        print(
+            "ru-server-test-agent Outline health check failed with exit "
+            f"status {ru_outline_health_exit_code}.",
+            file=sys.stderr,
+        )
+        return 25
+
+    logger.info("ru-server-test-agent Outline health check passed")
     logger.info("Creating the Outline access key for the RU feasibility probe")
     access_url = create_outline_user(eu_runner, RU_PROBE_OUTLINE_USER)
     if access_url is None:
