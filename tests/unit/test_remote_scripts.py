@@ -6,6 +6,15 @@ from importlib.resources import files
 from fck_rkn.remote import render
 
 
+class ScriptPlatformTests(unittest.TestCase):
+    def test_scripts_do_not_reference_a_cloud_provider(self) -> None:
+        forbidden = ("google", "gcloud", "metadata", "gcp", "iap", "aws", "azure")
+        for path in (files("fck_rkn.remote") / "scripts").iterdir():
+            text = path.read_text().lower()
+            for word in forbidden:
+                self.assertNotIn(word, text, f"{path.name} mentions {word}")
+
+
 class RenderTests(unittest.TestCase):
     def test_fills_placeholders_and_expands_includes(self) -> None:
         script = render("deploy_squid.sh", container_name="c", image="i", port=1)

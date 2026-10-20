@@ -699,6 +699,14 @@ def _wait_for_ssh(
             time.sleep(min(POLL_INTERVAL_SECONDS, remaining))
 
 
+def private_address_of(instance: compute_v1.Instance) -> str:
+    """Return the instance's internal address for the agents."""
+    for interface in instance.network_interfaces:
+        if interface.network_i_p:
+            return interface.network_i_p
+    raise ValueError(f"{instance.name} has no private network address")
+
+
 def ensure_eu_server(
     settings: TestEnvironmentSettings,
     instances_client: compute_v1.InstancesClient | None = None,

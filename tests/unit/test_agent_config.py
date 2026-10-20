@@ -25,6 +25,7 @@ def write_env(text: str) -> Path:
 
 VALID = (
     "EU_SERVER_HOST=eu.example\nRU_SERVER_HOST=ru.example\n"
+    "EU_SERVER_PRIVATE_ADDRESS=eu.internal\nRU_SERVER_PRIVATE_ADDRESS=ru.internal\n"
     "SSH_USER=deploy\nSSH_KEY_PATH=/keys/id\n"
 )
 

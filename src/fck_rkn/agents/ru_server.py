@@ -228,13 +228,13 @@ def recover_tunnel(runner: RemoteRunner) -> int:
     return result
 
 
-def deploy_outline_server(runner: RemoteRunner) -> int:
+def deploy_outline_server(runner: RemoteRunner, private_address: str) -> int:
     """Run the approved Outline Server container on ru-server (private address).
 
     Uses the same patched image and installer as eu-server; the existing client
     (1080) and forward (3128) listeners do not conflict with ports 10000/10001.
     """
-    return deploy_outline_on(runner)
+    return deploy_outline_on(runner, private_address)
 
 
 def stop_tunnel(runner: RemoteRunner) -> int:
@@ -296,7 +296,8 @@ def main(argv: list[str] | None = None) -> int:
         stream=sys.stderr,
     )
     try:
-        runner = ru_server_runner(load_agent_settings())
+        settings = load_agent_settings()
+        runner = ru_server_runner(settings)
     except (OSError, SettingsError, ValidationError, ValueError) as error:
         logger.error(
             "Could not load valid agent configuration (%s)",
@@ -314,7 +315,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "recover-tunnel":
         return recover_tunnel(runner)
     if args.action == "deploy-outline":
-        return deploy_outline_server(runner)
+        return deploy_outline_server(runner, settings.RU_SERVER_PRIVATE_ADDRESS)
     if args.action == "stop-tunnel":
         return stop_tunnel(runner)
     return 1

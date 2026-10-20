@@ -27,6 +27,8 @@ class AgentSettings(BaseSettings):
 
     EU_SERVER_HOST: str = Field(min_length=1)
     RU_SERVER_HOST: str = Field(min_length=1)
+    EU_SERVER_PRIVATE_ADDRESS: str = Field(min_length=1)
+    RU_SERVER_PRIVATE_ADDRESS: str = Field(min_length=1)
     SSH_USER: str = Field(min_length=1)
     SSH_KEY_PATH: Path
     SSH_PORT: int = Field(default=22, ge=1, le=65535)

@@ -40,6 +40,7 @@ from fck_rkn.gcp.compute import (
     RU_INSTANCE_NAME,
     ensure_eu_server,
     ensure_ru_server,
+    private_address_of,
     stop_test_project_vms,
     validate_project_access,
 )
@@ -190,6 +191,13 @@ def main() -> int:
     if instance is None:
         return exit_code
 
+    try:
+        eu_private_address = private_address_of(instance)
+    except ValueError as error:
+        logger.error("%s", error)
+        print(str(error), file=sys.stderr)
+        return 5
+
     eu_runner = GcloudIapRunner(
         INSTANCE_NAME, settings.GCP_PROJECT_ID, settings.GCP_ZONE
     )
@@ -260,7 +268,7 @@ def main() -> int:
 
     logger.info("eu-server-test-agent Squid HTTP check passed")
     logger.info("Invoking eu-server-agent Outline deployment")
-    outline_deploy_exit_code = deploy_outline(eu_runner)
+    outline_deploy_exit_code = deploy_outline(eu_runner, eu_private_address)
     if outline_deploy_exit_code != 0:
         logger.error(
             "eu-server-agent Outline deployment failed with exit status %d",

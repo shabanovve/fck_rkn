@@ -93,9 +93,9 @@ def follow_squid_logs(runner: RemoteRunner) -> int:
     )
 
 
-def deploy_outline(runner: RemoteRunner) -> int:
-    """Install Outline Server on eu-server."""
-    return deploy_outline_on(runner)
+def deploy_outline(runner: RemoteRunner, private_address: str) -> int:
+    """Install Outline Server on eu-server, bound to its private address."""
+    return deploy_outline_on(runner, private_address)
 
 
 def create_outline_user(
@@ -170,7 +170,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
-        runner = eu_server_runner(load_agent_settings())
+        settings = load_agent_settings()
+        runner = eu_server_runner(settings)
     except (OSError, SettingsError, ValidationError, ValueError) as error:
         logger.error(
             "Could not load valid agent configuration (%s)",
@@ -183,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "logs-squid":
         return follow_squid_logs(runner)
     if args.action == "deploy-outline":
-        return deploy_outline(runner)
+        return deploy_outline(runner, settings.EU_SERVER_PRIVATE_ADDRESS)
     if args.action == "create-outline-user":
         access_url = create_outline_user(runner, args.name)
         if access_url is None:

@@ -124,7 +124,7 @@ class EuServerAgentTests(unittest.TestCase):
 
     def test_deploys_official_outline_server_with_private_endpoint(self) -> None:
         runner = FakeRunner()
-        result = deploy_outline(runner)
+        result = deploy_outline(runner, "eu.internal")
 
         remote_command = runner.command
         self.assertIn(OUTLINE_INSTALLER_URL, remote_command)
@@ -133,7 +133,7 @@ class EuServerAgentTests(unittest.TestCase):
         self.assertIn(f"container_name={OUTLINE_CONTAINER_NAME}", remote_command)
         self.assertIn('CONTAINER_NAME="$container_name"', remote_command)
         self.assertIn(f"SHADOWBOX_DIR={OUTLINE_STATE_DIRECTORY}", remote_command)
-        self.assertIn("--hostname \"$private_ip\"", remote_command)
+        self.assertIn("--hostname \"$private_address\"", remote_command)
         self.assertIn(f"--api-port {OUTLINE_API_PORT}", remote_command)
         self.assertIn(f"--keys-port {OUTLINE_ACCESS_KEY_PORT}", remote_command)
         self.assertIn(">/dev/null 2>&1", remote_command)
@@ -144,7 +144,7 @@ class EuServerAgentTests(unittest.TestCase):
             remote_command.index("FCK_RKN_DOCKERFILE"),
             remote_command.index(OUTLINE_INSTALLER_URL),
         )
-        self.assertIn("Metadata-Flavor: Google", remote_command)
+        self.assertIn("private_address=eu.internal", remote_command)
         self.assertIn("refusing to replace it", remote_command)
         self.assertIn(
             'if [ "$actual_image" = "$expected_image" ] && '
@@ -165,20 +165,22 @@ class EuServerAgentTests(unittest.TestCase):
 
     def test_outline_deployment_reports_timeout(self) -> None:
         with self.assertLogs("fck_rkn.remote.runner", level="ERROR"):
-            result = deploy_outline(FakeRunner(error=RemoteTimeoutError()))
+            result = deploy_outline(FakeRunner(error=RemoteTimeoutError()), "eu.internal")
 
         self.assertNotEqual(result, 0)
 
     def test_cli_dispatches_deploy_outline_action(self) -> None:
         with (
-            patch("fck_rkn.agents.eu_server.load_agent_settings"),
+            patch("fck_rkn.agents.eu_server.load_agent_settings") as load,
             patch("fck_rkn.agents.eu_server.eu_server_runner") as make_runner,
             patch("fck_rkn.agents.eu_server.deploy_outline", return_value=0) as deploy,
         ):
             result = main(["deploy-outline"])
 
         self.assertEqual(result, 0)
-        deploy.assert_called_once_with(make_runner.return_value)
+        deploy.assert_called_once_with(
+            make_runner.return_value, load.return_value.EU_SERVER_PRIVATE_ADDRESS
+        )
 
     def test_creates_or_reuses_named_outline_user_and_returns_key_safely(self) -> None:
         access_url = "ss://sensitive-test-key@example.invalid:10001/?outline=1"

@@ -160,19 +160,26 @@ class RuServerSquidForwardTests(unittest.TestCase):
 
     def test_deploys_outline_server_through_the_runner(self) -> None:
         runner = FakeRunner()
-        result = deploy_outline_server(runner)
+        result = deploy_outline_server(runner, "ru.internal")
 
         self.assertEqual(result, 0)
         self.assertIn("expected_image=fck-rkn-shadowbox:no-public-ip-check", runner.command)
         self.assertIn("--api-port 10000", runner.command)
         self.assertIn("--keys-port 10001", runner.command)
         self.assertIn("leaving it unchanged", runner.command)
+        self.assertIn("private_address=ru.internal", runner.command)
+
+    def test_outline_deploy_rejects_blank_private_address(self) -> None:
+        runner = FakeRunner()
+        with self.assertLogs("fck_rkn.agents.outline", level="ERROR"):
+            self.assertEqual(deploy_outline_server(runner, " "), 1)
+        self.assertEqual(runner.calls, [])
 
     def test_ru_outline_deploy_reports_failure_and_timeout(self) -> None:
         with self.assertLogs("fck_rkn.remote.runner", level="ERROR"):
-            self.assertEqual(deploy_outline_server(FakeRunner(exit_code=7)), 7)
+            self.assertEqual(deploy_outline_server(FakeRunner(exit_code=7), "ru.internal"), 7)
             self.assertEqual(
-                deploy_outline_server(FakeRunner(error=RemoteTimeoutError())), 1
+                deploy_outline_server(FakeRunner(error=RemoteTimeoutError()), "ru.internal"), 1
             )
 
     def test_cli_dispatches_ru_deploy_outline(self) -> None:

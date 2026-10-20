@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shlex
 
 from fck_rkn.remote import render
 from fck_rkn.remote.runner import RemoteRunner, execute
@@ -26,8 +27,12 @@ OUTLINE_ACCESS_KEY_PORT = 10001
 OUTLINE_DEPLOY_TIMEOUT_SECONDS = 900
 
 
-def deploy_outline_on(runner: RemoteRunner) -> int:
-    """Install Outline Server on the runner target using its private IP."""
+def deploy_outline_on(runner: RemoteRunner, private_address: str) -> int:
+    """Install Outline Server on the runner target, bound to private_address."""
+    private_address = private_address.strip()
+    if not private_address:
+        logger.error("Outline Server private address must not be empty")
+        return 1
     remote_command = render(
         "deploy_outline.sh",
         container_name=OUTLINE_CONTAINER_NAME,
@@ -38,6 +43,7 @@ def deploy_outline_on(runner: RemoteRunner) -> int:
         state_directory=OUTLINE_STATE_DIRECTORY,
         api_port=OUTLINE_API_PORT,
         keys_port=OUTLINE_ACCESS_KEY_PORT,
+        private_address=shlex.quote(private_address),
     )
     logger.info("Deploying Outline Server with a private endpoint")
     result = execute(

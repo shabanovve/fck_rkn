@@ -26,15 +26,14 @@ echo "Building the Outline Server image without the public-IP target check"
 sudo docker build -t "$expected_image" -f - "$(mktemp -d)" <<'FCK_RKN_DOCKERFILE'
 #include outline_shadowbox.Dockerfile
 FCK_RKN_DOCKERFILE
-private_ip="$(curl --fail --silent --show-error -H 'Metadata-Flavor: Google' \
-  'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip')"
+private_address=@PRIVATE_ADDRESS@
 echo "Installing official Outline Server stable image on the private VM address"
 curl --fail --silent --show-error @INSTALLER_URL@ | sudo env \
   CONTAINER_NAME="$container_name" \
   SB_IMAGE="$expected_image" \
   SHADOWBOX_DIR=@STATE_DIRECTORY@ \
   bash -s -- \
-  --hostname "$private_ip" \
+  --hostname "$private_address" \
   --api-port @API_PORT@ \
   --keys-port @KEYS_PORT@ \
   >/dev/null 2>&1 || {

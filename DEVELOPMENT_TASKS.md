@@ -332,7 +332,7 @@ behavior that requires them.
   orchestrator passes a `GcloudIapRunner` for eu-server. `test_platform_independence.py`
   now covers every module under `agents/`.
 
-### 49f. Remove the GCP metadata dependency from remote scripts
+### 49f. [x] Remove the GCP metadata dependency from remote scripts
 
 - **Change:** `deploy_outline.sh` receives the private IP as a parameter
   instead of querying `metadata.google.internal`. The runner or the
@@ -340,6 +340,11 @@ behavior that requires them.
   configured address in production).
 - **Test:** Rendering test that no script under `remote/scripts/` references
   a cloud provider.
+- **Done:** `deploy_outline.sh` takes `@PRIVATE_ADDRESS@` (shell-quoted);
+  `deploy_outline_on`, `deploy_outline` and `deploy_outline_server` take
+  `private_address`. Production reads `EU_SERVER_PRIVATE_ADDRESS` and
+  `RU_SERVER_PRIVATE_ADDRESS` from `config/agents.env`; the orchestrator uses
+  `gcp.compute.private_address_of(instance)` (exit code 5 if missing).
 
 ### 49g. Document the platform boundary
 
