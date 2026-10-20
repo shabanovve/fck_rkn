@@ -12,6 +12,7 @@ from fck_rkn.agents.ru_server import (
     build_forward_deploy_command,
     build_recovery_command,
     deploy_outline_client,
+    deploy_outline_server,
     deploy_squid_forward,
     main,
     parse_access_url,
@@ -203,6 +204,45 @@ class RuServerSquidForwardTests(unittest.TestCase):
         completed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="x")
         with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed):
             self.assertEqual(recover_tunnel(make_settings()), 1)
+
+    def test_deploys_outline_server_on_ru_private_address(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=0)
+        with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed) as run:
+            result = deploy_outline_server(make_settings())
+
+        command = run.call_args.args[0]
+        remote = next(a for a in command if a.startswith("--command="))
+        self.assertEqual(result, 0)
+        self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "ru-server"])
+        self.assertIn("--tunnel-through-iap", command)
+        self.assertIn("expected_image=fck-rkn-shadowbox:no-public-ip-check", remote)
+        self.assertIn("--api-port 10000", remote)
+        self.assertIn("--keys-port 10001", remote)
+        self.assertIn("leaving it unchanged", remote)
+
+    def test_ru_outline_deploy_reports_failure_and_timeout(self) -> None:
+        failed = subprocess.CompletedProcess(args=[], returncode=7)
+        with (
+            patch("fck_rkn.agents.ru_server.subprocess.run", return_value=failed),
+            self.assertLogs("fck_rkn.agents.outline", level="ERROR"),
+        ):
+            self.assertEqual(deploy_outline_server(make_settings()), 7)
+        with (
+            patch(
+                "fck_rkn.agents.ru_server.subprocess.run",
+                side_effect=subprocess.TimeoutExpired("gcloud", 1),
+            ),
+            self.assertLogs("fck_rkn.agents.outline", level="ERROR"),
+        ):
+            self.assertEqual(deploy_outline_server(make_settings()), 1)
+
+    def test_cli_dispatches_ru_deploy_outline(self) -> None:
+        with (
+            patch("fck_rkn.agents.ru_server.load_config", return_value=make_settings()),
+            patch("fck_rkn.agents.ru_server.deploy_outline_server", return_value=0) as deploy,
+        ):
+            self.assertEqual(main(["deploy-outline"]), 0)
+        deploy.assert_called_once()
 
     def test_stop_tunnel_stops_only_the_forward_container(self) -> None:
         completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")

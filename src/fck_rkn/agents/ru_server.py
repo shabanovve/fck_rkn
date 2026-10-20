@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import SQUID_PORT
+from fck_rkn.agents.outline import deploy_outline_on
 from fck_rkn.config import TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import RU_INSTANCE_NAME
 from fck_rkn.remote import render
@@ -257,6 +258,15 @@ def recover_tunnel(settings: TestEnvironmentSettings) -> int:
     return result
 
 
+def deploy_outline_server(settings: TestEnvironmentSettings) -> int:
+    """Run the approved Outline Server container on ru-server (private address).
+
+    Uses the same patched image and installer as eu-server; the existing client
+    (1080) and forward (3128) listeners do not conflict with ports 10000/10001.
+    """
+    return deploy_outline_on(settings, RU_INSTANCE_NAME)
+
+
 def stop_tunnel(settings: TestEnvironmentSettings) -> int:
     """Simulate tunnel loss by stopping the forward container."""
     result = run_remote_with_input(
@@ -304,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
             "deploy-squid-forward",
             "recover-tunnel",
             "stop-tunnel",
+            "deploy-outline",
         ),
         help="Action to run",
     )
@@ -332,6 +343,8 @@ def main(argv: list[str] | None = None) -> int:
         return deploy_squid_forward(settings, sys.stdin.readline())
     if args.action == "recover-tunnel":
         return recover_tunnel(settings)
+    if args.action == "deploy-outline":
+        return deploy_outline_server(settings)
     if args.action == "stop-tunnel":
         return stop_tunnel(settings)
     return 1

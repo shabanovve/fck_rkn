@@ -262,10 +262,14 @@ behavior that requires them.
 
 ## Outline Server on `ru-server`
 
-### 49. Add RU Outline Server deployment
+### 49. [x] Add RU Outline Server deployment
 
 - **Change:** Add an action to `ru-server-agent` that starts the approved
   Outline Server container on RU.
+- **Done:** `ru-server-agent deploy-outline` reuses `deploy_outline.sh` and the
+  same patched image, ports (10000/10001) and state directory as on EU, bound
+  to ru-server's private address; it is idempotent. Not yet wired into
+  `test_env_host` (task 51).
 
 ### 50. Add RU Outline health test
 

@@ -11,6 +11,18 @@ import sys
 from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
+from fck_rkn.agents.outline import (  # noqa: F401
+    OUTLINE_ACCESS_KEY_PORT,
+    OUTLINE_API_PORT,
+    OUTLINE_BASE_IMAGE,
+    OUTLINE_CONTAINER_NAME,
+    OUTLINE_DEPLOY_TIMEOUT_SECONDS,
+    OUTLINE_IMAGE,
+    OUTLINE_INSTALLER_URL,
+    OUTLINE_SS_SERVER_VERSION,
+    OUTLINE_STATE_DIRECTORY,
+    deploy_outline_on,
+)
 from fck_rkn.config import TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import INSTANCE_NAME
 from fck_rkn.remote import render
@@ -21,24 +33,9 @@ PING_COMMAND = "ping -c 1 -W 10 youtube.com"
 SQUID_CONTAINER_NAME = "fck-rkn-squid"
 SQUID_IMAGE = "ubuntu/squid:latest"
 SQUID_PORT = 3128
-OUTLINE_CONTAINER_NAME = "fck-rkn-outline-shadowbox"
-OUTLINE_BASE_IMAGE = "quay.io/outline/shadowbox:stable"
-OUTLINE_IMAGE = "fck-rkn-shadowbox:no-public-ip-check"
-# The patched outline-ss-server (see remote/scripts/outline_shadowbox.Dockerfile)
-# accepts private target addresses so the RU route can reach eu-server's private
-# Squid endpoint, in test and production alike.
-OUTLINE_SS_SERVER_VERSION = "v1.7.3"
-OUTLINE_INSTALLER_URL = (
-    "https://raw.githubusercontent.com/Jigsaw-Code/outline-server/"
-    "master/src/server_manager/install_scripts/install_server.sh"
-)
-OUTLINE_STATE_DIRECTORY = "/opt/fck-rkn-outline"
-OUTLINE_API_PORT = 10000
-OUTLINE_ACCESS_KEY_PORT = 10001
 OUTLINE_KEY_CREATE_TIMEOUT_SECONDS = 90
 SSH_COMMAND_TIMEOUT_SECONDS = 90
 SQUID_DEPLOY_TIMEOUT_SECONDS = 900
-OUTLINE_DEPLOY_TIMEOUT_SECONDS = 900
 
 
 def run_youtube_ping(settings: TestEnvironmentSettings) -> int:
@@ -183,60 +180,8 @@ def follow_squid_logs(settings: TestEnvironmentSettings) -> int:
 
 
 def deploy_outline(settings: TestEnvironmentSettings) -> int:
-    """Install the official stable Outline Server using eu-server's private IP."""
-    remote_command = render(
-        "deploy_outline.sh",
-        container_name=OUTLINE_CONTAINER_NAME,
-        image=OUTLINE_IMAGE,
-        base_image=OUTLINE_BASE_IMAGE,
-        ss_server_version=OUTLINE_SS_SERVER_VERSION,
-        installer_url=OUTLINE_INSTALLER_URL,
-        state_directory=OUTLINE_STATE_DIRECTORY,
-        api_port=OUTLINE_API_PORT,
-        keys_port=OUTLINE_ACCESS_KEY_PORT,
-    )
-    command = [
-        "gcloud",
-        "compute",
-        "ssh",
-        INSTANCE_NAME,
-        f"--project={settings.GCP_PROJECT_ID}",
-        f"--zone={settings.GCP_ZONE}",
-        "--tunnel-through-iap",
-        f"--command={remote_command}",
-        "--quiet",
-    ]
-    logger.info(
-        "Deploying Outline Server on %s over IAP SSH with a private endpoint",
-        INSTANCE_NAME,
-    )
-    try:
-        result = subprocess.run(
-            command,
-            check=False,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-            timeout=OUTLINE_DEPLOY_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error(
-            "Outline Server deployment over IAP SSH exceeded the %d second timeout",
-            OUTLINE_DEPLOY_TIMEOUT_SECONDS,
-        )
-        return 1
-    except OSError as error:
-        logger.error("Could not start gcloud SSH command: %s", error)
-        return 1
-
-    if result.returncode != 0:
-        logger.error(
-            "Outline Server deployment or IAP SSH failed with exit status %d",
-            result.returncode,
-        )
-        return result.returncode or 1
-
-    logger.info("Outline Server deployment completed on %s", INSTANCE_NAME)
-    return 0
+    """Install Outline Server on eu-server."""
+    return deploy_outline_on(settings, INSTANCE_NAME)
 
 
 def create_outline_user(
