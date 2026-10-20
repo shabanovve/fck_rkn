@@ -404,9 +404,9 @@ behavior that requires them.
   unchanged.
 - **Done:** `stdin` may be a `Path`; `run_transport` streams the file as raw
   bytes (a missing file raises `RemoteStartError`). `RemoteRunner`, `execute`,
-  `SshRunner` and `GcloudIapRunner` accept `str | Path | None`.
+  `SshRunner` and `GcloudIapRunrner` accept `str | Path | None`.
 
-### 51c. Load the prebuilt image on a VM instead of building
+### 51c. [x] Load the prebuilt image on a VM instead of building
 
 - **Change:** Split `deploy_outline.sh`: `load_outline_image.sh` runs
   `gunzip | sudo docker load` from stdin when the expected image is missing;
@@ -415,6 +415,11 @@ behavior that requires them.
   `deploy_outline_on` stays image-agnostic.
 - **Test:** Fake-runner tests: load is skipped when the image exists; the
   script has no `docker build`; archive goes through stdin only.
+- **Done:** `load_outline_image.sh` (skips when the image exists, else
+  `gunzip | docker load`) and `agents/outline.load_outline_image`.
+  `deploy_outline.sh` no longer builds; it fails if the image is missing.
+  Until 51d the orchestrator and the `deploy-outline` CLIs do not load the
+  image, so a real run of Outline deployment fails at this step.
 
 ### 51d. Wire the single build into the orchestrator
 

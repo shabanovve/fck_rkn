@@ -21,11 +21,10 @@ if sudo docker container inspect watchtower >/dev/null 2>&1; then
   echo "A watchtower container already exists; refusing to replace it" >&2
   exit 1
 fi
-#include docker_setup.sh
-echo "Building the Outline Server image without the public-IP target check"
-sudo docker build -t "$expected_image" -f - "$(mktemp -d)" <<'FCK_RKN_DOCKERFILE'
-#include outline_shadowbox.Dockerfile
-FCK_RKN_DOCKERFILE
+if ! sudo docker image inspect "$expected_image" >/dev/null 2>&1; then
+  echo "The Outline Server image is missing; load it before deploying" >&2
+  exit 1
+fi
 private_address=@PRIVATE_ADDRESS@
 echo "Installing official Outline Server stable image on the private VM address"
 curl --fail --silent --show-error @INSTALLER_URL@ | sudo env \

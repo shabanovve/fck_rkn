@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import shlex
+from pathlib import Path
 
 from fck_rkn.remote import render
 from fck_rkn.remote.runner import RemoteRunner, execute
@@ -34,6 +35,21 @@ OUTLINE_HEALTH_CHECK_COMMAND = render(
     keys_port=OUTLINE_ACCESS_KEY_PORT,
 )
 
+OUTLINE_IMAGE_LOAD_TIMEOUT_SECONDS = 900
+
+
+def load_outline_image(runner: RemoteRunner, archive: Path) -> int:
+    """Load the gzip'd image archive on the runner target if it is missing."""
+    logger.info("Loading the Outline Server image")
+    return execute(
+        runner,
+        render("load_outline_image.sh", image=OUTLINE_IMAGE),
+        "Outline Server image load",
+        OUTLINE_IMAGE_LOAD_TIMEOUT_SECONDS,
+        stdin=archive,
+        stream_output=True,
+    )
+
 
 def deploy_outline_on(runner: RemoteRunner, private_address: str) -> int:
     """Install Outline Server on the runner target, bound to private_address."""
@@ -46,7 +62,6 @@ def deploy_outline_on(runner: RemoteRunner, private_address: str) -> int:
         container_name=OUTLINE_CONTAINER_NAME,
         image=OUTLINE_IMAGE,
         base_image=OUTLINE_BASE_IMAGE,
-        ss_server_version=OUTLINE_SS_SERVER_VERSION,
         installer_url=OUTLINE_INSTALLER_URL,
         state_directory=OUTLINE_STATE_DIRECTORY,
         api_port=OUTLINE_API_PORT,

@@ -15,6 +15,18 @@ class ScriptPlatformTests(unittest.TestCase):
                 self.assertNotIn(word, text, f"{path.name} mentions {word}")
 
 
+class LoadOutlineImageTests(unittest.TestCase):
+    def test_loads_archive_from_stdin_only_when_image_is_missing(self) -> None:
+        script = render("load_outline_image.sh", image="img:tag")
+        self.assertIn("expected_image=img:tag", script)
+        self.assertLess(
+            script.index("docker image inspect"), script.index("docker load")
+        )
+        self.assertIn("skipping the load", script)
+        self.assertIn("gunzip | sudo docker load", script)
+        self.assertNotIn("docker build", script)
+
+
 class RenderTests(unittest.TestCase):
     def test_fills_placeholders_and_expands_includes(self) -> None:
         script = render("deploy_squid.sh", container_name="c", image="i", port=1)
