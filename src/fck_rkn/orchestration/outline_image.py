@@ -6,7 +6,6 @@ import gzip
 import logging
 import shutil
 import subprocess
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -56,13 +55,11 @@ def build_outline_image(run: LocalRun = subprocess.run) -> int:
         ss_server_version=OUTLINE_SS_SERVER_VERSION,
         base_image=OUTLINE_BASE_IMAGE,
     )
-    with tempfile.TemporaryDirectory() as context:
-        result = _docker(
-            run,
-            ["build", "-t", OUTLINE_IMAGE, "-f", "-", context],
-            BUILD_TIMEOUT_SECONDS,
-            dockerfile,
-        )
+    # The Dockerfile is the whole context: a snap-confined docker cannot read
+    # temporary directories.
+    result = _docker(
+        run, ["build", "-t", OUTLINE_IMAGE, "-"], BUILD_TIMEOUT_SECONDS, dockerfile
+    )
     if result != 0:
         logger.error("Building the Outline Server image failed")
     return result
@@ -74,11 +71,22 @@ def export_outline_image(
     """Save the local image as a gzip archive in directory."""
     tar_path = directory / "outline-image.tar"
     archive = directory / "outline-image.tar.gz"
-    saved = _docker(
-        run, ["save", "-o", str(tar_path), OUTLINE_IMAGE], BUILD_TIMEOUT_SECONDS
-    )
+    try:
+        with tar_path.open("wb") as tar:
+            saved = run(
+                ["docker", "save", OUTLINE_IMAGE],
+                stdout=tar,
+                stderr=subprocess.DEVNULL,
+                timeout=BUILD_TIMEOUT_SECONDS,
+                check=False,
+            ).returncode
+    except (OSError, subprocess.TimeoutExpired) as error:
+        logger.error("Saving the Outline Server image failed: %s", error)
+        tar_path.unlink(missing_ok=True)
+        return None
     if saved != 0:
         logger.error("Saving the Outline Server image failed")
+        tar_path.unlink(missing_ok=True)
         return None
     try:
         with tar_path.open("rb") as source, gzip.open(archive, "wb") as target:

@@ -39,8 +39,7 @@ class BuildOutlineImageTests(unittest.TestCase):
         docker = FakeDocker(1, 0)
         self.assertEqual(build_outline_image(docker), 0)
         build_argv, dockerfile = docker.calls[1]
-        self.assertEqual(build_argv[:5], ["docker", "build", "-t", OUTLINE_IMAGE, "-f"])
-        self.assertEqual(build_argv[5], "-")
+        self.assertEqual(build_argv, ["docker", "build", "-t", OUTLINE_IMAGE, "-"])
         self.assertIn("return nil", dockerfile)
         self.assertIn(OUTLINE_BASE_IMAGE, dockerfile)
         self.assertEqual(len(docker.calls), 2)
@@ -66,7 +65,7 @@ class ExportOutlineImageTests(unittest.TestCase):
     def test_saves_and_compresses_the_image(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             def docker(argv, **kwargs):
-                Path(argv[argv.index("-o") + 1]).write_bytes(b"image-bytes")
+                kwargs["stdout"].write(b"image-bytes")
                 return subprocess.CompletedProcess(argv, 0)
 
             archive = export_outline_image(Path(directory), docker)
