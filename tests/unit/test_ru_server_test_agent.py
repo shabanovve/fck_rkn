@@ -12,6 +12,9 @@ from fck_rkn.agents.ru_server_test import (
     FORWARD_CHECK_COMMAND,
     check_outline_client,
     check_squid_forward,
+    check_tunnel_blocked,
+    TUNNEL_BLOCKED_CHECK_COMMAND,
+    main,
 )
 from fck_rkn.config import TestEnvironmentSettings
 
@@ -110,3 +113,45 @@ class RuServerForwardCheckTests(unittest.TestCase):
             self.assertLogs("fck_rkn.agents.ru_server", level="ERROR"),
         ):
             self.assertEqual(check_squid_forward(self.settings), 1)
+
+
+class RuServerTunnelBlockedTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.settings = TestEnvironmentSettings.model_construct(
+            GCP_PROJECT_ID="fck-rkn-test",
+            GCP_ZONE="europe-north1-a",
+        )
+
+    def test_script_requires_stopped_tunnel_and_no_squid_response(self) -> None:
+        script = TUNNEL_BLOCKED_CHECK_COMMAND
+        self.assertIn("fck-rkn-squid-forward", script)
+        self.assertIn("the tunnel is not lost", script)
+        self.assertIn("--proxy http://127.0.0.1:3128", script)
+        self.assertIn("Traffic still reaches EU Squid", script)
+        self.assertNotIn("docker start", script)
+        self.assertNotIn("docker restart", script)
+
+    def test_runs_remote_check_without_secrets(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed) as run:
+            result = check_tunnel_blocked(self.settings)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(run.call_args.kwargs["input"], "")
+        self.assertIn(f"--command={TUNNEL_BLOCKED_CHECK_COMMAND}", run.call_args.args[0])
+
+    def test_fails_when_traffic_is_not_blocked(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="")
+        with (
+            patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed),
+            self.assertLogs("fck_rkn.agents.ru_server", level="ERROR"),
+        ):
+            self.assertEqual(check_tunnel_blocked(self.settings), 1)
+
+    def test_cli_dispatches_tunnel_blocked(self) -> None:
+        with (
+            patch("fck_rkn.agents.ru_server_test.load_config", return_value=self.settings),
+            patch("fck_rkn.agents.ru_server_test.check_tunnel_blocked", return_value=0) as check,
+        ):
+            self.assertEqual(main(["tunnel-blocked"]), 0)
+        check.assert_called_once_with(self.settings)

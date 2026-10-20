@@ -75,11 +75,32 @@ def check_squid_forward(settings: TestEnvironmentSettings) -> int:
     )
 
 
+TUNNEL_BLOCKED_CHECK_COMMAND = render(
+    "tunnel_blocked_check.sh",
+    container_name=FORWARD_CONTAINER_NAME,
+    local_port=FORWARD_LOCAL_PORT,
+    target_url=PROBE_TARGET_URL,
+)
+
+
+def check_tunnel_blocked(settings: TestEnvironmentSettings) -> int:
+    """Verify no traffic reaches EU Squid while the tunnel is down.
+
+    Resumption after reconnection is verified by check_squid_forward.
+    """
+    return run_remote_with_input(
+        settings,
+        TUNNEL_BLOCKED_CHECK_COMMAND,
+        "",
+        "Checking that traffic is blocked while the tunnel is down",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run ru-server service checks.")
     parser.add_argument(
         "action",
-        choices=("outline-client", "squid-forward"),
+        choices=("outline-client", "squid-forward", "tunnel-blocked"),
         help="Check to run",
     )
     args = parser.parse_args(argv)
@@ -100,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.action == "squid-forward":
         return check_squid_forward(settings)
+    if args.action == "tunnel-blocked":
+        return check_tunnel_blocked(settings)
 
     # The key is read from stdin so it never appears in argv or shell history.
     access_url = sys.stdin.readline()

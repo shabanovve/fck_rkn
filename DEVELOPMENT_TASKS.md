@@ -244,10 +244,13 @@ behavior that requires them.
   (5 attempts, 10 s apart). It never touches routes or firewall rules and
   fails (exit 1) if the tunnel does not return.
 
-### 47. Add tunnel-loss test to `ru-server-test-agent`
+### 47. [x] Add tunnel-loss test to `ru-server-test-agent`
 
 - **Test:** Add a test that verifies traffic is blocked during tunnel loss
   and resumes only after the approved tunnel reconnects.
+- **Done:** `ru-server-test-agent tunnel-blocked` passes only while the
+  forward container is stopped and no request reaches EU Squid. After the
+  tunnel is restored, `squid-forward` verifies resumption. Task 48 wires them.
 
 ### 48. Deploy and test tunnel-loss recovery
 
