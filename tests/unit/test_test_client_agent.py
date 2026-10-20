@@ -11,6 +11,8 @@ from fake_runner import FakeRunner
 from fck_rkn.agent_config import AgentSettings, test_client_runner
 from fck_rkn.agents.test_client import (
     CONNECTION_CHECK_COMMAND,
+    SQUID_TUNNEL_CHECK_COMMAND,
+    check_squid_tunnel,
     build_connection_deploy_command,
     check_outline_connection,
     connect_to_outline,
@@ -193,6 +195,35 @@ class TestClientAgentTests(unittest.TestCase):
             test_client_runner(make_settings(TEST_CLIENT_HOST=""))
         runner = test_client_runner(make_settings(TEST_CLIENT_HOST="client"))
         self.assertEqual(runner.host, "client")
+
+
+class SquidTunnelCheckTests(unittest.TestCase):
+    def test_script_checks_container_and_localhost_listener(self) -> None:
+        self.assertIn("fck-rkn-test-client-squid", SQUID_TUNNEL_CHECK_COMMAND)
+        self.assertIn("/dev/tcp/127.0.0.1/3128", SQUID_TUNNEL_CHECK_COMMAND)
+
+    def test_check_runs_the_script_without_a_key(self) -> None:
+        runner = FakeRunner(stdout="ok\n")
+        self.assertEqual(check_squid_tunnel(runner), 0)
+        self.assertEqual(runner.command, SQUID_TUNNEL_CHECK_COMMAND)
+        self.assertEqual(runner.stdin, "")
+
+    def test_check_fails_when_the_remote_check_fails(self) -> None:
+        with self.assertLogs("fck_rkn.remote.runner", "ERROR"):
+            self.assertEqual(check_squid_tunnel(FakeRunner(exit_code=1)), 1)
+
+    def test_cli_check_squid_does_not_read_stdin(self) -> None:
+        with (
+            patch("fck_rkn.agents.test_client.load_agent_settings"),
+            patch("fck_rkn.agents.test_client.test_client_runner"),
+            patch("fck_rkn.agents.test_client.sys.stdin") as stdin,
+            patch(
+                "fck_rkn.agents.test_client.check_squid_tunnel", return_value=0
+            ) as check,
+        ):
+            self.assertEqual(main(["check-squid"]), 0)
+        check.assert_called_once()
+        stdin.readline.assert_not_called()
 
 
 if __name__ == "__main__":

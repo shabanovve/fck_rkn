@@ -95,6 +95,23 @@ def connect_to_outline(runner: RemoteRunner, access_url: str) -> int:
     return result
 
 
+SQUID_TUNNEL_CHECK_COMMAND = render(
+    "squid_tunnel_check.sh",
+    container_name=SQUID_TUNNEL_CONTAINER_NAME,
+    local_port=SQUID_TUNNEL_LOCAL_PORT,
+)
+
+
+def check_squid_tunnel(runner: RemoteRunner) -> int:
+    """Verify test-client listens on localhost TCP/3128 for the Squid tunnel."""
+    return run_remote_with_input(
+        runner,
+        SQUID_TUNNEL_CHECK_COMMAND,
+        "",
+        "Checking the test-client Squid tunnel listener",
+    )
+
+
 def build_squid_tunnel_config(
     method: str, password: str, host: str, port: int, squid_address: str
 ) -> str:
@@ -154,7 +171,7 @@ def deploy_squid_tunnel(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run test-client actions.")
-    parser.add_argument("action", choices=("connect-outline", "check-outline", "connect-squid"),
+    parser.add_argument("action", choices=("connect-outline", "check-outline", "connect-squid", "check-squid"),
         help="Action to run",
     )
     args = parser.parse_args(argv)
@@ -172,6 +189,9 @@ def main(argv: list[str] | None = None) -> int:
             "Could not load valid agent configuration (%s)", type(error).__name__
         )
         return 2
+
+    if args.action == "check-squid":
+        return check_squid_tunnel(runner)
 
     # The key is read from stdin so it never appears in argv or shell history.
     access_url = sys.stdin.readline()

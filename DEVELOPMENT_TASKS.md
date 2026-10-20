@@ -526,9 +526,11 @@ behavior that requires them.
   EU address comes from `EU_SERVER_PRIVATE_ADDRESS`. The orchestrator wiring
   is task 66.
 
-### 65. Add TCP/3128 check to `test-client-agent`
+### 65. [x] Add TCP/3128 check to `test-client-agent`
 
 - **Test:** Add a check for TCP/3128 at the approved endpoint.
+  - Done: `test-client-agent check-squid` verifies that the tunnel container
+    runs and localhost TCP/3128 accepts connections; it needs no key.
 
 ### 66. Deploy and test client TCP/3128 access
 
