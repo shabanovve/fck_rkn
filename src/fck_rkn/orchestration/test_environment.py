@@ -45,6 +45,7 @@ from fck_rkn.gcp.compute import (
     RU_INSTANCE_NAME,
     ensure_eu_server,
     ensure_ru_server,
+    lookup_test_client,
     private_address_of,
     stop_test_project_vms,
     validate_project_access,
@@ -474,6 +475,17 @@ def _run(image_directory: Path) -> int:
             )
             return failure_code
     logger.info("RU tunnel-loss blocking and recovery verified")
+
+    try:
+        test_client = lookup_test_client(settings)
+    except Exception as error:
+        logger.error("Looking up test-client failed: %s", error)
+        print(f"Looking up test-client failed: {error}", file=sys.stderr)
+        return 29
+    logger.info(
+        "test-client %s",
+        "exists" if test_client is not None else "does not exist yet",
+    )
 
     print(
         f"{ru_instance.name} is available in project "

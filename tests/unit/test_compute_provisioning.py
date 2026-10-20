@@ -37,6 +37,7 @@ from fck_rkn.gcp.compute import (
     ensure_eu_server,
     ensure_ru_server,
     lookup_ru_server,
+    lookup_test_client,
 )
 from fck_rkn.orchestration.test_environment import main as orchestrator_main
 
@@ -111,6 +112,51 @@ class ComputeProvisioningTests(unittest.TestCase):
             lookup_ru_server(make_settings(), instances_client)
 
         instances_client.insert.assert_not_called()
+
+    def test_test_client_lookup_returns_existing_instance(self) -> None:
+        instance = compute_v1.Instance(
+            name="test-client",
+            network_interfaces=[
+                compute_v1.NetworkInterface(
+                    network="projects/fck-rkn-test/global/networks/default"
+                )
+            ],
+        )
+        instances_client = Mock()
+        instances_client.get.return_value = instance
+
+        result = lookup_test_client(make_settings(), instances_client)
+
+        self.assertIs(result, instance)
+        instances_client.get.assert_called_once_with(
+            project="fck-rkn-test",
+            zone="europe-north1-a",
+            instance="test-client",
+        )
+        instances_client.insert.assert_not_called()
+
+    def test_test_client_lookup_returns_none_when_instance_is_absent(self) -> None:
+        instances_client = Mock()
+        instances_client.get.side_effect = NotFound("instance missing")
+
+        self.assertIsNone(lookup_test_client(make_settings(), instances_client))
+        instances_client.insert.assert_not_called()
+
+    def test_test_client_lookup_rejects_instance_on_unconfigured_network(
+        self,
+    ) -> None:
+        instances_client = Mock()
+        instances_client.get.return_value = compute_v1.Instance(
+            name="test-client",
+            network_interfaces=[
+                compute_v1.NetworkInterface(
+                    network="projects/fck-rkn-test/global/networks/other"
+                )
+            ],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "Existing test-client"):
+            lookup_test_client(make_settings(), instances_client)
 
     def test_ru_server_creation_passes_expected_resource_to_gcp(self) -> None:
         settings = make_settings()

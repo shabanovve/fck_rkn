@@ -434,30 +434,23 @@ behavior that requires them.
   its Outline deploy. Exit codes: 26 build/export, 27 EU load, 28 RU load.
   The agent `deploy-outline` CLIs expect the image to be loaded already.
 
-### 52. Add RU VPN-user creation script
-
-- **Change:** Add a script that creates a VPN user/access key for RU Outline.
-
-### 53. Add RU VPN-user creation test
-
-- **Test:** Add a `ru-server-test-agent` check for successful user/key
-  creation and authorized use.
-
-### 54. Run RU VPN-user creation and test
-
-- **Orchestration:** Make `test_env_host` invoke user creation only after
-  RU Outline is healthy, then run the RU test-agent check.
-
 ## Create and test `test-client`
 
-### 55. Add `test-client` lookup
+### 55. [x] Add `test-client` lookup
 
 - **Change:** Make `test_env_host` look up `test-client` in the isolated
   `fck-rkn-test` project.
+- **Done:** `gcp.compute.lookup_test_client` returns the existing VM or
+  `None` without creating it, and rejects a VM outside the configured test
+  network (the check is shared with `lookup_ru_server`). The orchestrator
+  calls it after the tunnel-loss checks and logs the result; a lookup error
+  stops with exit code 29. Its Docker tests are part of this change.
 
-### 56. Test `test-client` lookup
+### 56. [x] Test `test-client` lookup
 
 - **Test:** In Docker, verify present and absent VM results.
+- **Done:** Covered together with 55 in `tests/unit/test_compute_provisioning.py`
+  (present, absent, wrong network) and `tests/unit/test_orchestrator_ping.py`.
 
 ### 57. Add `test-client` creation
 

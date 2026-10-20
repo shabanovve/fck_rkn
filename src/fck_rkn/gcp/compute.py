@@ -17,6 +17,7 @@ from fck_rkn.config import TestEnvironmentSettings
 
 INSTANCE_NAME = "eu-server"
 RU_INSTANCE_NAME = "ru-server"
+TEST_CLIENT_INSTANCE_NAME = "test-client"
 NAT_ROUTER_NAME = "fck-rkn-test-nat-router"
 NAT_CONFIG_NAME = "fck-rkn-test-cloud-nat"
 INSTANCE_OPERATION_TIMEOUT_SECONDS = 300
@@ -518,32 +519,43 @@ def _get_or_create_instance(
     )
 
 
+def _lookup_in_test_network(
+    settings: TestEnvironmentSettings,
+    instance_name: str,
+    instances_client: compute_v1.InstancesClient | None,
+) -> compute_v1.Instance | None:
+    if instances_client is None:
+        instances_client, _, _ = _resolve_clients()
+
+    instance = _lookup_instance(settings, instance_name, instances_client)
+    if instance is None:
+        return None
+
+    _validate_network(instance, settings, instance_name)
+    logger.info("%s exists in the configured test network", instance_name)
+    return instance
+
+
 def lookup_ru_server(
     settings: TestEnvironmentSettings,
     instances_client: compute_v1.InstancesClient | None = None,
 ) -> compute_v1.Instance | None:
     """Look up ru-server in the configured project and zone without creating it."""
-    logger.info(
-        "Looking up %s in project %s, zone %s",
-        RU_INSTANCE_NAME,
-        settings.GCP_PROJECT_ID,
-        settings.GCP_ZONE,
-    )
-    if instances_client is None:
-        instances_client, _, _ = _resolve_clients()
-
-    instance = _lookup_instance(settings, RU_INSTANCE_NAME, instances_client)
-    if instance is None:
-        return None
-
-    _validate_ru_server_network(instance, settings)
-    logger.info("%s exists in the configured test network", RU_INSTANCE_NAME)
-    return instance
+    return _lookup_in_test_network(settings, RU_INSTANCE_NAME, instances_client)
 
 
-def _validate_ru_server_network(
+def lookup_test_client(
+    settings: TestEnvironmentSettings,
+    instances_client: compute_v1.InstancesClient | None = None,
+) -> compute_v1.Instance | None:
+    """Look up test-client in the configured project and zone without creating it."""
+    return _lookup_in_test_network(settings, TEST_CLIENT_INSTANCE_NAME, instances_client)
+
+
+def _validate_network(
     instance: compute_v1.Instance,
     settings: TestEnvironmentSettings,
+    instance_name: str,
 ) -> None:
     expected_network = (
         f"projects/{settings.GCP_PROJECT_ID}/global/networks/"
@@ -554,7 +566,7 @@ def _validate_ru_server_network(
         for interface in instance.network_interfaces
     ):
         raise RuntimeError(
-            f"Existing {RU_INSTANCE_NAME} is not connected to the configured "
+            f"Existing {instance_name} is not connected to the configured "
             f"test network {settings.GCP_NETWORK!r}; it was not modified"
         )
 
