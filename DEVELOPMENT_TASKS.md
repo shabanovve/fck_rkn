@@ -271,6 +271,63 @@ behavior that requires them.
   to ru-server's private address; it is idempotent. Not yet wired into
   `test_env_host` (task 51).
 
+### 49a. Add a platform-independent `RemoteRunner`
+
+- **Change:** Add `fck_rkn/remote/runner.py` with a `RemoteRunner` protocol
+  (`run(command, stdin, timeout, stream_output)` returning an exit code and
+  the captured output) and a shared implementation of the timeout, `OSError`
+  and non-zero exit handling that is now copied in every agent function.
+- **Test:** Unit tests for the shared error handling with a fake runner.
+
+### 49b. Add runner implementations
+
+- **Change:** Add `GcloudIapRunner` (the only place that builds
+  `gcloud compute ssh --tunnel-through-iap --project --zone`) and a generic
+  `SshRunner` (plain `ssh` with host, user and key path from configuration)
+  for production. Both pass secrets through stdin only.
+- **Rule:** `GcloudIapRunner` and everything under `fck_rkn/gcp/` may be used
+  only by `test_env_host` and test-only code.
+
+### 49c. Split configuration into agent and test-environment parts
+
+- **Change:** Keep the `GCP_*` settings in a test-environment settings class
+  used only by `test_env_host` and `fck_rkn/gcp/`. Add platform-neutral agent
+  settings (target host and runner selection). Agents must not import
+  `fck_rkn.gcp` or `TestEnvironmentSettings`.
+
+### 49d. Make `ru-server-agent` and `ru-server-test-agent` use `RemoteRunner`
+
+- **Change:** Replace `run_remote_with_input` and the `RU_INSTANCE_NAME` /
+  `gcloud` usage in `ru_server.py` and `ru_server_test.py` with a runner
+  passed in by the caller. `test_env_host` supplies `GcloudIapRunner`.
+- **Test:** Existing RU tests use a fake runner; add a check that no module
+  under `fck_rkn/agents/` references `gcloud`, `IAP` or `fck_rkn.gcp`.
+
+### 49e. Make `eu-server-agent` and `eu-server-test-agent` use `RemoteRunner`
+
+- **Change:** Replace the seven repeated `gcloud` command builders in
+  `eu_server.py`, `eu_server_test.py` and `outline.py` with a runner. EU may
+  be hosted on GCP in production, but only through the runner configuration.
+
+### 49f. Remove the GCP metadata dependency from remote scripts
+
+- **Change:** `deploy_outline.sh` receives the private IP as a parameter
+  instead of querying `metadata.google.internal`. The runner or the
+  orchestrator resolves the address (GCP metadata in the test environment, a
+  configured address in production).
+- **Test:** Rendering test that no script under `remote/scripts/` references
+  a cloud provider.
+
+### 49g. Document the platform boundary
+
+- **Docs:** Update `DEVELOPMENT.md`, `DEVELOPMENT_PLAN.md` and
+  `TEST_ENV_HOST.md`: GCP, IAP and `gcloud` belong only to the test layer;
+  agents depend on `RemoteRunner`; production selects `SshRunner` (or another
+  runner) by configuration.
+- **Open decision:** whether production agents run remotely over SSH from the
+  controller (`SshRunner`) or locally on each server; the runner interface
+  supports both.
+
 ### 50. Add RU Outline health test
 
 - **Test:** Add a `ru-server-test-agent` check for Outline health and
