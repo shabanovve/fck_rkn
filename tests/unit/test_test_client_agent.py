@@ -12,7 +12,9 @@ from fck_rkn.agent_config import AgentSettings, test_client_runner
 from fck_rkn.agents.test_client import (
     CONNECTION_CHECK_COMMAND,
     SQUID_TUNNEL_CHECK_COMMAND,
+    HTTP_REQUEST_COMMAND,
     check_squid_tunnel,
+    request_youtube,
     build_connection_deploy_command,
     check_outline_connection,
     connect_to_outline,
@@ -225,6 +227,36 @@ class SquidTunnelCheckTests(unittest.TestCase):
         ):
             self.assertEqual(main(["check-squid"]), 0)
         check.assert_called_once()
+        stdin.readline.assert_not_called()
+
+
+class HttpRequestTests(unittest.TestCase):
+    def test_script_requests_youtube_through_the_local_proxy(self) -> None:
+        self.assertIn("--proxy http://127.0.0.1:3128", HTTP_REQUEST_COMMAND)
+        self.assertIn("http://youtube.com/", HTTP_REQUEST_COMMAND)
+        self.assertNotIn("--socks5", HTTP_REQUEST_COMMAND)
+
+    def test_request_runs_the_script_without_a_key(self) -> None:
+        runner = FakeRunner(stdout="HTTP status through the proxy path: 200\n")
+        self.assertEqual(request_youtube(runner), 0)
+        self.assertEqual(runner.command, HTTP_REQUEST_COMMAND)
+        self.assertEqual(runner.stdin, "")
+
+    def test_request_fails_when_no_response_arrives(self) -> None:
+        with self.assertLogs("fck_rkn.remote.runner", "ERROR"):
+            self.assertEqual(request_youtube(FakeRunner(exit_code=1)), 1)
+
+    def test_cli_dispatches_the_request_action(self) -> None:
+        with (
+            patch("fck_rkn.agents.test_client.load_agent_settings"),
+            patch("fck_rkn.agents.test_client.test_client_runner"),
+            patch("fck_rkn.agents.test_client.sys.stdin") as stdin,
+            patch(
+                "fck_rkn.agents.test_client.request_youtube", return_value=0
+            ) as request,
+        ):
+            self.assertEqual(main(["request-youtube"]), 0)
+        request.assert_called_once()
         stdin.readline.assert_not_called()
 
 

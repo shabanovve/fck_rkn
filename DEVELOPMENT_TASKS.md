@@ -541,10 +541,13 @@ behavior that requires them.
   34), which also sends an HTTP request through 127.0.0.1:3128 and requires a
   Squid response.
 
-### 67. Add HTTP request to `test-client-agent`
+### 67. [x] Add HTTP request to `test-client-agent`
 
 - **Change:** Add an HTTP request to `youtube.com` through the intended
   client-to-RU-to-EU Squid path.
+- **Done:** `test-client-agent request-youtube` sends the request through
+  127.0.0.1:3128 and prints the HTTP status. It fails only when no HTTP
+  response arrives; judging the status is task 68.
 
 ### 68. Add HTTP result assertion to `test-client-agent`
 

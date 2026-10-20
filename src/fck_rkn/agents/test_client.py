@@ -113,6 +113,27 @@ def check_squid_tunnel(runner: RemoteRunner) -> int:
     )
 
 
+HTTP_REQUEST_COMMAND = render(
+    "client_http_request.sh",
+    local_port=SQUID_TUNNEL_LOCAL_PORT,
+    target_url=PROBE_TARGET_URL,
+)
+
+
+def request_youtube(runner: RemoteRunner) -> int:
+    """Send an HTTP request to youtube.com through client-to-RU-to-EU Squid.
+
+    Succeeds whenever an HTTP response arrives; judging the status is a
+    separate assertion.
+    """
+    return run_remote_with_input(
+        runner,
+        HTTP_REQUEST_COMMAND,
+        "",
+        "HTTP request to youtube.com through the test-client proxy path",
+    )
+
+
 def build_squid_tunnel_config(
     method: str, password: str, host: str, port: int, squid_address: str
 ) -> str:
@@ -172,7 +193,7 @@ def deploy_squid_tunnel(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run test-client actions.")
-    parser.add_argument("action", choices=("connect-outline", "check-outline", "connect-squid", "check-squid"),
+    parser.add_argument("action", choices=("connect-outline", "check-outline", "connect-squid", "check-squid", "request-youtube"),
         help="Action to run",
     )
     args = parser.parse_args(argv)
@@ -193,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.action == "check-squid":
         return check_squid_tunnel(runner)
+    if args.action == "request-youtube":
+        return request_youtube(runner)
 
     # The key is read from stdin so it never appears in argv or shell history.
     access_url = sys.stdin.readline()
