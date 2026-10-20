@@ -21,6 +21,10 @@ from fck_rkn.agents.eu_server import (
     SQUID_DEPLOY_TIMEOUT_SECONDS,
     SQUID_IMAGE,
     SQUID_PORT,
+    MTPROXY_CONTAINER_NAME,
+    MTPROXY_IMAGE,
+    MTPROXY_PORT,
+    deploy_mtproxy,
     deploy_squid,
     deploy_outline,
     create_outline_user,
@@ -112,6 +116,40 @@ class EuServerAgentTests(unittest.TestCase):
             result = main(["deploy-squid"])
 
         self.assertEqual(result, 0)
+        deploy.assert_called_once_with(make_runner.return_value)
+
+    def test_deploys_mtproxy_with_a_host_generated_secret(self) -> None:
+        runner = FakeRunner()
+        result = deploy_mtproxy(runner)
+
+        command = runner.command
+        self.assertEqual(result, 0)
+        self.assertIn(f"container_name={MTPROXY_CONTAINER_NAME}", command)
+        self.assertIn(f"docker pull {MTPROXY_IMAGE}", command)
+        self.assertIn(f"--publish {MTPROXY_PORT}:443/tcp", command)
+        self.assertIn("/dev/urandom", command)
+        self.assertIn("umask 077", command)
+        self.assertIn("--volume", command)
+        self.assertLess(
+            command.index("leaving it unchanged"), command.index("docker pull")
+        )
+        self.assertIsNone(runner.stdin)
+        self.assertNotIn("SECRET=", command)
+        self.assertNotIn("cat \"$state_directory/secret\"", command)
+
+    def test_mtproxy_deployment_fails_without_logging_output(self) -> None:
+        with self.assertLogs("fck_rkn.remote.runner", level="ERROR") as logs:
+            result = deploy_mtproxy(FakeRunner(exit_code=1, stdout="test-secret"))
+        self.assertEqual(result, 1)
+        self.assertNotIn("test-secret", "\n".join(logs.output))
+
+    def test_cli_dispatches_deploy_mtproxy_action(self) -> None:
+        with (
+            patch("fck_rkn.agents.eu_server.load_agent_settings"),
+            patch("fck_rkn.agents.eu_server.eu_server_runner") as make_runner,
+            patch("fck_rkn.agents.eu_server.deploy_mtproxy", return_value=0) as deploy,
+        ):
+            self.assertEqual(main(["deploy-mtproxy"]), 0)
         deploy.assert_called_once_with(make_runner.return_value)
 
     def test_cli_fails_with_exit_2_on_invalid_agent_configuration(self) -> None:

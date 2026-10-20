@@ -569,10 +569,16 @@ behavior that requires them.
 
 ## Other README requirements
 
-### 70. Add MTProxy deployment to `eu-server-agent`
+### 70. [x] Add MTProxy deployment to `eu-server-agent`
 
 - **Change:** Add one action to deploy the approved MTProxy Docker service
   on EU with its secret supplied securely.
+- **Done:** Owner decisions: the official `telegrammessenger/proxy` image and
+  a secret generated on EU at the first deployment. `eu-server-agent
+  deploy-mtproxy` stores the secret root-only in `/opt/fck-rkn-mtproxy`
+  (mounted as the image's `/data`), never prints or logs it, and leaves a
+  running container unchanged. Host port 8443 maps to the image's 443. The
+  image tag is not pinned yet.
 
 ### 71. Add MTProxy test to `eu-server-test-agent`
 

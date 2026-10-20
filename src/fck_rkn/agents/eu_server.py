@@ -37,6 +37,10 @@ PING_COMMAND = "ping -c 1 -W 10 youtube.com"
 SQUID_CONTAINER_NAME = "fck-rkn-squid"
 SQUID_IMAGE = "ubuntu/squid:latest"
 SQUID_PORT = 3128
+MTPROXY_CONTAINER_NAME = "fck-rkn-mtproxy"
+MTPROXY_IMAGE = "telegrammessenger/proxy:latest"
+MTPROXY_PORT = 8443
+MTPROXY_STATE_DIRECTORY = "/opt/fck-rkn-mtproxy"
 OUTLINE_KEY_CREATE_TIMEOUT_SECONDS = 90
 SSH_COMMAND_TIMEOUT_SECONDS = 90
 SQUID_DEPLOY_TIMEOUT_SECONDS = 900
@@ -76,6 +80,28 @@ def deploy_squid(runner: RemoteRunner) -> int:
     )
     if result == 0:
         logger.info("Squid deployment completed on TCP port %d", SQUID_PORT)
+    return result
+
+
+def deploy_mtproxy(runner: RemoteRunner) -> int:
+    """Start MTProxy on eu-server; its secret is generated and kept on the host."""
+    remote_command = render(
+        "deploy_mtproxy.sh",
+        container_name=MTPROXY_CONTAINER_NAME,
+        image=MTPROXY_IMAGE,
+        port=MTPROXY_PORT,
+        state_directory=MTPROXY_STATE_DIRECTORY,
+    )
+    logger.info("Deploying MTProxy on eu-server (TCP port %d)", MTPROXY_PORT)
+    result = execute(
+        runner,
+        remote_command,
+        "MTProxy deployment",
+        SQUID_DEPLOY_TIMEOUT_SECONDS,
+        stream_output=True,
+    )
+    if result == 0:
+        logger.info("MTProxy deployment completed; the secret is not logged")
     return result
 
 
@@ -149,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
             "ping",
             "deploy-squid",
             "logs-squid",
+            "deploy-mtproxy",
             "deploy-outline",
             "create-outline-user",
         ),
@@ -181,6 +208,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.action == "deploy-squid":
         return deploy_squid(runner)
+    if args.action == "deploy-mtproxy":
+        return deploy_mtproxy(runner)
     if args.action == "logs-squid":
         return follow_squid_logs(runner)
     if args.action == "deploy-outline":
