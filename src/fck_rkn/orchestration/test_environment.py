@@ -30,9 +30,12 @@ from fck_rkn.agents.eu_server_test import (
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.ru_server import (
     deploy_outline_client,
+    deploy_mtproxy_forward,
     deploy_outline_server,
     deploy_squid_forward,
+    recover_mtproxy_forward,
     recover_tunnel,
+    stop_mtproxy_forward,
     stop_tunnel,
 )
 from fck_rkn.agents.test_client import (
@@ -45,6 +48,8 @@ from fck_rkn.agents.test_client import (
 from fck_rkn.agents.ru_server_test import (
     check_outline_client,
     check_outline_health as check_ru_outline_health,
+    check_mtproxy_forward,
+    check_mtproxy_forward_blocked,
     check_squid_forward,
     check_tunnel_blocked,
 )
@@ -490,11 +495,39 @@ def _run(image_directory: Path) -> int:
 
     logger.info("RU forward to EU Squid verified")
 
+    mtproxy_deploy_steps = (
+        ("MTProxy forward deployment", deploy_mtproxy_forward, 38, True),
+        ("MTProxy forward check", check_mtproxy_forward, 39, False),
+    )
+    for description, step, failure_code, needs_key in mtproxy_deploy_steps:
+        logger.info("Running RU %s", description)
+        step_exit_code = (
+            step(ru_runner, access_url) if needs_key else step(ru_runner)
+        )
+        if step_exit_code != 0:
+            logger.error(
+                "RU %s failed with exit status %d", description, step_exit_code
+            )
+            print(
+                f"RU {description} failed with exit status {step_exit_code}.",
+                file=sys.stderr,
+            )
+            return failure_code
+    logger.info("RU forward to EU MTProxy verified")
+
     tunnel_loss_steps = (
         ("tunnel loss simulation", stop_tunnel, 20),
         ("blocked-traffic check", check_tunnel_blocked, 21),
         ("tunnel recovery", recover_tunnel, 22),
         ("post-recovery forward check", check_squid_forward, 23),
+        ("MTProxy tunnel loss simulation", stop_mtproxy_forward, 40),
+        (
+            "MTProxy blocked-traffic check",
+            check_mtproxy_forward_blocked,
+            41,
+        ),
+        ("MTProxy forward recovery", recover_mtproxy_forward, 42),
+        ("post-recovery MTProxy forward check", check_mtproxy_forward, 43),
     )
     for description, step, failure_code in tunnel_loss_steps:
         logger.info("Running RU %s", description)

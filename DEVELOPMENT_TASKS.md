@@ -619,10 +619,15 @@ behavior that requires them.
   handshake, because the secret stays on EU; this must be confirmed on real
   VMs. Denial during tunnel loss is task 75.
 
-### 75. Deploy and test RU MTProxy forwarding
+### 75. [x] Deploy and test RU MTProxy forwarding
 
 - **Orchestration:** Make `test_env_host` deploy and test the RU MTProxy
   forwarding path, including denial during tunnel loss.
+- **Done:** After the Squid forward check, the orchestrator deploys and
+  checks the RU MTProxy forward (exits 38, 39). After the Squid tunnel-loss
+  steps it stops the MTProxy forward (40), checks that it accepts no
+  connections (41), recovers it (42) and re-checks it (43). Not yet verified
+  on real VMs.
 
 ### 89. Add service and tunnel metrics
 

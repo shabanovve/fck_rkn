@@ -154,6 +154,11 @@ class OrchestratorPingTests(unittest.TestCase):
             "stop_tunnel",
             "check_tunnel_blocked",
             "recover_tunnel",
+            "deploy_mtproxy_forward",
+            "check_mtproxy_forward",
+            "stop_mtproxy_forward",
+            "check_mtproxy_forward_blocked",
+            "recover_mtproxy_forward",
         ):
             tunnel_patch = patch(
                 f"fck_rkn.orchestration.test_environment.{name}",
@@ -257,8 +262,13 @@ class OrchestratorPingTests(unittest.TestCase):
             self.ru_forward_check_mock.call_args_list,
             [call(ru_runner), call(ru_runner)],
         )
-        for mock in self.ru_tunnel_mocks.values():
-            mock.assert_called_once_with(ru_runner)
+        for name, mock in self.ru_tunnel_mocks.items():
+            if name == "deploy_mtproxy_forward":
+                mock.assert_called_once_with(ru_runner, "ss://configured-key")
+            elif name == "check_mtproxy_forward":
+                self.assertEqual(mock.call_args_list, [call(ru_runner)] * 2)
+            else:
+                mock.assert_called_once_with(ru_runner)
         ping.assert_called_once_with(EU_RUNNER)
         deploy.assert_called_once_with(EU_RUNNER)
         squid_check.assert_called_once_with(EU_RUNNER)
@@ -765,6 +775,41 @@ class OrchestratorPingTests(unittest.TestCase):
         result, _ = self.run_main_with_healthy_eu()
 
         self.assertEqual(result, 23)
+
+    def test_mtproxy_forward_steps_fail_with_own_codes(self) -> None:
+        for name, code in (
+            ("deploy_mtproxy_forward", 38),
+            ("check_mtproxy_forward", 39),
+            ("stop_mtproxy_forward", 40),
+            ("check_mtproxy_forward_blocked", 41),
+            ("recover_mtproxy_forward", 42),
+        ):
+            with self.subTest(step=name):
+                for mock in self.ru_tunnel_mocks.values():
+                    mock.reset_mock(return_value=False)
+                    mock.return_value = 0
+                self.ru_tunnel_mocks[name].return_value = 1
+
+                result, stderr = self.run_main_with_healthy_eu()
+
+                self.assertEqual(result, code)
+                self.assertNotIn("ss://configured-key", stderr.getvalue())
+
+    def test_fails_when_mtproxy_forward_does_not_resume(self) -> None:
+        self.ru_tunnel_mocks["check_mtproxy_forward"].side_effect = [0, 1]
+
+        result, _ = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 43)
+
+    def test_mtproxy_forward_is_deployed_with_the_ru_key(self) -> None:
+        self.run_main_with_healthy_eu()
+
+        self.ru_tunnel_mocks["deploy_mtproxy_forward"].assert_called_once()
+        self.assertEqual(
+            self.ru_tunnel_mocks["deploy_mtproxy_forward"].call_args.args[1],
+            "ss://configured-key",
+        )
 
     def test_fails_when_test_client_lookup_fails(self) -> None:
         self.client_lookup_mock.side_effect = RuntimeError("wrong network")

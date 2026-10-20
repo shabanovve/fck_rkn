@@ -122,6 +122,23 @@ def check_tunnel_blocked(runner: RemoteRunner) -> int:
     )
 
 
+MTPROXY_FORWARD_BLOCKED_CHECK_COMMAND = render(
+    "mtproxy_forward_blocked_check.sh",
+    container_name=MTPROXY_FORWARD_CONTAINER_NAME,
+    local_port=MTPROXY_FORWARD_LOCAL_PORT,
+)
+
+
+def check_mtproxy_forward_blocked(runner: RemoteRunner) -> int:
+    """Verify the MTProxy forward accepts no traffic while the tunnel is down."""
+    return run_remote_with_input(
+        runner,
+        MTPROXY_FORWARD_BLOCKED_CHECK_COMMAND,
+        "",
+        "Checking that MTProxy traffic is blocked while the tunnel is down",
+    )
+
+
 def check_outline_health(runner: RemoteRunner) -> int:
     """Check ru-server Outline container, authenticated API, and access port."""
     logger.info(
@@ -146,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
             "outline-health",
             "squid-forward",
             "mtproxy-forward",
+            "mtproxy-forward-blocked",
             "tunnel-blocked",
         ),
         help="Check to run",
@@ -172,6 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         return check_mtproxy_forward(runner)
     if args.action == "outline-health":
         return check_outline_health(runner)
+    if args.action == "mtproxy-forward-blocked":
+        return check_mtproxy_forward_blocked(runner)
     if args.action == "tunnel-blocked":
         return check_tunnel_blocked(runner)
 

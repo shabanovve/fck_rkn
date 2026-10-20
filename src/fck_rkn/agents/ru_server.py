@@ -277,6 +277,36 @@ def recover_tunnel(runner: RemoteRunner) -> int:
     return result
 
 
+def recover_mtproxy_forward(runner: RemoteRunner) -> int:
+    """Restart the MTProxy forward with bounded retries, never bypassing it."""
+    result = run_remote_with_input(
+        runner,
+        render(
+            "recover_mtproxy_forward.sh",
+            container_name=MTPROXY_FORWARD_CONTAINER_NAME,
+            local_port=MTPROXY_FORWARD_LOCAL_PORT,
+            attempts=RECOVERY_ATTEMPTS,
+            delay_seconds=RECOVERY_DELAY_SECONDS,
+        ),
+        "",
+        "Recovering the MTProxy forward (traffic stays blocked on failure)",
+        timeout=RECOVERY_TIMEOUT_SECONDS,
+    )
+    if result == 0:
+        logger.info("MTProxy forward is up on %s", "ru-server")
+    return result
+
+
+def stop_mtproxy_forward(runner: RemoteRunner) -> int:
+    """Simulate tunnel loss by stopping the MTProxy forward container."""
+    return run_remote_with_input(
+        runner,
+        render("stop_tunnel.sh", container_name=MTPROXY_FORWARD_CONTAINER_NAME),
+        "",
+        "Simulating tunnel loss by stopping the MTProxy forward",
+    )
+
+
 def deploy_outline_server(runner: RemoteRunner, private_address: str) -> int:
     """Run the approved Outline Server container on ru-server (private address).
 
@@ -334,6 +364,8 @@ def main(argv: list[str] | None = None) -> int:
             "deploy-mtproxy-forward",
             "recover-tunnel",
             "stop-tunnel",
+            "recover-mtproxy-forward",
+            "stop-mtproxy-forward",
             "deploy-outline",
         ),
         help="Action to run",
@@ -368,6 +400,10 @@ def main(argv: list[str] | None = None) -> int:
         return recover_tunnel(runner)
     if args.action == "deploy-outline":
         return deploy_outline_server(runner, settings.RU_SERVER_PRIVATE_ADDRESS)
+    if args.action == "recover-mtproxy-forward":
+        return recover_mtproxy_forward(runner)
+    if args.action == "stop-mtproxy-forward":
+        return stop_mtproxy_forward(runner)
     if args.action == "stop-tunnel":
         return stop_tunnel(runner)
     return 1

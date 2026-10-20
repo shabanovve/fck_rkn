@@ -243,3 +243,39 @@ class MtproxyForwardCheckTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stderr)
                 self.assertNotIn("test-secret", result.stdout + result.stderr)
+
+
+class MtproxyForwardBlockedTests(unittest.TestCase):
+    def test_check_runs_the_blocked_script_without_a_key(self) -> None:
+        from fck_rkn.agents.ru_server_test import (
+            MTPROXY_FORWARD_BLOCKED_CHECK_COMMAND,
+            check_mtproxy_forward_blocked,
+        )
+
+        runner = FakeRunner(stdout="blocked\n")
+        self.assertEqual(check_mtproxy_forward_blocked(runner), 0)
+        self.assertEqual(runner.command, MTPROXY_FORWARD_BLOCKED_CHECK_COMMAND)
+        self.assertIn("fck-rkn-mtproxy-forward", runner.command)
+        self.assertEqual(runner.stdin, "")
+
+    def test_script_fails_when_the_forward_still_listens(self) -> None:
+        from fck_rkn.agents.ru_server_test import MTPROXY_FORWARD_BLOCKED_CHECK_COMMAND
+
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        command = MTPROXY_FORWARD_BLOCKED_CHECK_COMMAND.replace("8443", str(port))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, body in (("sudo", 'exec "$@"\n'), ("docker", "echo exited\n")):
+                tool = root / name
+                tool.write_text("#!/bin/sh\n" + body)
+                tool.chmod(0o755)
+            env = {**os.environ, "PATH": f"{root}:{os.environ['PATH']}"}
+            busy = subprocess.run(["bash", "-c", command], env=env, capture_output=True, text=True)
+            listener.close()
+            free = subprocess.run(["bash", "-c", command], env=env, capture_output=True, text=True)
+        self.assertNotEqual(busy.returncode, 0)
+        self.assertIn("still accepts", busy.stderr)
+        self.assertEqual(free.returncode, 0, free.stderr)
