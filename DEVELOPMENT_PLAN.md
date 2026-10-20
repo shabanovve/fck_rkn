@@ -108,11 +108,10 @@ the proxy.
 - The EU Outline Server must be rebuilt from the official image with
   `outline-ss-server` patched so it accepts private target addresses (the stock
   server rejects them). This lets RU clients reach the private EU Squid
-  endpoint through Outline. This is a test-environment-only requirement: it
-  removes the server's protection against requests to private networks.
-  Production does not need it: production servers use real public IP
-  addresses, so private targets are not an issue, and production uses the
-  standard Outline Docker image from the public registry.
+  endpoint through Outline. It removes the server's protection against
+  requests to private networks; in production RU requests also reach the EU
+  Squid through the tunnel at its private address on port 3128, and this risk
+  is accepted.
 - Provide and invoke a script to create a VPN user/access key after Outline
   Server is deployed and running, before client connectivity testing.
 - Extend `eu-server-test-agent` to verify Outline Server health and test a

@@ -13,10 +13,10 @@ from pydantic_settings.exceptions import SettingsError
 from fck_rkn.agents.eu_server import (
     OUTLINE_ACCESS_KEY_PORT,
     OUTLINE_CONTAINER_NAME,
+    OUTLINE_IMAGE,
     OUTLINE_STATE_DIRECTORY,
     SQUID_CONTAINER_NAME,
     SQUID_PORT,
-    outline_image,
 )
 from fck_rkn.config import TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import INSTANCE_NAME
@@ -31,16 +31,13 @@ SQUID_STARTUP_CHECK_COMMAND = render(
     port=SQUID_PORT,
 )
 SQUID_HTTP_CHECK_COMMAND = render("squid_http_check.sh", port=SQUID_PORT)
-
-
-def build_outline_health_check_command(allow_private_targets: bool) -> str:
-    return render(
-        "outline_health_check.sh",
-        container_name=OUTLINE_CONTAINER_NAME,
-        image=outline_image(allow_private_targets),
-        state_directory=OUTLINE_STATE_DIRECTORY,
-        keys_port=OUTLINE_ACCESS_KEY_PORT,
-    )
+OUTLINE_HEALTH_CHECK_COMMAND = render(
+    "outline_health_check.sh",
+    container_name=OUTLINE_CONTAINER_NAME,
+    image=OUTLINE_IMAGE,
+    state_directory=OUTLINE_STATE_DIRECTORY,
+    keys_port=OUTLINE_ACCESS_KEY_PORT,
+)
 
 
 def check_squid_startup(settings: TestEnvironmentSettings) -> int:
@@ -147,12 +144,8 @@ def check_squid_http(settings: TestEnvironmentSettings) -> int:
     return 0
 
 
-def check_outline_health(
-    settings: TestEnvironmentSettings,
-    allow_private_targets: bool = False,
-) -> int:
+def check_outline_health(settings: TestEnvironmentSettings) -> int:
     """Check Outline container, authenticated API, and access port via IAP SSH."""
-    health_check_command = build_outline_health_check_command(allow_private_targets)
     command = [
         "gcloud",
         "compute",
@@ -161,7 +154,7 @@ def check_outline_health(
         f"--project={settings.GCP_PROJECT_ID}",
         f"--zone={settings.GCP_ZONE}",
         "--tunnel-through-iap",
-        f"--command={health_check_command}",
+        f"--command={OUTLINE_HEALTH_CHECK_COMMAND}",
         "--quiet",
     ]
     logger.info(
@@ -219,11 +212,6 @@ def main(argv: list[str] | None = None) -> int:
         default="startup",
         help="Check to run (default: startup)",
     )
-    parser.add_argument(
-        "--allow-private-targets",
-        action="store_true",
-        help="outline: expect the patched test-environment Outline image",
-    )
     args = parser.parse_args(argv)
 
     try:
@@ -238,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "http":
         return check_squid_http(settings)
     if args.action == "outline":
-        return check_outline_health(settings, args.allow_private_targets)
+        return check_outline_health(settings)
     return check_squid_startup(settings)
 
 

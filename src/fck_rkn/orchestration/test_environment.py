@@ -244,7 +244,7 @@ def main() -> int:
 
     logger.info("eu-server-test-agent Squid HTTP check passed")
     logger.info("Invoking eu-server-agent Outline deployment")
-    outline_deploy_exit_code = deploy_outline(settings, allow_private_targets=True)
+    outline_deploy_exit_code = deploy_outline(settings)
     if outline_deploy_exit_code != 0:
         logger.error(
             "eu-server-agent Outline deployment failed with exit status %d",
@@ -259,7 +259,7 @@ def main() -> int:
 
     logger.info("eu-server-agent Outline deployment passed")
     logger.info("Invoking eu-server-test-agent Outline health check")
-    outline_health_exit_code = check_outline_health(settings, allow_private_targets=True)
+    outline_health_exit_code = check_outline_health(settings)
     if outline_health_exit_code != 0:
         logger.error(
             "eu-server-test-agent Outline health check failed with exit "

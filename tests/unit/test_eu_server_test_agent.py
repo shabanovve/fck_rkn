@@ -9,13 +9,12 @@ from unittest.mock import patch
 from fck_rkn.agents.eu_server import (
     OUTLINE_ACCESS_KEY_PORT,
     OUTLINE_CONTAINER_NAME,
-    OUTLINE_BASE_IMAGE,
-    OUTLINE_PATCHED_IMAGE,
+    OUTLINE_IMAGE,
     SQUID_CONTAINER_NAME,
     SQUID_PORT,
 )
 from fck_rkn.agents.eu_server_test import (
-    build_outline_health_check_command,
+    OUTLINE_HEALTH_CHECK_COMMAND,
     SSH_COMMAND_TIMEOUT_SECONDS,
     SQUID_HTTP_CHECK_COMMAND,
     SQUID_STARTUP_CHECK_COMMAND,
@@ -223,31 +222,26 @@ class EuServerTestAgentTests(unittest.TestCase):
             ) as run,
             redirect_stdout(output),
         ):
-            result = check_outline_health(self.settings, allow_private_targets=True)
+            result = check_outline_health(self.settings)
 
         command = run.call_args.args[0]
-        health_command = build_outline_health_check_command(True)
         self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "eu-server"])
         self.assertIn("--project=fck-rkn-test", command)
         self.assertIn("--zone=europe-north1-a", command)
         self.assertIn("--tunnel-through-iap", command)
-        self.assertIn(f"--command={health_command}", command)
-        self.assertIn(OUTLINE_CONTAINER_NAME, health_command)
-        self.assertIn(f"expected_image={OUTLINE_PATCHED_IMAGE}", health_command)
-        self.assertIn(
-            f"expected_image={OUTLINE_BASE_IMAGE}",
-            build_outline_health_check_command(False),
-        )
+        self.assertIn(f"--command={OUTLINE_HEALTH_CHECK_COMMAND}", command)
+        self.assertIn(OUTLINE_CONTAINER_NAME, OUTLINE_HEALTH_CHECK_COMMAND)
+        self.assertIn(OUTLINE_IMAGE, OUTLINE_HEALTH_CHECK_COMMAND)
         self.assertIn(
             "access-keys",
-            health_command,
+            OUTLINE_HEALTH_CHECK_COMMAND,
         )
         self.assertIn(
             f"/dev/tcp/127.0.0.1/{OUTLINE_ACCESS_KEY_PORT}",
-            health_command,
+            OUTLINE_HEALTH_CHECK_COMMAND,
         )
-        self.assertIn("json.load", health_command)
-        self.assertNotIn("print(keys", health_command)
+        self.assertIn("json.load", OUTLINE_HEALTH_CHECK_COMMAND)
+        self.assertNotIn("print(keys", OUTLINE_HEALTH_CHECK_COMMAND)
         self.assertEqual(
             run.call_args.kwargs["timeout"],
             SSH_COMMAND_TIMEOUT_SECONDS,
@@ -303,14 +297,9 @@ class EuServerTestAgentTests(unittest.TestCase):
             ) as check,
         ):
             result = main(["outline"])
-            private_result = main(["outline", "--allow-private-targets"])
 
         self.assertEqual(result, 0)
-        self.assertEqual(private_result, 0)
-        self.assertEqual(
-            [call.args for call in check.call_args_list],
-            [(self.settings, False), (self.settings, True)],
-        )
+        check.assert_called_once_with(self.settings)
 
 
 if __name__ == "__main__":

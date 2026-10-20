@@ -226,7 +226,7 @@ behavior that requires them.
 ### 42a. [x] Allow private targets in the test Outline Server
 
 - **Change:** `eu-server-agent` builds a derived Outline Server image whose
-  `outline-ss-server` accepts private target addresses (test environment only),
+  `outline-ss-server` accepts private target addresses,
   so the RU forward can reach the private Squid endpoint.
 
 ### 42b. [x] Move remote scripts out of Python strings
@@ -234,13 +234,6 @@ behavior that requires them.
 - **Change:** Shell, Python and Dockerfile snippets live as real files in
   `src/fck_rkn/remote/scripts/` and are loaded with `fck_rkn.remote.render`
   (`@NAME@` placeholders, `#include` fragments, strict unused/missing checks).
-
-### 42c. [x] Rebuild Outline only from `test_env_host`
-
-- **Change:** `deploy_outline` / `check_outline_health` take
-  `allow_private_targets`; `test_env_host` passes `True` (patched build),
-  otherwise the standard Docker image is used (also the CLI default; opt in
-  with `--allow-private-targets`).
 
 ### 46. Add tunnel-loss recovery to `ru-server-agent`
 

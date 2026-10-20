@@ -31,15 +31,12 @@ To stream the Squid container's live Docker logs independently, run
 `.venv/bin/eu-server-agent logs-squid`. Press Ctrl-C to stop following logs.
 
 To deploy Outline Server directly on `eu-server`, run
-`.venv/bin/eu-server-agent deploy-outline`. By default the standard stable
-Outline image is used. When started by `test_env_host` (or with
-`--allow-private-targets`) the agent first builds an image
+`.venv/bin/eu-server-agent deploy-outline`. The agent first builds an image
 from the official stable image with `outline-ss-server` patched to accept
 private target addresses (the stock server rejects them), so RU clients can
 reach the private EU Squid endpoint through Outline. The patch removes the
-server's private-network protection and is for this test environment only:
-production servers have real public IP addresses and use the standard Outline
-Docker image from the public registry. The
+server's private-network protection; the risk is accepted because production
+also sends RU requests through the tunnel to the private Squid address. The
 official installer then runs that image and configures
 Outline with the VM's private IP and fixed management/access-key ports. Its
 secret-bearing installer output is suppressed; generated state remains in the
