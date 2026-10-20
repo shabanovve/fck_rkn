@@ -271,13 +271,16 @@ behavior that requires them.
   to ru-server's private address; it is idempotent. Not yet wired into
   `test_env_host` (task 51).
 
-### 49a. Add a platform-independent `RemoteRunner`
+### 49a. [x] Add a platform-independent `RemoteRunner`
 
 - **Change:** Add `fck_rkn/remote/runner.py` with a `RemoteRunner` protocol
   (`run(command, stdin, timeout, stream_output)` returning an exit code and
   the captured output) and a shared implementation of the timeout, `OSError`
   and non-zero exit handling that is now copied in every agent function.
 - **Test:** Unit tests for the shared error handling with a fake runner.
+- **Done:** `RemoteRunner`, `RemoteResult`, `RemoteTimeoutError`,
+  `RemoteStartError` and `execute()` live in `fck_rkn/remote/runner.py`.
+  Agents are migrated in tasks 49d and 49e.
 
 ### 49b. Add runner implementations
 
