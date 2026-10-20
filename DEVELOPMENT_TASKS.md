@@ -549,10 +549,14 @@ behavior that requires them.
   127.0.0.1:3128 and prints the HTTP status. It fails only when no HTTP
   response arrives; judging the status is task 68.
 
-### 68. Add HTTP result assertion to `test-client-agent`
+### 68. [x] Add HTTP result assertion to `test-client-agent`
 
 - **Test:** Verify the request satisfies the owner-approved HTTP success
   condition and fails when the proxy path is unavailable.
+- **Done:** Owner-approved success condition: HTTP status 2xx or 3xx and a
+  Squid `Via`/`Server` header. `request-youtube` now asserts it and fails on a
+  missing response, another status, or a non-Squid response. Task 67's
+  request is the same script.
 
 ### 69. Run the full client request test
 

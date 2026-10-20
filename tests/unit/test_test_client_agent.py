@@ -236,6 +236,34 @@ class HttpRequestTests(unittest.TestCase):
         self.assertIn("http://youtube.com/", HTTP_REQUEST_COMMAND)
         self.assertNotIn("--socks5", HTTP_REQUEST_COMMAND)
 
+    def test_script_asserts_status_and_squid_origin(self) -> None:
+        self.assertIn("2??|3??", HTTP_REQUEST_COMMAND)
+        self.assertIn("Unexpected HTTP status", HTTP_REQUEST_COMMAND)
+        self.assertIn("did not come from EU Squid", HTTP_REQUEST_COMMAND)
+        self.assertIn("request through the proxy path failed", HTTP_REQUEST_COMMAND)
+
+    def test_script_assertion_against_fake_proxy_responses(self) -> None:
+        import subprocess
+        import tempfile
+        import os
+
+        cases = (
+            ("HTTP/1.1 301 Moved\r\nVia: 1.1 host (squid/6)\r\n\r\n", 0),
+            ("HTTP/1.1 503 Down\r\nVia: 1.1 host (squid/6)\r\n\r\n", 1),
+            ("HTTP/1.1 200 OK\r\nServer: nginx\r\n\r\n", 1),
+        )
+        for headers, expected in cases:
+            with self.subTest(headers=headers), tempfile.TemporaryDirectory() as d:
+                curl = Path(d, "curl")
+                curl.write_text(f"#!/bin/sh\nprintf '%s' '{headers}'\n")
+                curl.chmod(0o755)
+                env = {**os.environ, "PATH": f"{d}:{os.environ['PATH']}"}
+                result = subprocess.run(
+                    ["bash", "-c", HTTP_REQUEST_COMMAND],
+                    env=env, capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, expected, result.stderr)
+
     def test_request_runs_the_script_without_a_key(self) -> None:
         runner = FakeRunner(stdout="HTTP status through the proxy path: 200\n")
         self.assertEqual(request_youtube(runner), 0)

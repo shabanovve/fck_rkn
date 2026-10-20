@@ -121,10 +121,10 @@ HTTP_REQUEST_COMMAND = render(
 
 
 def request_youtube(runner: RemoteRunner) -> int:
-    """Send an HTTP request to youtube.com through client-to-RU-to-EU Squid.
+    """Request youtube.com through client-to-RU-to-EU Squid and assert the result.
 
-    Succeeds whenever an HTTP response arrives; judging the status is a
-    separate assertion.
+    Success: HTTP status 2xx or 3xx and a Squid Via/Server header. A missing
+    response, another status, or a response not from Squid fails.
     """
     return run_remote_with_input(
         runner,

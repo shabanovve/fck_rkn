@@ -242,8 +242,9 @@ milestones:
 6. Which VPC/subnet and remaining ingress/egress rules should be used?
 7. Should `ping youtube.com` be a strict pass/fail requirement? ICMP may be
    blocked independently of DNS and HTTP connectivity.
-8. Which HTTP status codes and response conditions count as a successful
-   Squid request to `youtube.com`?
+8. *Resolved:* success is an HTTP status 2xx or 3xx and a Squid
+   `Via`/`Server` header. Original question: which HTTP status codes and
+   response conditions count as a successful Squid request to `youtube.com`?
 9. Should Squid and the Outline endpoints be reachable only over private
    addresses, or is any narrowly restricted public ingress required?
 10. The EU Outline Server uses the official stable image rebuilt with the
