@@ -359,10 +359,14 @@ behavior that requires them.
   `TEST_ENV_HOST.md`. Decision recorded: production agents run from a
   controller over SSH (`SshRunner`).
 
-### 50. Add RU Outline health test
+### 50. [x] Add RU Outline health test
 
 - **Test:** Add a `ru-server-test-agent` check for Outline health and
   authorized client endpoint access.
+- **Done:** `ru_server_test.check_outline_health` and CLI action
+  `outline-health` run the shared `outline_health_check.sh` (command now
+  built once in `agents/outline.py`) on ru-server. Not yet called by the
+  orchestrator (task 51).
 
 ### 51. Deploy and test RU Outline health
 

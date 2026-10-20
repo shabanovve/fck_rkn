@@ -26,6 +26,14 @@ OUTLINE_API_PORT = 10000
 OUTLINE_ACCESS_KEY_PORT = 10001
 OUTLINE_DEPLOY_TIMEOUT_SECONDS = 900
 
+OUTLINE_HEALTH_CHECK_COMMAND = render(
+    "outline_health_check.sh",
+    container_name=OUTLINE_CONTAINER_NAME,
+    image=OUTLINE_IMAGE,
+    state_directory=OUTLINE_STATE_DIRECTORY,
+    keys_port=OUTLINE_ACCESS_KEY_PORT,
+)
+
 
 def deploy_outline_on(runner: RemoteRunner, private_address: str) -> int:
     """Install Outline Server on the runner target, bound to private_address."""

@@ -10,6 +10,10 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import SQUID_PORT
+from fck_rkn.agents.outline import (
+    OUTLINE_ACCESS_KEY_PORT,
+    OUTLINE_HEALTH_CHECK_COMMAND,
+)
 from fck_rkn.agents.ru_server import (
     CLIENT_CONTAINER_NAME,
     CLIENT_IMAGE,
@@ -97,11 +101,26 @@ def check_tunnel_blocked(runner: RemoteRunner) -> int:
     )
 
 
+def check_outline_health(runner: RemoteRunner) -> int:
+    """Check ru-server Outline container, authenticated API, and access port."""
+    logger.info(
+        "Checking Outline Server container, authorized API, and TCP access "
+        "port %d on ru-server",
+        OUTLINE_ACCESS_KEY_PORT,
+    )
+    return run_remote_with_input(
+        runner,
+        OUTLINE_HEALTH_CHECK_COMMAND,
+        "",
+        "Outline Server health check",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run ru-server service checks.")
     parser.add_argument(
         "action",
-        choices=("outline-client", "squid-forward", "tunnel-blocked"),
+        choices=("outline-client", "outline-health", "squid-forward", "tunnel-blocked"),
         help="Check to run",
     )
     args = parser.parse_args(argv)
@@ -122,6 +141,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.action == "squid-forward":
         return check_squid_forward(runner)
+    if args.action == "outline-health":
+        return check_outline_health(runner)
     if args.action == "tunnel-blocked":
         return check_tunnel_blocked(runner)
 

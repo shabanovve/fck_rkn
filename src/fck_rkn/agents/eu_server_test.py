@@ -11,12 +11,10 @@ from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import (
     OUTLINE_ACCESS_KEY_PORT,
-    OUTLINE_CONTAINER_NAME,
-    OUTLINE_IMAGE,
-    OUTLINE_STATE_DIRECTORY,
     SQUID_CONTAINER_NAME,
     SQUID_PORT,
 )
+from fck_rkn.agents.outline import OUTLINE_HEALTH_CHECK_COMMAND
 from fck_rkn.agent_config import eu_server_runner, load_agent_settings
 from fck_rkn.remote import render
 from fck_rkn.remote.runner import RemoteRunner, execute
@@ -30,13 +28,6 @@ SQUID_STARTUP_CHECK_COMMAND = render(
     port=SQUID_PORT,
 )
 SQUID_HTTP_CHECK_COMMAND = render("squid_http_check.sh", port=SQUID_PORT)
-OUTLINE_HEALTH_CHECK_COMMAND = render(
-    "outline_health_check.sh",
-    container_name=OUTLINE_CONTAINER_NAME,
-    image=OUTLINE_IMAGE,
-    state_directory=OUTLINE_STATE_DIRECTORY,
-    keys_port=OUTLINE_ACCESS_KEY_PORT,
-)
 
 
 def check_squid_startup(runner: RemoteRunner) -> int:

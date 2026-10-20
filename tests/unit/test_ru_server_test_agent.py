@@ -9,9 +9,11 @@ from fake_runner import FakeRunner
 
 from fck_rkn.agents.ru_server_test import (
     CLIENT_CHECK_COMMAND,
+    OUTLINE_HEALTH_CHECK_COMMAND,
     FORWARD_CHECK_COMMAND,
     TUNNEL_BLOCKED_CHECK_COMMAND,
     check_outline_client,
+    check_outline_health,
     check_squid_forward,
     check_tunnel_blocked,
     main,
@@ -103,4 +105,26 @@ class RuServerTunnelBlockedTests(unittest.TestCase):
             patch("fck_rkn.agents.ru_server_test.check_tunnel_blocked", return_value=0) as check,
         ):
             self.assertEqual(main(["tunnel-blocked"]), 0)
+        check.assert_called_once_with(make_runner.return_value)
+
+
+class RuServerOutlineHealthTests(unittest.TestCase):
+    def test_checks_container_authorized_api_and_access_port(self) -> None:
+        runner = FakeRunner(stdout="healthy\n")
+        self.assertEqual(check_outline_health(runner), 0)
+        self.assertEqual(runner.command, OUTLINE_HEALTH_CHECK_COMMAND)
+        self.assertIn("access-keys", runner.command)
+        self.assertIn("/dev/tcp/127.0.0.1/10001", runner.command)
+
+    def test_reports_remote_failure(self) -> None:
+        with self.assertLogs("fck_rkn.remote.runner", level="ERROR"):
+            self.assertEqual(check_outline_health(FakeRunner(exit_code=1)), 1)
+
+    def test_cli_dispatches_outline_health(self) -> None:
+        with (
+            patch("fck_rkn.agents.ru_server_test.load_agent_settings"),
+            patch("fck_rkn.agents.ru_server_test.ru_server_runner") as make_runner,
+            patch("fck_rkn.agents.ru_server_test.check_outline_health", return_value=0) as check,
+        ):
+            self.assertEqual(main(["outline-health"]), 0)
         check.assert_called_once_with(make_runner.return_value)
