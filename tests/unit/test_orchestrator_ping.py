@@ -79,6 +79,12 @@ class OrchestratorPingTests(unittest.TestCase):
             "fck_rkn.orchestration.test_environment.check_squid_tunnel",
             return_value=0,
         )
+        self.client_request = patch(
+            "fck_rkn.orchestration.test_environment.request_youtube",
+            return_value=0,
+        )
+        self.client_request_mock = self.client_request.start()
+        self.addCleanup(self.client_request.stop)
         self.squid_tunnel_deploy_mock = self.squid_tunnel_deploy.start()
         self.squid_tunnel_check_mock = self.squid_tunnel_check.start()
         self.addCleanup(self.squid_tunnel_deploy.stop)
@@ -583,6 +589,22 @@ class OrchestratorPingTests(unittest.TestCase):
                 self.assertEqual(result, expected)
                 self.assertIn("failed with exit status 1", stderr.getvalue())
         self.squid_tunnel_check_mock.assert_called_once()
+
+    def test_youtube_request_failure_has_its_own_code(self) -> None:
+        self.client_request_mock.return_value = 1
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 35)
+        self.assertIn("youtube.com request", stderr.getvalue())
+
+    def test_youtube_request_runs_last_on_the_client_runner(self) -> None:
+        result, _ = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 0)
+        self.client_request_mock.assert_called_once_with(
+            GcloudIapRunner("test-client", "fck-rkn-test", "europe-north1-a")
+        )
 
     def test_squid_tunnel_is_deployed_with_the_test_key_and_eu_address(self) -> None:
         result, _ = self.run_main_with_healthy_eu()

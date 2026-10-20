@@ -558,10 +558,14 @@ behavior that requires them.
   missing response, another status, or a non-Squid response. Task 67's
   request is the same script.
 
-### 69. Run the full client request test
+### 69. [x] Run the full client request test
 
 - **Orchestration:** Make `test_env_host` run `test-client-agent` after
   deployment and require successful proxy handling with no direct fallback.
+- **Done:** After the tunnel check the orchestrator runs
+  `request_youtube` on `test-client` (exit 35). The request goes only through
+  the local proxy 127.0.0.1:3128 with no direct fallback, and the assertion
+  requires a Squid response, so a direct answer would fail.
 
 ## Other README requirements
 

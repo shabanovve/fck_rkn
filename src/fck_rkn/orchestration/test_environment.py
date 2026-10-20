@@ -38,6 +38,7 @@ from fck_rkn.agents.test_client import (
     check_squid_tunnel,
     connect_to_outline,
     deploy_squid_tunnel,
+    request_youtube,
 )
 from fck_rkn.agents.ru_server_test import (
     check_outline_client,
@@ -540,6 +541,11 @@ def _run(image_directory: Path) -> int:
             33,
         ),
         ("Squid tunnel check", lambda: check_squid_tunnel(client_runner), 34),
+        (
+            "youtube.com request through the proxy path",
+            lambda: request_youtube(client_runner),
+            35,
+        ),
     )
     for description, step, failure_code in squid_tunnel_steps:
         logger.info("Running test-client %s", description)
@@ -556,7 +562,9 @@ def _run(image_directory: Path) -> int:
                 file=sys.stderr,
             )
             return failure_code
-    logger.info("test-client localhost TCP/3128 reaches EU Squid through RU")
+    logger.info(
+        "test-client reached youtube.com only through EU Squid via RU Outline"
+    )
 
     print(
         f"{ru_instance.name} is available in project "
