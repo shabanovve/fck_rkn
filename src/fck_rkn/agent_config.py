@@ -29,6 +29,7 @@ class AgentSettings(BaseSettings):
     RU_SERVER_HOST: str = Field(min_length=1)
     EU_SERVER_PRIVATE_ADDRESS: str = Field(min_length=1)
     RU_SERVER_PRIVATE_ADDRESS: str = Field(min_length=1)
+    TEST_CLIENT_HOST: str = ""
     SSH_USER: str = Field(min_length=1)
     SSH_KEY_PATH: Path
     SSH_PORT: int = Field(default=22, ge=1, le=65535)
@@ -46,6 +47,12 @@ def eu_server_runner(settings: AgentSettings) -> RemoteRunner:
 
 def ru_server_runner(settings: AgentSettings) -> RemoteRunner:
     return _ssh_runner(settings, settings.RU_SERVER_HOST)
+
+
+def test_client_runner(settings: AgentSettings) -> RemoteRunner:
+    if not settings.TEST_CLIENT_HOST:
+        raise ValueError("TEST_CLIENT_HOST is not configured")
+    return _ssh_runner(settings, settings.TEST_CLIENT_HOST)
 
 
 def _ssh_runner(settings: AgentSettings, host: str) -> SshRunner:

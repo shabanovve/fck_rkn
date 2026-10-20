@@ -19,6 +19,7 @@ eu-server-agent = "fck_rkn.agents.eu_server:main"
 eu-server-test-agent = "fck_rkn.agents.eu_server_test:main"
 ru-server-agent = "fck_rkn.agents.ru_server:main"
 ru-server-test-agent = "fck_rkn.agents.ru_server_test:main"
+test-client-agent = "fck_rkn.agents.test_client:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

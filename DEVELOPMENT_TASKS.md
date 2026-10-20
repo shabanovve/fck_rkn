@@ -482,10 +482,16 @@ behavior that requires them.
 - **Done:** Ready, running-wait timeout and SSH-wait timeout are tested for
   `test-client`; a failure from `ensure_test_client` gives exit code 29.
 
-### 61. Add Outline connection to `test-client-agent`
+### 61. [x] Add Outline connection to `test-client-agent`
 
 - **Change:** Add an action to connect from `test-client` to RU Outline using
   the protected RU test key.
+- **Done:** `test-client-agent connect-outline` (`agents/test_client.py`) reads
+  the `ss://` key from stdin and starts a persistent `ss-local` container
+  `fck-rkn-test-client-outline` (private config, `--restart unless-stopped`),
+  reusing the RU client script. `TEST_CLIENT_HOST` was added to the agent
+  settings. The key is created on RU Outline by the orchestrator with
+  `create_outline_user` through the RU runner (task 63).
 
 ### 62. Add test-client Outline connection test
 
