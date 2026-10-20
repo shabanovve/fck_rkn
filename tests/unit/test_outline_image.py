@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import io
 import subprocess
 import tempfile
 import unittest
@@ -61,27 +62,51 @@ class BuildOutlineImageTests(unittest.TestCase):
             )
 
 
+class FakeProcess:
+    def __init__(self, data: bytes, code: int) -> None:
+        self.stdout = io.BytesIO(data)
+        self.code = code
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        return None
+
+    def wait(self, timeout=None) -> int:
+        return self.code
+
+
 class ExportOutlineImageTests(unittest.TestCase):
-    def test_saves_and_compresses_the_image(self) -> None:
+    def test_streams_and_compresses_the_image(self) -> None:
+        argv_seen = []
+
+        def popen(argv, **kwargs):
+            argv_seen.append(argv)
+            return FakeProcess(b"image-bytes", 0)
+
         with tempfile.TemporaryDirectory() as directory:
-            def docker(argv, **kwargs):
-                kwargs["stdout"].write(b"image-bytes")
-                return subprocess.CompletedProcess(argv, 0)
+            archive = export_outline_image(Path(directory), popen)
 
-            archive = export_outline_image(Path(directory), docker)
-
+            self.assertEqual(argv_seen, [["docker", "save", OUTLINE_IMAGE]])
             self.assertEqual(gzip.decompress(archive.read_bytes()), b"image-bytes")
-            self.assertEqual(
-                sorted(p.name for p in Path(directory).iterdir()),
-                ["outline-image.tar.gz"],
-            )
 
-    def test_save_failure_returns_none(self) -> None:
+    def test_save_failure_returns_none_and_leaves_no_archive(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             with self.assertLogs("fck_rkn.orchestration.outline_image", "ERROR"):
-                self.assertIsNone(
-                    export_outline_image(Path(directory), FakeDocker(1))
+                result = export_outline_image(
+                    Path(directory), lambda argv, **kw: FakeProcess(b"x", 1)
                 )
+            self.assertIsNone(result)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_missing_docker_returns_none(self) -> None:
+        def popen(argv, **kwargs):
+            raise FileNotFoundError("docker")
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertLogs("fck_rkn.orchestration.outline_image", "ERROR"):
+                self.assertIsNone(export_outline_image(Path(directory), popen))
 
 
 if __name__ == "__main__":

@@ -66,34 +66,26 @@ def build_outline_image(run: LocalRun = subprocess.run) -> int:
 
 
 def export_outline_image(
-    directory: Path, run: LocalRun = subprocess.run
+    directory: Path, popen: Callable[..., subprocess.Popen] = subprocess.Popen
 ) -> Path | None:
-    """Save the local image as a gzip archive in directory."""
-    tar_path = directory / "outline-image.tar"
+    """Stream the local image through gzip into an archive in directory."""
     archive = directory / "outline-image.tar.gz"
+    # A pipe is required: a snap-confined docker cannot write to a file stdout.
     try:
-        with tar_path.open("wb") as tar:
-            saved = run(
-                ["docker", "save", OUTLINE_IMAGE],
-                stdout=tar,
-                stderr=subprocess.DEVNULL,
-                timeout=BUILD_TIMEOUT_SECONDS,
-                check=False,
-            ).returncode
+        with popen(
+            ["docker", "save", OUTLINE_IMAGE],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        ) as process:
+            with archive.open("wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb") as target:
+                shutil.copyfileobj(process.stdout, target)
+            saved = process.wait(timeout=BUILD_TIMEOUT_SECONDS)
     except (OSError, subprocess.TimeoutExpired) as error:
         logger.error("Saving the Outline Server image failed: %s", error)
-        tar_path.unlink(missing_ok=True)
+        archive.unlink(missing_ok=True)
         return None
     if saved != 0:
         logger.error("Saving the Outline Server image failed")
-        tar_path.unlink(missing_ok=True)
+        archive.unlink(missing_ok=True)
         return None
-    try:
-        with tar_path.open("rb") as source, gzip.open(archive, "wb") as target:
-            shutil.copyfileobj(source, target)
-    except OSError as error:
-        logger.error("Could not compress the Outline Server image: %s", error)
-        return None
-    finally:
-        tar_path.unlink(missing_ok=True)
     return archive
