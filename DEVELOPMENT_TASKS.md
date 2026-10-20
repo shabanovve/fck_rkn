@@ -421,13 +421,18 @@ behavior that requires them.
   Until 51d the orchestrator and the `deploy-outline` CLIs do not load the
   image, so a real run of Outline deployment fails at this step.
 
-### 51d. Wire the single build into the orchestrator
+### 51d. [x] Wire the single build into the orchestrator
 
 - **Orchestration:** Build once before the EU Outline deploy, load the image
   on `eu-server`, then on `ru-server` before its Outline deploy. New exit
   codes for build and load failures.
 - **Test:** Orchestrator test: build runs once; load runs for both runners
   before each deployment; failures stop the workflow.
+- **Done:** `orchestration/outline_image.export_outline_image` (docker save +
+  gzip). The orchestrator builds once after the EU Squid checks, loads the
+  archive on `eu-server` before its Outline deploy and on `ru-server` before
+  its Outline deploy. Exit codes: 26 build/export, 27 EU load, 28 RU load.
+  The agent `deploy-outline` CLIs expect the image to be loaded already.
 
 ### 52. Add RU VPN-user creation script
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from pathlib import Path
 from unittest.mock import call, patch
 
 from google.cloud import compute_v1
@@ -62,6 +63,18 @@ class OrchestratorPingTests(unittest.TestCase):
         self.ru_outline_health_mock = self.ru_outline_health.start()
         self.addCleanup(self.ru_outline_deploy.stop)
         self.addCleanup(self.ru_outline_health.stop)
+        self.image_mocks = {}
+        for name, value in (
+            ("build_outline_image", 0),
+            ("export_outline_image", Path("/tmp/outline-image.tar.gz")),
+            ("load_outline_image", 0),
+        ):
+            image_patch = patch(
+                f"fck_rkn.orchestration.test_environment.{name}",
+                return_value=value,
+            )
+            self.image_mocks[name] = image_patch.start()
+            self.addCleanup(image_patch.stop)
         self.ru_key = patch(
             "fck_rkn.orchestration.test_environment.create_outline_user",
             return_value="ss://configured-key",
@@ -150,6 +163,13 @@ class OrchestratorPingTests(unittest.TestCase):
         self.ru_lookup_mock.assert_called_once_with(self.settings)
         ru_runner = GcloudIapRunner(
             "ru-server", "fck-rkn-test", "europe-north1-a"
+        )
+        archive = Path("/tmp/outline-image.tar.gz")
+        self.image_mocks["build_outline_image"].assert_called_once_with()
+        self.image_mocks["export_outline_image"].assert_called_once()
+        self.assertEqual(
+            self.image_mocks["load_outline_image"].call_args_list,
+            [call(EU_RUNNER, archive), call(ru_runner, archive)],
         )
         self.ru_outline_deploy_mock.assert_called_once_with(
             ru_runner, "ru.internal"
@@ -475,6 +495,43 @@ class OrchestratorPingTests(unittest.TestCase):
 
         self.assertEqual(result, 13)
         self.assertIn("Outline access key", stderr.getvalue())
+
+    def test_stops_when_the_image_cannot_be_built_or_exported(self) -> None:
+        for name, value in (
+            ("build_outline_image", 1),
+            ("export_outline_image", None),
+        ):
+            with self.subTest(step=name):
+                for mock in self.image_mocks.values():
+                    mock.reset_mock()
+                self.image_mocks["build_outline_image"].return_value = 0
+                self.image_mocks["export_outline_image"].return_value = Path("a")
+                self.image_mocks[name].return_value = value
+                self.outline_deploy_mock.reset_mock()
+
+                result, stderr = self.run_main_with_healthy_eu()
+
+                self.assertEqual(result, 26)
+                self.image_mocks["load_outline_image"].assert_not_called()
+                self.outline_deploy_mock.assert_not_called()
+
+    def test_stops_when_the_image_cannot_be_loaded_on_eu_server(self) -> None:
+        self.image_mocks["load_outline_image"].return_value = 1
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 27)
+        self.outline_deploy_mock.assert_not_called()
+        self.assertIn("eu-server", stderr.getvalue())
+
+    def test_stops_when_the_image_cannot_be_loaded_on_ru_server(self) -> None:
+        self.image_mocks["load_outline_image"].side_effect = [0, 1]
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 28)
+        self.ru_outline_deploy_mock.assert_not_called()
+        self.assertIn("ru-server", stderr.getvalue())
 
     def test_stops_when_ru_outline_deployment_fails(self) -> None:
         self.ru_outline_deploy_mock.return_value = 1

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import sys
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 
 from google.api_core.exceptions import GoogleAPICallError
 from google.auth.exceptions import GoogleAuthError
@@ -23,6 +25,7 @@ from fck_rkn.agents.eu_server_test import (
     check_squid_http,
     check_squid_startup,
 )
+from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.ru_server import (
     deploy_outline_client,
     deploy_outline_server,
@@ -47,6 +50,10 @@ from fck_rkn.gcp.compute import (
     validate_project_access,
 )
 from fck_rkn.gcp.runner import GcloudIapRunner
+from fck_rkn.orchestration.outline_image import (
+    build_outline_image,
+    export_outline_image,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -107,6 +114,11 @@ def _provision_server(
 
 
 def main() -> int:
+    with tempfile.TemporaryDirectory() as directory:
+        return _run(Path(directory))
+
+
+def _run(image_directory: Path) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -269,6 +281,21 @@ def main() -> int:
         return 9
 
     logger.info("eu-server-test-agent Squid HTTP check passed")
+    logger.info("Building the Outline Server image once on this host")
+    if build_outline_image() != 0:
+        print("Could not build the Outline Server image.", file=sys.stderr)
+        return 26
+    image_archive = export_outline_image(image_directory)
+    if image_archive is None:
+        print("Could not export the Outline Server image.", file=sys.stderr)
+        return 26
+    if load_outline_image(eu_runner, image_archive) != 0:
+        print(
+            "Could not load the Outline Server image on eu-server.",
+            file=sys.stderr,
+        )
+        return 27
+
     logger.info("Invoking eu-server-agent Outline deployment")
     outline_deploy_exit_code = deploy_outline(eu_runner, eu_private_address)
     if outline_deploy_exit_code != 0:
@@ -316,6 +343,13 @@ def main() -> int:
         logger.error("%s", error)
         print(str(error), file=sys.stderr)
         return 12
+
+    if load_outline_image(ru_runner, image_archive) != 0:
+        print(
+            "Could not load the Outline Server image on ru-server.",
+            file=sys.stderr,
+        )
+        return 28
 
     logger.info("Invoking ru-server-agent Outline Server deployment")
     ru_outline_deploy_exit_code = deploy_outline_server(

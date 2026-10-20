@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import gzip
 import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 
 from fck_rkn.agents.outline import OUTLINE_BASE_IMAGE, OUTLINE_IMAGE
-from fck_rkn.orchestration.outline_image import build_outline_image
+from fck_rkn.orchestration.outline_image import (
+    build_outline_image,
+    export_outline_image,
+)
 
 
 class FakeDocker:
@@ -54,6 +60,29 @@ class BuildOutlineImageTests(unittest.TestCase):
                 ),
                 1,
             )
+
+
+class ExportOutlineImageTests(unittest.TestCase):
+    def test_saves_and_compresses_the_image(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            def docker(argv, **kwargs):
+                Path(argv[argv.index("-o") + 1]).write_bytes(b"image-bytes")
+                return subprocess.CompletedProcess(argv, 0)
+
+            archive = export_outline_image(Path(directory), docker)
+
+            self.assertEqual(gzip.decompress(archive.read_bytes()), b"image-bytes")
+            self.assertEqual(
+                sorted(p.name for p in Path(directory).iterdir()),
+                ["outline-image.tar.gz"],
+            )
+
+    def test_save_failure_returns_none(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertLogs("fck_rkn.orchestration.outline_image", "ERROR"):
+                self.assertIsNone(
+                    export_outline_image(Path(directory), FakeDocker(1))
+                )
 
 
 if __name__ == "__main__":
