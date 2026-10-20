@@ -16,11 +16,13 @@ from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import (
     create_outline_user,
+    deploy_mtproxy,
     deploy_outline,
     deploy_squid,
     run_youtube_ping,
 )
 from fck_rkn.agents.eu_server_test import (
+    check_mtproxy,
     check_outline_health,
     check_squid_http,
     check_squid_startup,
@@ -337,6 +339,29 @@ def _run(image_directory: Path) -> int:
         return 11
 
     logger.info("eu-server-test-agent Outline health check passed")
+
+    mtproxy_steps = (
+        ("MTProxy deployment", "eu-server-agent", deploy_mtproxy, 36),
+        ("MTProxy check", "eu-server-test-agent", check_mtproxy, 37),
+    )
+    for description, agent, step, failure_code in mtproxy_steps:
+        logger.info("Invoking %s %s", agent, description)
+        step_exit_code = step(eu_runner)
+        if step_exit_code != 0:
+            logger.error(
+                "%s %s failed with exit status %d",
+                agent,
+                description,
+                step_exit_code,
+            )
+            print(
+                f"{agent} {description} failed with exit status "
+                f"{step_exit_code}.",
+                file=sys.stderr,
+            )
+            return failure_code
+    logger.info("eu-server-test-agent MTProxy check passed")
+
     ru_instance, exit_code = _provision_server(
         "ru-server", ensure_ru_server, settings, failure_code=12, auth_code=12
     )

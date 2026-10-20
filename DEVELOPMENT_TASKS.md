@@ -590,10 +590,13 @@ behavior that requires them.
   tests run the real script against fakes and assert the secret is absent from
   its output. The check does not inspect the container's own logs.
 
-### 72. Deploy and test MTProxy
+### 72. [x] Deploy and test MTProxy
 
 - **Orchestration:** Make `test_env_host` deploy MTProxy and run the EU
   test-agent check.
+- **Done:** After the EU Outline health check the orchestrator runs
+  `deploy_mtproxy` (exit 36) and `check_mtproxy` (exit 37) on EU, before RU
+  provisioning.
 
 ### 73. Add MTProxy forwarding to `ru-server-agent`
 

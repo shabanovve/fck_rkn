@@ -36,6 +36,18 @@ class OrchestratorPingTests(unittest.TestCase):
             "fck_rkn.orchestration.test_environment.check_outline_health",
             return_value=0,
         )
+        self.mtproxy_deploy = patch(
+            "fck_rkn.orchestration.test_environment.deploy_mtproxy",
+            return_value=0,
+        )
+        self.mtproxy_check = patch(
+            "fck_rkn.orchestration.test_environment.check_mtproxy",
+            return_value=0,
+        )
+        self.mtproxy_deploy_mock = self.mtproxy_deploy.start()
+        self.mtproxy_check_mock = self.mtproxy_check.start()
+        self.addCleanup(self.mtproxy_deploy.stop)
+        self.addCleanup(self.mtproxy_check.stop)
         self.outline_deploy_mock = self.outline_deploy.start()
         self.outline_check_mock = self.outline_check.start()
         self.addCleanup(self.outline_deploy.stop)
@@ -575,6 +587,28 @@ class OrchestratorPingTests(unittest.TestCase):
                 self.assertEqual(result, expected)
                 self.assertIn("failed with exit status 1", stderr.getvalue())
         self.client_check_mock.assert_called_once()
+
+    def test_mtproxy_steps_fail_with_own_codes_and_stop(self) -> None:
+        for deploy_code, check_code, expected in ((1, 0, 36), (0, 1, 37)):
+            with self.subTest(expected=expected):
+                self.mtproxy_deploy_mock.reset_mock()
+                self.mtproxy_check_mock.reset_mock()
+                self.mtproxy_deploy_mock.return_value = deploy_code
+                self.mtproxy_check_mock.return_value = check_code
+
+                result, stderr = self.run_main_with_healthy_eu()
+
+                self.assertEqual(result, expected)
+                self.assertIn("MTProxy", stderr.getvalue())
+                self.ru_outline_deploy_mock.assert_not_called()
+        self.mtproxy_check_mock.assert_called_once()
+
+    def test_mtproxy_runs_on_the_eu_runner_after_outline_health(self) -> None:
+        result, _ = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 0)
+        self.mtproxy_deploy_mock.assert_called_once_with(EU_RUNNER)
+        self.mtproxy_check_mock.assert_called_once_with(EU_RUNNER)
 
     def test_squid_tunnel_steps_fail_with_own_codes_and_stop(self) -> None:
         for deploy_code, check_code, expected in ((1, 0, 33), (0, 1, 34)):
