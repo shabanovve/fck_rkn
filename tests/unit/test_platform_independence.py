@@ -3,8 +3,7 @@ import unittest
 from pathlib import Path
 
 AGENTS = Path(__file__).resolve().parents[2] / "src" / "fck_rkn" / "agents"
-# eu_server*.py move onto runners in task 49e.
-MIGRATED = ("ru_server.py", "ru_server_test.py", "outline.py")
+MIGRATED = tuple(p.name for p in AGENTS.glob("*.py") if p.name != "__init__.py")
 FORBIDDEN = re.compile(r"gcloud|\bIAP\b|iap|fck_rkn\.gcp|TestEnvironmentSettings|metadata\.google")
 
 

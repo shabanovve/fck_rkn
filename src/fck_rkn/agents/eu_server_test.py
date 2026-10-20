@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import subprocess
 import sys
 
 from pydantic import ValidationError
@@ -18,9 +17,9 @@ from fck_rkn.agents.eu_server import (
     SQUID_CONTAINER_NAME,
     SQUID_PORT,
 )
-from fck_rkn.config import TestEnvironmentSettings, load_config
-from fck_rkn.gcp.compute import INSTANCE_NAME
+from fck_rkn.agent_config import eu_server_runner, load_agent_settings
 from fck_rkn.remote import render
+from fck_rkn.remote.runner import RemoteRunner, execute
 
 
 logger = logging.getLogger(__name__)
@@ -40,160 +39,53 @@ OUTLINE_HEALTH_CHECK_COMMAND = render(
 )
 
 
-def check_squid_startup(settings: TestEnvironmentSettings) -> int:
-    """Check Squid container health and its local TCP listener over IAP SSH."""
-    command = [
-        "gcloud",
-        "compute",
-        "ssh",
-        INSTANCE_NAME,
-        f"--project={settings.GCP_PROJECT_ID}",
-        f"--zone={settings.GCP_ZONE}",
-        "--tunnel-through-iap",
-        f"--command={SQUID_STARTUP_CHECK_COMMAND}",
-        "--quiet",
-    ]
-    logger.info(
-        "Checking Squid container and TCP port %d on %s through IAP",
-        SQUID_PORT,
-        INSTANCE_NAME,
-    )
-    try:
-        result = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=SSH_COMMAND_TIMEOUT_SECONDS,
+def check_squid_startup(runner: RemoteRunner) -> int:
+    """Check Squid container health and its local TCP listener."""
+    logger.info("Checking Squid container and TCP port %d on eu-server", SQUID_PORT)
+    result = _run_check(runner, SQUID_STARTUP_CHECK_COMMAND, "Squid startup check")
+    if result == 0:
+        logger.info(
+            "Squid container is running and TCP port %d accepts connections",
+            SQUID_PORT,
         )
-    except subprocess.TimeoutExpired:
-        logger.error(
-            "Squid startup check over IAP SSH exceeded the %d second timeout",
-            SSH_COMMAND_TIMEOUT_SECONDS,
-        )
-        return 1
-    except OSError as error:
-        logger.error("Could not start gcloud SSH command: %s", error)
-        return 1
-
-    if result.stdout:
-        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-    if result.returncode != 0:
-        logger.error(
-            "Squid startup check or IAP SSH failed with exit status %d",
-            result.returncode,
-        )
-        if result.stderr:
-            print(result.stderr, file=sys.stderr, end="")
-        return result.returncode or 1
-
-    logger.info(
-        "Squid container is running and TCP port %d accepts connections",
-        SQUID_PORT,
-    )
-    return 0
+    return result
 
 
-def check_squid_http(settings: TestEnvironmentSettings) -> int:
+def check_squid_http(runner: RemoteRunner) -> int:
     """Check an HTTP request to youtube.com through Squid on eu-server."""
-    command = [
-        "gcloud",
-        "compute",
-        "ssh",
-        INSTANCE_NAME,
-        f"--project={settings.GCP_PROJECT_ID}",
-        f"--zone={settings.GCP_ZONE}",
-        "--tunnel-through-iap",
-        f"--command={SQUID_HTTP_CHECK_COMMAND}",
-        "--quiet",
-    ]
-    logger.info(
-        "Checking HTTP GET youtube.com through Squid on %s over IAP",
-        INSTANCE_NAME,
+    logger.info("Checking HTTP GET youtube.com through Squid on eu-server")
+    result = _run_check(
+        runner, SQUID_HTTP_CHECK_COMMAND, "HTTP request through Squid"
     )
-    try:
-        result = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=SSH_COMMAND_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error(
-            "Squid HTTP check over IAP SSH exceeded the %d second timeout",
-            SSH_COMMAND_TIMEOUT_SECONDS,
-        )
-        return 1
-    except OSError as error:
-        logger.error("Could not start gcloud SSH command: %s", error)
-        return 1
-
-    if result.stdout:
-        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-    if result.returncode != 0:
-        logger.error(
-            "HTTP request through Squid or IAP SSH failed with exit status %d",
-            result.returncode,
-        )
-        if result.stderr:
-            print(result.stderr, file=sys.stderr, end="")
-        return result.returncode or 1
-
-    logger.info("HTTP GET youtube.com through Squid succeeded")
-    return 0
+    if result == 0:
+        logger.info("HTTP GET youtube.com through Squid succeeded")
+    return result
 
 
-def check_outline_health(settings: TestEnvironmentSettings) -> int:
-    """Check Outline container, authenticated API, and access port via IAP SSH."""
-    command = [
-        "gcloud",
-        "compute",
-        "ssh",
-        INSTANCE_NAME,
-        f"--project={settings.GCP_PROJECT_ID}",
-        f"--zone={settings.GCP_ZONE}",
-        "--tunnel-through-iap",
-        f"--command={OUTLINE_HEALTH_CHECK_COMMAND}",
-        "--quiet",
-    ]
+def check_outline_health(runner: RemoteRunner) -> int:
+    """Check Outline container, authenticated API, and access port."""
     logger.info(
         "Checking Outline Server container, authorized API, and TCP access "
-        "port %d on %s through IAP",
+        "port %d on eu-server",
         OUTLINE_ACCESS_KEY_PORT,
-        INSTANCE_NAME,
     )
-    try:
-        result = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=SSH_COMMAND_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error(
-            "Outline Server health check over IAP SSH exceeded the %d second timeout",
-            SSH_COMMAND_TIMEOUT_SECONDS,
-        )
-        return 1
-    except OSError as error:
-        logger.error("Could not start gcloud SSH command: %s", error)
-        return 1
+    result = _run_check(
+        runner, OUTLINE_HEALTH_CHECK_COMMAND, "Outline Server health check"
+    )
+    if result == 0:
+        logger.info("Outline Server authorized endpoint is healthy")
+    return result
 
-    if result.stdout:
-        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-    if result.returncode != 0:
-        logger.error(
-            "Outline Server health check or IAP SSH failed with exit status %d",
-            result.returncode,
-        )
-        if result.stderr:
-            print(result.stderr, file=sys.stderr, end="")
-        return result.returncode or 1
 
-    logger.info("Outline Server authorized endpoint is healthy")
-    return 0
+def _run_check(runner: RemoteRunner, command: str, description: str) -> int:
+    return execute(
+        runner,
+        command,
+        description,
+        SSH_COMMAND_TIMEOUT_SECONDS,
+        print_output=True,
+        print_stderr=True,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -215,19 +107,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        settings = load_config()
+        runner = eu_server_runner(load_agent_settings())
     except (OSError, SettingsError, ValidationError, ValueError) as error:
         logger.error(
-            "Could not load valid test configuration (%s)",
+            "Could not load valid agent configuration (%s)",
             type(error).__name__,
         )
         return 2
 
     if args.action == "http":
-        return check_squid_http(settings)
+        return check_squid_http(runner)
     if args.action == "outline":
-        return check_outline_health(settings)
-    return check_squid_startup(settings)
+        return check_outline_health(runner)
+    return check_squid_startup(runner)
 
 
 if __name__ == "__main__":

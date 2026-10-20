@@ -6,8 +6,9 @@ from fck_rkn.remote.runner import RemoteResult
 class FakeRunner:
     """Records calls instead of reaching a host."""
 
-    def __init__(self, exit_code: int = 0, stdout: str = "", error=None) -> None:
-        self.result = RemoteResult(exit_code, stdout)
+    def __init__(self, exit_code: int = 0, stdout: str = "", stderr: str = "", error=None
+    ) -> None:
+        self.result = RemoteResult(exit_code, stdout, stderr)
         self.error = error
         self.calls: list[tuple[str, str | None, int, bool]] = []
 

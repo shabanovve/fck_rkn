@@ -9,6 +9,8 @@ from google.cloud import compute_v1
 
 from fck_rkn.config import TestEnvironmentSettings
 from fck_rkn.gcp.runner import GcloudIapRunner
+
+EU_RUNNER = GcloudIapRunner("eu-server", "fck-rkn-test", "europe-north1-a")
 from fck_rkn.orchestration.test_environment import main
 
 
@@ -144,12 +146,12 @@ class OrchestratorPingTests(unittest.TestCase):
         )
         for mock in self.ru_tunnel_mocks.values():
             mock.assert_called_once_with(ru_runner)
-        ping.assert_called_once_with(self.settings)
-        deploy.assert_called_once_with(self.settings)
-        squid_check.assert_called_once_with(self.settings)
-        http_check.assert_called_once_with(self.settings)
-        self.outline_deploy_mock.assert_called_once_with(self.settings)
-        self.outline_check_mock.assert_called_once_with(self.settings)
+        ping.assert_called_once_with(EU_RUNNER)
+        deploy.assert_called_once_with(EU_RUNNER)
+        squid_check.assert_called_once_with(EU_RUNNER)
+        http_check.assert_called_once_with(EU_RUNNER)
+        self.outline_deploy_mock.assert_called_once_with(EU_RUNNER)
+        self.outline_check_mock.assert_called_once_with(EU_RUNNER)
 
     def test_fails_workflow_when_ping_agent_returns_nonzero(self) -> None:
         stderr = StringIO()
@@ -186,7 +188,7 @@ class OrchestratorPingTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(result, 6)
-        ping.assert_called_once_with(self.settings)
+        ping.assert_called_once_with(EU_RUNNER)
         deploy.assert_not_called()
         squid_check.assert_not_called()
         http_check.assert_not_called()
@@ -228,7 +230,7 @@ class OrchestratorPingTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(result, 7)
-        deploy.assert_called_once_with(self.settings)
+        deploy.assert_called_once_with(EU_RUNNER)
         squid_check.assert_not_called()
         http_check.assert_not_called()
         self.assertIn("Squid deployment failed", stderr.getvalue())
@@ -270,7 +272,7 @@ class OrchestratorPingTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(result, 8)
-        squid_check.assert_called_once_with(self.settings)
+        squid_check.assert_called_once_with(EU_RUNNER)
         http_check.assert_not_called()
         self.assertIn("Squid startup check failed", stderr.getvalue())
 
@@ -312,8 +314,8 @@ class OrchestratorPingTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(result, 9)
-        squid_check.assert_called_once_with(self.settings)
-        http_check.assert_called_once_with(self.settings)
+        squid_check.assert_called_once_with(EU_RUNNER)
+        http_check.assert_called_once_with(EU_RUNNER)
         self.assertIn("Squid HTTP check failed", stderr.getvalue())
 
     def test_fails_if_outline_deployment_fails_and_skips_health_check(self) -> None:
@@ -355,7 +357,7 @@ class OrchestratorPingTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(result, 10)
-        self.outline_deploy_mock.assert_called_once_with(self.settings)
+        self.outline_deploy_mock.assert_called_once_with(EU_RUNNER)
         self.outline_check_mock.assert_not_called()
         self.assertIn("Outline deployment failed", stderr.getvalue())
 
@@ -398,8 +400,8 @@ class OrchestratorPingTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(result, 11)
-        self.outline_deploy_mock.assert_called_once_with(self.settings)
-        self.outline_check_mock.assert_called_once_with(self.settings)
+        self.outline_deploy_mock.assert_called_once_with(EU_RUNNER)
+        self.outline_check_mock.assert_called_once_with(EU_RUNNER)
         self.assertIn("Outline health check failed", stderr.getvalue())
 
     def run_main_with_healthy_eu(self) -> tuple[int, StringIO]:

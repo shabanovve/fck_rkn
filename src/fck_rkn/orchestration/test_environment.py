@@ -36,6 +36,7 @@ from fck_rkn.agents.ru_server_test import (
 )
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import (
+    INSTANCE_NAME,
     RU_INSTANCE_NAME,
     ensure_eu_server,
     ensure_ru_server,
@@ -189,12 +190,16 @@ def main() -> int:
     if instance is None:
         return exit_code
 
+    eu_runner = GcloudIapRunner(
+        INSTANCE_NAME, settings.GCP_PROJECT_ID, settings.GCP_ZONE
+    )
+
     print(
         f"GCP access is valid; {instance.name} is running and SSH-ready "
         f"in {settings.GCP_ZONE}."
     )
     logger.info("Invoking eu-server-agent ping check")
-    ping_exit_code = run_youtube_ping(settings)
+    ping_exit_code = run_youtube_ping(eu_runner)
     if ping_exit_code != 0:
         logger.error(
             "eu-server-agent ping check failed with exit status %d",
@@ -209,7 +214,7 @@ def main() -> int:
 
     logger.info("eu-server-agent ping check passed")
     logger.info("Invoking eu-server-agent Squid deployment")
-    deploy_exit_code = deploy_squid(settings)
+    deploy_exit_code = deploy_squid(eu_runner)
     if deploy_exit_code != 0:
         logger.error(
             "eu-server-agent Squid deployment failed with exit status %d",
@@ -224,7 +229,7 @@ def main() -> int:
 
     logger.info("eu-server-agent Squid deployment passed")
     logger.info("Invoking eu-server-test-agent Squid startup check")
-    squid_test_exit_code = check_squid_startup(settings)
+    squid_test_exit_code = check_squid_startup(eu_runner)
     if squid_test_exit_code != 0:
         logger.error(
             "eu-server-test-agent Squid startup check failed with exit "
@@ -240,7 +245,7 @@ def main() -> int:
 
     logger.info("eu-server-test-agent Squid startup check passed")
     logger.info("Invoking eu-server-test-agent Squid HTTP check")
-    squid_http_exit_code = check_squid_http(settings)
+    squid_http_exit_code = check_squid_http(eu_runner)
     if squid_http_exit_code != 0:
         logger.error(
             "eu-server-test-agent Squid HTTP check failed with exit status %d",
@@ -255,7 +260,7 @@ def main() -> int:
 
     logger.info("eu-server-test-agent Squid HTTP check passed")
     logger.info("Invoking eu-server-agent Outline deployment")
-    outline_deploy_exit_code = deploy_outline(settings)
+    outline_deploy_exit_code = deploy_outline(eu_runner)
     if outline_deploy_exit_code != 0:
         logger.error(
             "eu-server-agent Outline deployment failed with exit status %d",
@@ -270,7 +275,7 @@ def main() -> int:
 
     logger.info("eu-server-agent Outline deployment passed")
     logger.info("Invoking eu-server-test-agent Outline health check")
-    outline_health_exit_code = check_outline_health(settings)
+    outline_health_exit_code = check_outline_health(eu_runner)
     if outline_health_exit_code != 0:
         logger.error(
             "eu-server-test-agent Outline health check failed with exit "
@@ -296,7 +301,7 @@ def main() -> int:
     )
 
     logger.info("Creating the Outline access key for the RU feasibility probe")
-    access_url = create_outline_user(settings, RU_PROBE_OUTLINE_USER)
+    access_url = create_outline_user(eu_runner, RU_PROBE_OUTLINE_USER)
     if access_url is None:
         logger.error("Could not create the Outline access key for ru-server")
         print("Could not create the Outline access key for ru-server.", file=sys.stderr)

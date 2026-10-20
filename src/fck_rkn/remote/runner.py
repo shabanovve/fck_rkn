@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -38,7 +39,7 @@ class RemoteRunner(Protocol):
         self,
         command: str,
         stdin: str | None,
-        timeout: int,
+        timeout: int | None,
         stream_output: bool = False,
     ) -> RemoteResult: ...
 
@@ -47,15 +48,18 @@ def execute(
     runner: RemoteRunner,
     command: str,
     description: str,
-    timeout: int,
+    timeout: int | None,
     stdin: str | None = None,
     stream_output: bool = False,
     print_output: bool = False,
+    print_stderr: bool = False,
 ) -> int:
     """Run command and return an exit code, logging failures without output.
 
     Remote output is never logged because it may contain secrets; with
-    print_output the captured stdout is printed for the caller.
+    print_output the captured stdout is printed for the caller, and with
+    print_stderr the captured stderr is printed when the command fails.
+    A timeout of None waits indefinitely.
     """
     try:
         result = runner.run(command, stdin, timeout, stream_output)
@@ -74,5 +78,7 @@ def execute(
             description,
             result.exit_code,
         )
+        if print_stderr and result.stderr:
+            print(result.stderr, file=sys.stderr, end="")
         return result.exit_code
     return 0

@@ -11,7 +11,7 @@ from fck_rkn.remote.runner import RemoteResult, RemoteStartError, RemoteTimeoutE
 def run_transport(
     argv: list[str],
     stdin: str | None,
-    timeout: int,
+    timeout: int | None,
     stream_output: bool,
 ) -> RemoteResult:
     """Run a transport command, mapping failures to runner exceptions."""

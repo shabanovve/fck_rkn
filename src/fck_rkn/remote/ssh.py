@@ -35,7 +35,7 @@ class SshRunner:
         self,
         command: str,
         stdin: str | None,
-        timeout: int,
+        timeout: int | None,
         stream_output: bool = False,
     ) -> RemoteResult:
         return run_transport(self.build_command(command), stdin, timeout, stream_output)

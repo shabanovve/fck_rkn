@@ -318,14 +318,19 @@ behavior that requires them.
   `RemoteRunner`; their CLIs build an `SshRunner` from `AgentSettings`; the
   orchestrator passes `GcloudIapRunner`. `tests/unit/fake_runner.py` is the
   shared fake; `test_platform_independence.py` checks the migrated modules
-  (`eu_server*.py` are added in 49e). `eu_server.deploy_outline` still builds
-  a `GcloudIapRunner` until 49e.
+  (`eu_server*.py` were added in 49e).
 
-### 49e. Make `eu-server-agent` and `eu-server-test-agent` use `RemoteRunner`
+### 49e. [x] Make `eu-server-agent` and `eu-server-test-agent` use `RemoteRunner`
 
 - **Change:** Replace the seven repeated `gcloud` command builders in
   `eu_server.py`, `eu_server_test.py` and `outline.py` with a runner. EU may
   be hosted on GCP in production, but only through the runner configuration.
+- **Done:** every function in `eu_server.py` and `eu_server_test.py` takes a
+  `RemoteRunner` (a shared `execute` helper replaces the repeated builders;
+  `execute` gained `print_stderr` and an optional timeout for the log
+  stream). Their CLIs build an `SshRunner` from `AgentSettings`; the
+  orchestrator passes a `GcloudIapRunner` for eu-server. `test_platform_independence.py`
+  now covers every module under `agents/`.
 
 ### 49f. Remove the GCP metadata dependency from remote scripts
 

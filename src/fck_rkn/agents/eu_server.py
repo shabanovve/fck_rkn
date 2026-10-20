@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import logging
 import shlex
-import subprocess
 import sys
 
 from pydantic import ValidationError
@@ -23,10 +22,14 @@ from fck_rkn.agents.outline import (  # noqa: F401
     OUTLINE_STATE_DIRECTORY,
     deploy_outline_on,
 )
-from fck_rkn.config import TestEnvironmentSettings, load_config
-from fck_rkn.gcp.compute import INSTANCE_NAME
-from fck_rkn.gcp.runner import GcloudIapRunner
+from fck_rkn.agent_config import eu_server_runner, load_agent_settings
 from fck_rkn.remote import render
+from fck_rkn.remote.runner import (
+    RemoteRunner,
+    RemoteStartError,
+    RemoteTimeoutError,
+    execute,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -39,156 +42,64 @@ SSH_COMMAND_TIMEOUT_SECONDS = 90
 SQUID_DEPLOY_TIMEOUT_SECONDS = 900
 
 
-def run_youtube_ping(settings: TestEnvironmentSettings) -> int:
-    """Run one bounded ping to youtube.com on eu-server over IAP SSH."""
-    command = [
-        "gcloud",
-        "compute",
-        "ssh",
-        INSTANCE_NAME,
-        f"--project={settings.GCP_PROJECT_ID}",
-        f"--zone={settings.GCP_ZONE}",
-        "--tunnel-through-iap",
-        f"--command={PING_COMMAND}",
-        "--quiet",
-    ]
-    logger.info("Running remote ping check on %s through IAP", INSTANCE_NAME)
-    try:
-        result = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=SSH_COMMAND_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error(
-            "Remote ping over IAP SSH exceeded the %d second timeout",
-            SSH_COMMAND_TIMEOUT_SECONDS,
-        )
-        return 1
-    except OSError as error:
-        logger.error("Could not start gcloud SSH command: %s", error)
-        return 1
-
-    if result.stdout:
-        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-    if result.returncode != 0:
-        logger.error(
-            "Remote ping or IAP SSH failed with exit status %d",
-            result.returncode,
-        )
-        if result.stderr:
-            print(result.stderr, file=sys.stderr, end="")
-        return result.returncode or 1
-
-    logger.info("Remote ping to youtube.com succeeded")
-    return 0
+def run_youtube_ping(runner: RemoteRunner) -> int:
+    """Run one bounded ping to youtube.com on eu-server."""
+    logger.info("Running remote ping check on eu-server")
+    result = execute(
+        runner,
+        PING_COMMAND,
+        "Remote ping",
+        SSH_COMMAND_TIMEOUT_SECONDS,
+        print_output=True,
+        print_stderr=True,
+    )
+    if result == 0:
+        logger.info("Remote ping to youtube.com succeeded")
+    return result
 
 
-def deploy_squid(settings: TestEnvironmentSettings) -> int:
-    """Install Docker if needed and start Squid on eu-server over IAP SSH."""
+def deploy_squid(runner: RemoteRunner) -> int:
+    """Install Docker if needed and start Squid on eu-server."""
     remote_command = render(
         "deploy_squid.sh",
         container_name=SQUID_CONTAINER_NAME,
         image=SQUID_IMAGE,
         port=SQUID_PORT,
     )
-    command = [
-        "gcloud",
-        "compute",
-        "ssh",
-        INSTANCE_NAME,
-        f"--project={settings.GCP_PROJECT_ID}",
-        f"--zone={settings.GCP_ZONE}",
-        "--tunnel-through-iap",
-        f"--command={remote_command}",
-        "--quiet",
-    ]
+    logger.info("Deploying Squid on eu-server (TCP port %d)", SQUID_PORT)
+    result = execute(
+        runner,
+        remote_command,
+        "Squid deployment",
+        SQUID_DEPLOY_TIMEOUT_SECONDS,
+        stream_output=True,
+    )
+    if result == 0:
+        logger.info("Squid deployment completed on TCP port %d", SQUID_PORT)
+    return result
+
+
+def follow_squid_logs(runner: RemoteRunner) -> int:
+    """Stream live Squid container logs from eu-server until interrupted."""
     logger.info(
-        "Deploying Squid on %s through IAP SSH (TCP port %d)",
-        INSTANCE_NAME,
-        SQUID_PORT,
+        "Streaming live Squid container logs from eu-server; press Ctrl-C to stop"
     )
-    try:
-        result = subprocess.run(
-            command,
-            check=False,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-            timeout=SQUID_DEPLOY_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error(
-            "Squid deployment over IAP SSH exceeded the %d second timeout",
-            SQUID_DEPLOY_TIMEOUT_SECONDS,
-        )
-        return 1
-    except OSError as error:
-        logger.error("Could not start gcloud SSH command: %s", error)
-        return 1
-
-    if result.returncode != 0:
-        logger.error(
-            "Squid deployment or IAP SSH failed with exit status %d",
-            result.returncode,
-        )
-        return result.returncode or 1
-
-    logger.info("Squid deployment completed on TCP port %d", SQUID_PORT)
-    return 0
-
-
-def follow_squid_logs(settings: TestEnvironmentSettings) -> int:
-    """Stream live Squid container logs from eu-server through IAP SSH."""
-    remote_command = (
-        f"sudo docker logs --follow --timestamps {SQUID_CONTAINER_NAME}"
+    return execute(
+        runner,
+        f"sudo docker logs --follow --timestamps {SQUID_CONTAINER_NAME}",
+        "Squid log stream",
+        None,
+        stream_output=True,
     )
-    command = [
-        "gcloud",
-        "compute",
-        "ssh",
-        INSTANCE_NAME,
-        f"--project={settings.GCP_PROJECT_ID}",
-        f"--zone={settings.GCP_ZONE}",
-        "--tunnel-through-iap",
-        f"--command={remote_command}",
-        "--quiet",
-    ]
-    logger.info(
-        "Streaming live Squid container logs from %s through IAP; "
-        "press Ctrl-C to stop",
-        INSTANCE_NAME,
-    )
-    try:
-        result = subprocess.run(
-            command,
-            check=False,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-        )
-    except OSError as error:
-        logger.error("Could not start gcloud SSH command: %s", error)
-        return 1
-
-    if result.returncode != 0:
-        logger.error(
-            "Squid log stream or IAP SSH failed with exit status %d",
-            result.returncode,
-        )
-        return result.returncode or 1
-    return 0
 
 
-def deploy_outline(settings: TestEnvironmentSettings) -> int:
+def deploy_outline(runner: RemoteRunner) -> int:
     """Install Outline Server on eu-server."""
-    # Temporary until task 49e moves eu-server onto a caller-supplied runner.
-    runner = GcloudIapRunner(INSTANCE_NAME, settings.GCP_PROJECT_ID, settings.GCP_ZONE)
     return deploy_outline_on(runner)
 
 
 def create_outline_user(
-    settings: TestEnvironmentSettings,
+    runner: RemoteRunner,
     user_name: str,
 ) -> str | None:
     """Create or reuse a named Outline access key and return its access URL."""
@@ -202,40 +113,21 @@ def create_outline_user(
         user_name=shlex.quote(user_name),
         state_directory=shlex.quote(OUTLINE_STATE_DIRECTORY),
     )
-    command = [
-        "gcloud",
-        "compute",
-        "ssh",
-        INSTANCE_NAME,
-        f"--project={settings.GCP_PROJECT_ID}",
-        f"--zone={settings.GCP_ZONE}",
-        "--tunnel-through-iap",
-        f"--command={remote_command}",
-        "--quiet",
-    ]
-    logger.info(
-        "Creating or reusing Outline user %s on %s",
-        user_name,
-        INSTANCE_NAME,
-    )
+    logger.info("Creating or reusing Outline user %s on eu-server", user_name)
     try:
-        result = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=OUTLINE_KEY_CREATE_TIMEOUT_SECONDS,
+        result = runner.run(
+            remote_command, None, OUTLINE_KEY_CREATE_TIMEOUT_SECONDS
         )
-    except subprocess.TimeoutExpired:
-        logger.error("Outline user creation over IAP SSH timed out")
+    except RemoteTimeoutError:
+        logger.error("Outline user creation timed out")
         return None
-    except OSError as error:
-        logger.error("Could not start gcloud SSH command: %s", error)
+    except RemoteStartError as error:
+        logger.error("Could not start the remote command runner: %s", error)
         return None
 
     access_url = result.stdout.strip()
     if (
-        result.returncode != 0
+        result.exit_code != 0
         or not access_url.startswith("ss://")
         or "\n" in access_url
     ):
@@ -278,27 +170,27 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
-        settings = load_config()
+        runner = eu_server_runner(load_agent_settings())
     except (OSError, SettingsError, ValidationError, ValueError) as error:
         logger.error(
-            "Could not load valid test configuration (%s)",
+            "Could not load valid agent configuration (%s)",
             type(error).__name__,
         )
         return 2
 
     if args.action == "deploy-squid":
-        return deploy_squid(settings)
+        return deploy_squid(runner)
     if args.action == "logs-squid":
-        return follow_squid_logs(settings)
+        return follow_squid_logs(runner)
     if args.action == "deploy-outline":
-        return deploy_outline(settings)
+        return deploy_outline(runner)
     if args.action == "create-outline-user":
-        access_url = create_outline_user(settings, args.name)
+        access_url = create_outline_user(runner, args.name)
         if access_url is None:
             return 1
         print(access_url)
         return 0
-    return run_youtube_ping(settings)
+    return run_youtube_ping(runner)
 
 
 if __name__ == "__main__":
