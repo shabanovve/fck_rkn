@@ -74,6 +74,9 @@ listener. The temporary client container is removed after the check.
   verifies a dedicated Cloud Router and public Cloud NAT for that subnet.
   Test VMs use NAT for outbound Internet access and must not have external IPs.
 - Google Cloud CLI (`gcloud`) installed.
+- Docker on the orchestrator host. The patched Outline Server image is built
+  once there and loaded onto `eu-server` and then `ru-server`; if the image
+  already exists on the host, it is reused and not rebuilt.
 - The operator signed in to the CLI, and Application Default Credentials
   configured for the Python client libraries.
 - Permissions to inspect the project, create Compute Engine instances, manage

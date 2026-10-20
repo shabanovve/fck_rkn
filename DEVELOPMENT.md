@@ -91,6 +91,18 @@
 - Cloud-provider firewall rules may be used as an additional defense, but the
   guest operating system must retain and enforce the required network policy.
 
+## Outline Server Image
+
+- The patched Outline Server image (`fck-rkn-shadowbox:no-public-ip-check`)
+  is built once, on the orchestrator host, not separately on each VM.
+- If the image already exists on the host, the build is skipped and the
+  existing image is used.
+- The same image is then loaded onto `eu-server` and afterwards onto
+  `ru-server` (`docker save` piped through the runner to `docker load`);
+  a VM that already has the image skips the load.
+- The host needs Docker for this. Image archives travel through the runner's
+  stdin, never through argv or logs.
+
 ## Testing
 
 - Run automated tests inside GCP virtual machines; do not rely on tests run

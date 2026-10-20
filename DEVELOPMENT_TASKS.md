@@ -377,6 +377,45 @@ behavior that requires them.
   `ru_server_test.check_outline_health`. Failures stop the workflow before
   the Outline access key is created (exit codes 24 and 25).
 
+### 51a. Build the patched Outline image once on the orchestrator host
+
+- **Change:** Build `fck-rkn-shadowbox:no-public-ip-check` locally with
+  `docker build` from the same Dockerfile (rendered by `render`). If the image
+  already exists on the host (`docker image inspect`), use it and do not
+  rebuild. Add a local-build module in the
+  test layer; production keeps the per-server build unless decided otherwise.
+- **Docs:** Requirement recorded in `DEVELOPMENT.md` ("Outline Server Image")
+  and `TEST_ENV_HOST.md` (prerequisites).
+- **Test:** Unit tests with a fake command executor: build is run once and
+  skipped when the image exists; a build failure returns a non-zero code.
+
+### 51b. Support binary stdin in runners
+
+- **Change:** `RemoteRunner.run` currently takes text `stdin`. Allow `bytes`
+  (or a file object / path) in `RemoteRunner`, `run_transport`, `SshRunner`
+  and `GcloudIapRunner` so a gzip'd `docker save` stream can be piped without
+  loading it into memory or exposing it in argv.
+- **Test:** Runner tests with a binary payload; existing text callers are
+  unchanged.
+
+### 51c. Load the prebuilt image on a VM instead of building
+
+- **Change:** Split `deploy_outline.sh`: `load_outline_image.sh` runs
+  `gunzip | sudo docker load` from stdin when the expected image is missing;
+  `deploy_outline.sh` stops building and only requires the image. Add
+  `load_outline_image(runner, image_archive)` to `agents/outline.py`;
+  `deploy_outline_on` stays image-agnostic.
+- **Test:** Fake-runner tests: load is skipped when the image exists; the
+  script has no `docker build`; archive goes through stdin only.
+
+### 51d. Wire the single build into the orchestrator
+
+- **Orchestration:** Build once before the EU Outline deploy, load the image
+  on `eu-server`, then on `ru-server` before its Outline deploy. New exit
+  codes for build and load failures.
+- **Test:** Orchestrator test: build runs once; load runs for both runners
+  before each deployment; failures stop the workflow.
+
 ### 52. Add RU VPN-user creation script
 
 - **Change:** Add a script that creates a VPN user/access key for RU Outline.
