@@ -10,7 +10,9 @@ from fake_runner import FakeRunner
 from fck_rkn.agents.ru_server import (
     build_client_deploy_command,
     build_forward_deploy_command,
+    build_mtproxy_forward_deploy_command,
     build_recovery_command,
+    deploy_mtproxy_forward,
     deploy_outline_client,
     deploy_outline_server,
     deploy_squid_forward,
@@ -228,3 +230,50 @@ class RuServerSquidForwardTests(unittest.TestCase):
         runner = FakeRunner()
         self.assertEqual(deploy_squid_forward(runner, "bad"), 1)
         self.assertEqual(runner.calls, [])
+
+
+class RuServerMtproxyForwardTests(unittest.TestCase):
+    def test_forwards_localhost_8443_to_eu_mtproxy_with_config_via_stdin(self) -> None:
+        runner = FakeRunner(stdout="started\n")
+        result = deploy_mtproxy_forward(runner, make_access_url())
+
+        self.assertEqual(result, 0)
+        self.assertNotIn("test-secret", runner.command)
+        config = json.loads(runner.stdin)
+        self.assertEqual(config["server"], "configured-host")
+        self.assertEqual(config["password"], "test-secret")
+        self.assertEqual(config["local_address"], "127.0.0.1")
+        self.assertEqual(config["local_port"], 8443)
+        self.assertEqual(config["tunnel_address"], "configured-host:8443")
+
+    def test_forward_uses_its_own_container_and_state(self) -> None:
+        script = build_mtproxy_forward_deploy_command()
+        self.assertIn("ss-tunnel", script)
+        self.assertIn("fck-rkn-mtproxy-forward", script)
+        self.assertIn("/opt/fck-rkn-mtproxy-forward", script)
+        self.assertNotIn("fck-rkn-squid-forward", script)
+        self.assertNotIn("fck-rkn-mtproxy-forward", build_forward_deploy_command())
+        self.assertNotIn("fck-rkn-mtproxy-forward", build_client_deploy_command())
+
+    def test_forward_fails_without_leaking_output_and_rejects_bad_key(self) -> None:
+        runner = FakeRunner(exit_code=1, stdout="test-secret")
+        with self.assertLogs("fck_rkn.remote.runner", level="ERROR") as logs:
+            self.assertEqual(deploy_mtproxy_forward(runner, make_access_url()), 1)
+        self.assertNotIn("test-secret", "\n".join(logs.output))
+
+        runner = FakeRunner()
+        self.assertEqual(deploy_mtproxy_forward(runner, "bad"), 1)
+        self.assertEqual(runner.calls, [])
+
+    def test_cli_reads_the_key_from_stdin(self) -> None:
+        with (
+            patch("fck_rkn.agents.ru_server.load_agent_settings"),
+            patch("fck_rkn.agents.ru_server.ru_server_runner") as make_runner,
+            patch("fck_rkn.agents.ru_server.sys.stdin") as stdin,
+            patch(
+                "fck_rkn.agents.ru_server.deploy_mtproxy_forward", return_value=0
+            ) as deploy,
+        ):
+            stdin.readline.return_value = "ss://key\n"
+            self.assertEqual(main(["deploy-mtproxy-forward"]), 0)
+        deploy.assert_called_once_with(make_runner.return_value, "ss://key\n")

@@ -598,9 +598,15 @@ behavior that requires them.
   `deploy_mtproxy` (exit 36) and `check_mtproxy` (exit 37) on EU, before RU
   provisioning.
 
-### 73. Add MTProxy forwarding to `ru-server-agent`
+### 73. [x] Add MTProxy forwarding to `ru-server-agent`
 
 - **Change:** Add the approved RU-to-EU forwarding path for MTProxy.
+- **Done:** `ru-server-agent deploy-mtproxy-forward` reads the RU Outline key
+  from stdin and starts a persistent `ss-tunnel` container
+  `fck-rkn-mtproxy-forward` that forwards RU 127.0.0.1:8443 to EU MTProxy
+  (port 8443) through Outline, mirroring the Squid forward. It has its own
+  container and state directory. Tunnel-loss handling for this forward
+  (stop/recovery) is task 75.
 
 ### 74. Add RU MTProxy path test
 

@@ -13,7 +13,7 @@ from urllib.parse import unquote, urlsplit
 from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
-from fck_rkn.agents.eu_server import SQUID_PORT
+from fck_rkn.agents.eu_server import MTPROXY_PORT, SQUID_PORT
 from fck_rkn.agents.outline import deploy_outline_on
 from fck_rkn.agent_config import load_agent_settings, ru_server_runner
 from fck_rkn.remote import render
@@ -34,6 +34,9 @@ CLIENT_DEPLOY_TIMEOUT_SECONDS = 900
 FORWARD_CONTAINER_NAME = "fck-rkn-squid-forward"
 FORWARD_STATE_DIRECTORY = "/opt/fck-rkn-squid-forward"
 FORWARD_LOCAL_PORT = SQUID_PORT
+MTPROXY_FORWARD_CONTAINER_NAME = "fck-rkn-mtproxy-forward"
+MTPROXY_FORWARD_STATE_DIRECTORY = "/opt/fck-rkn-mtproxy-forward"
+MTPROXY_FORWARD_LOCAL_PORT = MTPROXY_PORT
 RECOVERY_ATTEMPTS = 5
 RECOVERY_DELAY_SECONDS = 10
 RECOVERY_TIMEOUT_SECONDS = 600
@@ -116,6 +119,16 @@ def build_forward_deploy_command() -> str:
     )
 
 
+def build_mtproxy_forward_deploy_command() -> str:
+    """Return a remote script that starts the persistent EU MTProxy TCP forward."""
+    return _build_container_deploy_command(
+        MTPROXY_FORWARD_CONTAINER_NAME,
+        MTPROXY_FORWARD_STATE_DIRECTORY,
+        "ss-tunnel",
+        "MTProxy forward",
+    )
+
+
 def _build_container_deploy_command(
     container_name: str, state_directory: str, entrypoint: str, title: str
 ) -> str:
@@ -155,6 +168,42 @@ def build_forward_config(method: str, password: str, host: str, port: int) -> st
             "tunnel_address": f"{host}:{SQUID_PORT}",
         }
     )
+
+
+def build_mtproxy_forward_config(
+    method: str, password: str, host: str, port: int
+) -> str:
+    """Return the ss-tunnel config forwarding RU localhost to EU MTProxy via Outline."""
+    return json.dumps(
+        {
+            "server": host,
+            "server_port": port,
+            "method": method,
+            "password": password,
+            "local_address": "127.0.0.1",
+            "local_port": MTPROXY_FORWARD_LOCAL_PORT,
+            "tunnel_address": f"{host}:{MTPROXY_PORT}",
+        }
+    )
+
+
+def deploy_mtproxy_forward(runner: RemoteRunner, access_url: str) -> int:
+    """Forward ru-server localhost TCP/8443 to EU MTProxy through EU Outline."""
+    try:
+        method, password, host, port = parse_access_url(access_url)
+    except ValueError as error:
+        logger.error("%s", error)
+        return 1
+    result = run_remote_with_input(
+        runner,
+        build_mtproxy_forward_deploy_command(),
+        build_mtproxy_forward_config(method, password, host, port),
+        "Deploying the EU MTProxy TCP forward in Docker",
+        timeout=CLIENT_DEPLOY_TIMEOUT_SECONDS,
+    )
+    if result == 0:
+        logger.info("EU MTProxy forward deployment completed on ru-server")
+    return result
 
 
 def deploy_squid_forward(
@@ -282,6 +331,7 @@ def main(argv: list[str] | None = None) -> int:
             "probe-outline-squid",
             "deploy-outline-client",
             "deploy-squid-forward",
+            "deploy-mtproxy-forward",
             "recover-tunnel",
             "stop-tunnel",
             "deploy-outline",
@@ -312,6 +362,8 @@ def main(argv: list[str] | None = None) -> int:
         return deploy_outline_client(runner, sys.stdin.readline())
     if args.action == "deploy-squid-forward":
         return deploy_squid_forward(runner, sys.stdin.readline())
+    if args.action == "deploy-mtproxy-forward":
+        return deploy_mtproxy_forward(runner, sys.stdin.readline())
     if args.action == "recover-tunnel":
         return recover_tunnel(runner)
     if args.action == "deploy-outline":
