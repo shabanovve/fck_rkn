@@ -377,7 +377,7 @@ behavior that requires them.
   `ru_server_test.check_outline_health`. Failures stop the workflow before
   the Outline access key is created (exit codes 24 and 25).
 
-### 51a. Build the patched Outline image once on the orchestrator host
+### 51a. [x] Build the patched Outline image once on the orchestrator host
 
 - **Change:** Build `fck-rkn-shadowbox:no-public-ip-check` locally with
   `docker build` from the same Dockerfile (rendered by `render`). If the image
@@ -388,6 +388,11 @@ behavior that requires them.
   and `TEST_ENV_HOST.md` (prerequisites).
 - **Test:** Unit tests with a fake command executor: build is run once and
   skipped when the image exists; a build failure returns a non-zero code.
+- **Done:** `orchestration/outline_image.build_outline_image()` checks
+  `docker image inspect`, reuses an existing image, otherwise runs
+  `docker build` with the rendered `outline_shadowbox.Dockerfile` on stdin.
+  Not yet wired into the orchestrator (51d); the VM scripts still build
+  until 51c.
 
 ### 51b. Support binary stdin in runners
 
