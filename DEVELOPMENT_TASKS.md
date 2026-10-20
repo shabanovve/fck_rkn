@@ -504,10 +504,15 @@ behavior that requires them.
   server, and an HTTP request through the tunnel. The script's server message
   is now neutral (no "EU").
 
-### 63. Connect and test `test-client`
+### 63. [x] Connect and test `test-client`
 
 - **Orchestration:** Make `test_env_host` deploy/invoke the connection action
   and run its test-agent check.
+- **Done:** After `test-client` is SSH-ready, the orchestrator creates the
+  `test-client` access key on RU Outline with `create_outline_user` through
+  the RU runner (exit 30), runs `connect_to_outline` (31) and then
+  `check_outline_connection` (32) over the IAP runner. The key is passed only
+  through stdin.
 
 ### 64. Add the approved proxy address to `test-client-agent`
 

@@ -63,6 +63,18 @@ class OrchestratorPingTests(unittest.TestCase):
         )
         self.client_ensure_mock = self.client_ensure.start()
         self.addCleanup(self.client_ensure.stop)
+        self.client_connect = patch(
+            "fck_rkn.orchestration.test_environment.connect_to_outline",
+            return_value=0,
+        )
+        self.client_check = patch(
+            "fck_rkn.orchestration.test_environment.check_outline_connection",
+            return_value=0,
+        )
+        self.client_connect_mock = self.client_connect.start()
+        self.client_check_mock = self.client_check.start()
+        self.addCleanup(self.client_connect.stop)
+        self.addCleanup(self.client_check.stop)
         self.ru_outline_deploy = patch(
             "fck_rkn.orchestration.test_environment.deploy_outline_server",
             return_value=0,
@@ -197,6 +209,19 @@ class OrchestratorPingTests(unittest.TestCase):
         )
         self.ru_forward_deploy_mock.assert_called_once_with(
             ru_runner, "ss://configured-key"
+        )
+        client_runner = GcloudIapRunner(
+            "test-client", "fck-rkn-test", "europe-north1-a"
+        )
+        self.assertEqual(
+            self.ru_key_mock.call_args_list[-1],
+            call(ru_runner, "test-client"),
+        )
+        self.client_connect_mock.assert_called_once_with(
+            client_runner, "ss://configured-key"
+        )
+        self.client_check_mock.assert_called_once_with(
+            client_runner, "ss://configured-key"
         )
         self.assertEqual(
             self.ru_forward_check_mock.call_args_list,
@@ -509,6 +534,29 @@ class OrchestratorPingTests(unittest.TestCase):
 
         self.assertEqual(result, 13)
         self.assertIn("Outline access key", stderr.getvalue())
+
+    def test_fails_when_test_client_key_cannot_be_created(self) -> None:
+        self.ru_key_mock.side_effect = ["ss://configured-key", None]
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 30)
+        self.assertIn("test-client", stderr.getvalue())
+        self.client_connect_mock.assert_not_called()
+
+    def test_test_client_steps_fail_with_own_codes_and_stop(self) -> None:
+        for connect_code, check_code, expected in ((1, 0, 31), (0, 1, 32)):
+            with self.subTest(expected=expected):
+                self.client_connect_mock.reset_mock()
+                self.client_check_mock.reset_mock()
+                self.client_connect_mock.return_value = connect_code
+                self.client_check_mock.return_value = check_code
+
+                result, stderr = self.run_main_with_healthy_eu()
+
+                self.assertEqual(result, expected)
+                self.assertIn("failed with exit status 1", stderr.getvalue())
+        self.client_check_mock.assert_called_once()
 
     def test_stops_when_the_image_cannot_be_built_or_exported(self) -> None:
         for name, value in (

@@ -33,6 +33,7 @@ from fck_rkn.agents.ru_server import (
     recover_tunnel,
     stop_tunnel,
 )
+from fck_rkn.agents.test_client import check_outline_connection, connect_to_outline
 from fck_rkn.agents.ru_server_test import (
     check_outline_client,
     check_outline_health as check_ru_outline_health,
@@ -60,6 +61,7 @@ from fck_rkn.orchestration.outline_image import (
 
 logger = logging.getLogger(__name__)
 RU_PROBE_OUTLINE_USER = "ru-server-feasibility-probe"
+TEST_CLIENT_OUTLINE_USER = "test-client"
 
 
 def _shutdown_vms(settings: TestEnvironmentSettings) -> int:
@@ -489,6 +491,40 @@ def _run(image_directory: Path) -> int:
         print(f"Preparing test-client failed: {error}", file=sys.stderr)
         return 29
     logger.info("test-client %s is running and SSH-ready", test_client.name)
+
+    logger.info("Creating the RU Outline access key for test-client")
+    client_access_url = create_outline_user(ru_runner, TEST_CLIENT_OUTLINE_USER)
+    if client_access_url is None:
+        logger.error("Could not create the RU Outline access key for test-client")
+        print(
+            "Could not create the RU Outline access key for test-client.",
+            file=sys.stderr,
+        )
+        return 30
+
+    client_runner = GcloudIapRunner(
+        test_client.name, settings.GCP_PROJECT_ID, settings.GCP_ZONE
+    )
+    client_steps = (
+        ("connection", connect_to_outline, 31),
+        ("connection check", check_outline_connection, 32),
+    )
+    for description, step, failure_code in client_steps:
+        logger.info("Running test-client Outline %s", description)
+        step_exit_code = step(client_runner, client_access_url)
+        if step_exit_code != 0:
+            logger.error(
+                "test-client Outline %s failed with exit status %d",
+                description,
+                step_exit_code,
+            )
+            print(
+                f"test-client Outline {description} failed with exit status "
+                f"{step_exit_code}.",
+                file=sys.stderr,
+            )
+            return failure_code
+    logger.info("test-client is connected to RU Outline")
 
     print(
         f"{ru_instance.name} is available in project "
