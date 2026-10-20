@@ -14,6 +14,7 @@ from fck_rkn.agents.test_client import (
     build_connection_deploy_command,
     check_outline_connection,
     connect_to_outline,
+    deploy_squid_tunnel,
     main,
 )
 
@@ -118,6 +119,51 @@ class TestClientAgentTests(unittest.TestCase):
             self.assertEqual(main(["check-outline"]), 0)
         check.assert_called_once()
         connect.assert_not_called()
+
+    def test_squid_tunnel_targets_eu_squid_through_the_ru_key(self) -> None:
+        runner = FakeRunner(stdout="started\n")
+
+        result = deploy_squid_tunnel(runner, make_access_url(), "eu-squid.internal")
+
+        self.assertEqual(result, 0)
+        self.assertNotIn("test-secret", runner.command)
+        self.assertIn("ss-tunnel", runner.command)
+        self.assertIn("fck-rkn-test-client-squid", runner.command)
+        config = json.loads(runner.stdin)
+        self.assertEqual(config["server"], "configured-host")
+        self.assertEqual(config["server_port"], 10001)
+        self.assertEqual(config["password"], "test-secret")
+        self.assertEqual(config["local_address"], "127.0.0.1")
+        self.assertEqual(config["local_port"], 3128)
+        self.assertEqual(config["tunnel_address"], "eu-squid.internal:3128")
+
+    def test_squid_tunnel_uses_a_container_separate_from_the_connection(self) -> None:
+        runner = FakeRunner()
+        deploy_squid_tunnel(runner, make_access_url(), "eu-squid.internal")
+        self.assertNotIn("fck-rkn-test-client-outline", runner.command)
+
+    def test_squid_tunnel_rejects_bad_input_without_running_commands(self) -> None:
+        runner = FakeRunner()
+        with self.assertLogs("fck_rkn.agents.test_client", "ERROR"):
+            self.assertEqual(deploy_squid_tunnel(runner, "bad", "eu"), 1)
+            self.assertEqual(
+                deploy_squid_tunnel(runner, make_access_url(), " "), 1
+            )
+        self.assertEqual(runner.calls, [])
+
+    def test_cli_passes_the_configured_eu_address_to_the_squid_tunnel(self) -> None:
+        settings = make_settings(EU_SERVER_PRIVATE_ADDRESS="eu-private")
+        with (
+            patch("fck_rkn.agents.test_client.load_agent_settings", return_value=settings),
+            patch("fck_rkn.agents.test_client.test_client_runner"),
+            patch("fck_rkn.agents.test_client.sys.stdin") as stdin,
+            patch(
+                "fck_rkn.agents.test_client.deploy_squid_tunnel", return_value=0
+            ) as deploy,
+        ):
+            stdin.readline.return_value = "ss://key\n"
+            self.assertEqual(main(["connect-squid"]), 0)
+        self.assertEqual(deploy.call_args.args[1:], ("ss://key\n", "eu-private"))
 
     def test_cli_reads_the_key_from_stdin(self) -> None:
         with (

@@ -514,11 +514,17 @@ behavior that requires them.
   `check_outline_connection` (32) over the IAP runner. The key is passed only
   through stdin.
 
-### 64. Add the approved proxy address to `test-client-agent`
+### 64. [x] Add the approved proxy address to `test-client-agent`
 
 - **Change:** Configure `test-client-agent` to use the confirmed service
   address/listener. Do not assume Outline provides a router or layer-3
   gateway.
+- **Done:** Owner decision: the approved listener is a local TCP forward
+  on `test-client`, 127.0.0.1:3128, to EU Squid's private address through RU
+  Outline. `test-client-agent connect-squid` reads the RU key from stdin and
+  starts a persistent `ss-tunnel` container `fck-rkn-test-client-squid`; the
+  EU address comes from `EU_SERVER_PRIVATE_ADDRESS`. The orchestrator wiring
+  is task 66.
 
 ### 65. Add TCP/3128 check to `test-client-agent`
 

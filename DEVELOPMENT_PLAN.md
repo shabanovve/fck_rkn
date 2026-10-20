@@ -249,7 +249,9 @@ milestones:
 10. The EU Outline Server uses the official stable image rebuilt with the
     private-target patch. Which Outline
     client version and protected test-key provisioning method should be used?
-11. For the requested “router IP,” do you mean the test client's default
+11. *Resolved:* the approved listener is a local TCP forward on
+    `test-client` (127.0.0.1:3128) to EU Squid through RU Outline. Original
+    question: for the requested “router IP,” do you mean the test client's default
     gateway, its Outline local proxy listener, or another address? Outline
     clients commonly expose a local proxy rather than a layer-3 router.
 12. What cleanup policy is required: delete all test VMs after each run, keep
