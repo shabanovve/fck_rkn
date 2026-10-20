@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import logging
-import subprocess
-import sys
 
-from fck_rkn.config import TestEnvironmentSettings
 from fck_rkn.remote import render
+from fck_rkn.remote.runner import RemoteRunner, execute
 
 
 logger = logging.getLogger(__name__)
@@ -28,8 +26,8 @@ OUTLINE_ACCESS_KEY_PORT = 10001
 OUTLINE_DEPLOY_TIMEOUT_SECONDS = 900
 
 
-def deploy_outline_on(settings: TestEnvironmentSettings, instance_name: str) -> int:
-    """Install Outline Server on instance_name using its private IP."""
+def deploy_outline_on(runner: RemoteRunner) -> int:
+    """Install Outline Server on the runner target using its private IP."""
     remote_command = render(
         "deploy_outline.sh",
         container_name=OUTLINE_CONTAINER_NAME,
@@ -41,45 +39,14 @@ def deploy_outline_on(settings: TestEnvironmentSettings, instance_name: str) -> 
         api_port=OUTLINE_API_PORT,
         keys_port=OUTLINE_ACCESS_KEY_PORT,
     )
-    command = [
-        "gcloud",
-        "compute",
-        "ssh",
-        instance_name,
-        f"--project={settings.GCP_PROJECT_ID}",
-        f"--zone={settings.GCP_ZONE}",
-        "--tunnel-through-iap",
-        f"--command={remote_command}",
-        "--quiet",
-    ]
-    logger.info(
-        "Deploying Outline Server on %s over IAP SSH with a private endpoint",
-        instance_name,
+    logger.info("Deploying Outline Server with a private endpoint")
+    result = execute(
+        runner,
+        remote_command,
+        "Outline Server deployment",
+        OUTLINE_DEPLOY_TIMEOUT_SECONDS,
+        stream_output=True,
     )
-    try:
-        result = subprocess.run(
-            command,
-            check=False,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-            timeout=OUTLINE_DEPLOY_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error(
-            "Outline Server deployment over IAP SSH exceeded the %d second timeout",
-            OUTLINE_DEPLOY_TIMEOUT_SECONDS,
-        )
-        return 1
-    except OSError as error:
-        logger.error("Could not start gcloud SSH command: %s", error)
-        return 1
-
-    if result.returncode != 0:
-        logger.error(
-            "Outline Server deployment or IAP SSH failed with exit status %d",
-            result.returncode,
-        )
-        return result.returncode or 1
-
-    logger.info("Outline Server deployment completed on %s", instance_name)
-    return 0
+    if result == 0:
+        logger.info("Outline Server deployment completed")
+    return result

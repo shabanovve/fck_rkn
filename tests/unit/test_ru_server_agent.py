@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import base64
-import subprocess
+import json
 import unittest
 from unittest.mock import patch
 
-import json
+from fake_runner import FakeRunner
 
 from fck_rkn.agents.ru_server import (
     build_client_deploy_command,
@@ -17,17 +17,10 @@ from fck_rkn.agents.ru_server import (
     main,
     parse_access_url,
     recover_tunnel,
-    stop_tunnel,
     run_outline_squid_probe,
+    stop_tunnel,
 )
-from fck_rkn.config import TestEnvironmentSettings
-
-
-def make_settings() -> TestEnvironmentSettings:
-    return TestEnvironmentSettings.model_construct(
-        GCP_PROJECT_ID="fck-rkn-test",
-        GCP_ZONE="europe-north1-a",
-    )
+from fck_rkn.remote.runner import RemoteTimeoutError
 
 
 def make_access_url() -> str:
@@ -47,69 +40,45 @@ class RuServerAgentTests(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 parse_access_url(url)
 
-    def test_probe_passes_key_via_stdin_and_runs_on_ru_server(self) -> None:
-        completed = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="HTTP 403\n", stderr=""
-        )
-        with patch(
-            "fck_rkn.agents.ru_server.subprocess.run", return_value=completed
-        ) as run:
-            result = run_outline_squid_probe(make_settings(), make_access_url())
+    def test_probe_passes_key_via_stdin(self) -> None:
+        runner = FakeRunner(stdout="HTTP 403\n")
+        result = run_outline_squid_probe(runner, make_access_url())
 
         self.assertEqual(result, 0)
-        command = run.call_args.args[0]
-        self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "ru-server"])
-        self.assertIn("--tunnel-through-iap", command)
-        self.assertNotIn("test-secret", " ".join(command))
-        self.assertEqual(
-            run.call_args.kwargs["input"],
-            "test-method test-secret configured-host 10001\n",
-        )
-        remote = next(c for c in command if c.startswith("--command="))
-        self.assertIn("ss-tunnel", remote)
-        self.assertIn(":3128", remote)
+        self.assertNotIn("test-secret", runner.command)
+        self.assertEqual(runner.stdin, "test-method test-secret configured-host 10001\n")
+        self.assertIn("ss-tunnel", runner.command)
+        self.assertIn(":3128", runner.command)
 
     def test_probe_fails_when_squid_is_unreachable(self) -> None:
-        completed = subprocess.CompletedProcess(
-            args=[], returncode=1, stdout="", stderr="secret details"
-        )
-        with (
-            patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed),
-            self.assertLogs("fck_rkn.agents.ru_server", level="ERROR") as logs,
-        ):
-            result = run_outline_squid_probe(make_settings(), make_access_url())
+        runner = FakeRunner(exit_code=1)
+        with self.assertLogs("fck_rkn.remote.runner", level="ERROR") as logs:
+            result = run_outline_squid_probe(runner, make_access_url())
 
         self.assertEqual(result, 1)
-        self.assertNotIn("secret details", "\n".join(logs.output))
+        self.assertNotIn("test-secret", "\n".join(logs.output))
 
     def test_probe_fails_on_timeout_and_invalid_key(self) -> None:
-        with patch(
-            "fck_rkn.agents.ru_server.subprocess.run",
-            side_effect=subprocess.TimeoutExpired("gcloud", 1),
-        ):
+        with self.assertLogs("fck_rkn.remote.runner", level="ERROR"):
             self.assertEqual(
-                run_outline_squid_probe(make_settings(), make_access_url()), 1
+                run_outline_squid_probe(
+                    FakeRunner(error=RemoteTimeoutError()), make_access_url()
+                ),
+                1,
             )
-        with patch("fck_rkn.agents.ru_server.subprocess.run") as run:
-            self.assertEqual(run_outline_squid_probe(make_settings(), "bad"), 1)
-        run.assert_not_called()
+        runner = FakeRunner()
+        self.assertEqual(run_outline_squid_probe(runner, "bad"), 1)
+        self.assertEqual(runner.calls, [])
 
 
 class RuServerClientDeployTests(unittest.TestCase):
     def test_deploys_persistent_client_with_config_via_stdin(self) -> None:
-        completed = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="started\n", stderr=""
-        )
-        with patch(
-            "fck_rkn.agents.ru_server.subprocess.run", return_value=completed
-        ) as run:
-            result = deploy_outline_client(make_settings(), make_access_url())
+        runner = FakeRunner(stdout="started\n")
+        result = deploy_outline_client(runner, make_access_url())
 
         self.assertEqual(result, 0)
-        command = run.call_args.args[0]
-        self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "ru-server"])
-        self.assertNotIn("test-secret", " ".join(command))
-        config = json.loads(run.call_args.kwargs["input"])
+        self.assertNotIn("test-secret", runner.command)
+        config = json.loads(runner.stdin)
         self.assertEqual(config["server"], "configured-host")
         self.assertEqual(config["server_port"], 10001)
         self.assertEqual(config["method"], "test-method")
@@ -129,39 +98,27 @@ class RuServerClientDeployTests(unittest.TestCase):
         self.assertNotIn("test-secret", script)
 
     def test_deploy_fails_on_remote_error_without_leaking_output(self) -> None:
-        completed = subprocess.CompletedProcess(
-            args=[], returncode=1, stdout="", stderr="test-secret"
-        )
-        with (
-            patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed),
-            self.assertLogs("fck_rkn.agents.ru_server", level="ERROR") as logs,
-        ):
-            result = deploy_outline_client(make_settings(), make_access_url())
+        runner = FakeRunner(exit_code=1, stdout="test-secret")
+        with self.assertLogs("fck_rkn.remote.runner", level="ERROR") as logs:
+            result = deploy_outline_client(runner, make_access_url())
 
         self.assertEqual(result, 1)
         self.assertNotIn("test-secret", "\n".join(logs.output))
 
     def test_deploy_rejects_invalid_key_without_running_ssh(self) -> None:
-        with patch("fck_rkn.agents.ru_server.subprocess.run") as run:
-            self.assertEqual(deploy_outline_client(make_settings(), "bad"), 1)
-        run.assert_not_called()
+        runner = FakeRunner()
+        self.assertEqual(deploy_outline_client(runner, "bad"), 1)
+        self.assertEqual(runner.calls, [])
 
 
 class RuServerSquidForwardTests(unittest.TestCase):
     def test_forwards_localhost_3128_to_eu_squid_with_config_via_stdin(self) -> None:
-        completed = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="started\n", stderr=""
-        )
-        with patch(
-            "fck_rkn.agents.ru_server.subprocess.run", return_value=completed
-        ) as run:
-            result = deploy_squid_forward(make_settings(), make_access_url())
+        runner = FakeRunner(stdout="started\n")
+        result = deploy_squid_forward(runner, make_access_url())
 
         self.assertEqual(result, 0)
-        command = run.call_args.args[0]
-        self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "ru-server"])
-        self.assertNotIn("test-secret", " ".join(command))
-        config = json.loads(run.call_args.kwargs["input"])
+        self.assertNotIn("test-secret", runner.command)
+        config = json.loads(runner.stdin)
         self.assertEqual(config["server"], "configured-host")
         self.assertEqual(config["password"], "test-secret")
         self.assertEqual(config["local_address"], "127.0.0.1")
@@ -192,93 +149,75 @@ class RuServerSquidForwardTests(unittest.TestCase):
             self.assertNotIn(forbidden, script)
 
     def test_recover_tunnel_runs_script_without_stdin_secrets(self) -> None:
-        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-        with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed) as run:
-            result = recover_tunnel(make_settings())
-
-        self.assertEqual(result, 0)
-        self.assertEqual(run.call_args.kwargs["input"], "")
-        self.assertIn(f"--command={build_recovery_command()}", run.call_args.args[0])
+        runner = FakeRunner()
+        self.assertEqual(recover_tunnel(runner), 0)
+        self.assertEqual(runner.stdin, "")
+        self.assertEqual(runner.command, build_recovery_command())
 
     def test_recover_tunnel_fails_when_tunnel_does_not_return(self) -> None:
-        completed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="x")
-        with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed):
-            self.assertEqual(recover_tunnel(make_settings()), 1)
+        with self.assertLogs("fck_rkn.remote.runner", level="ERROR"):
+            self.assertEqual(recover_tunnel(FakeRunner(exit_code=1)), 1)
 
-    def test_deploys_outline_server_on_ru_private_address(self) -> None:
-        completed = subprocess.CompletedProcess(args=[], returncode=0)
-        with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed) as run:
-            result = deploy_outline_server(make_settings())
+    def test_deploys_outline_server_through_the_runner(self) -> None:
+        runner = FakeRunner()
+        result = deploy_outline_server(runner)
 
-        command = run.call_args.args[0]
-        remote = next(a for a in command if a.startswith("--command="))
         self.assertEqual(result, 0)
-        self.assertEqual(command[:4], ["gcloud", "compute", "ssh", "ru-server"])
-        self.assertIn("--tunnel-through-iap", command)
-        self.assertIn("expected_image=fck-rkn-shadowbox:no-public-ip-check", remote)
-        self.assertIn("--api-port 10000", remote)
-        self.assertIn("--keys-port 10001", remote)
-        self.assertIn("leaving it unchanged", remote)
+        self.assertIn("expected_image=fck-rkn-shadowbox:no-public-ip-check", runner.command)
+        self.assertIn("--api-port 10000", runner.command)
+        self.assertIn("--keys-port 10001", runner.command)
+        self.assertIn("leaving it unchanged", runner.command)
 
     def test_ru_outline_deploy_reports_failure_and_timeout(self) -> None:
-        failed = subprocess.CompletedProcess(args=[], returncode=7)
-        with (
-            patch("fck_rkn.agents.ru_server.subprocess.run", return_value=failed),
-            self.assertLogs("fck_rkn.agents.outline", level="ERROR"),
-        ):
-            self.assertEqual(deploy_outline_server(make_settings()), 7)
-        with (
-            patch(
-                "fck_rkn.agents.ru_server.subprocess.run",
-                side_effect=subprocess.TimeoutExpired("gcloud", 1),
-            ),
-            self.assertLogs("fck_rkn.agents.outline", level="ERROR"),
-        ):
-            self.assertEqual(deploy_outline_server(make_settings()), 1)
+        with self.assertLogs("fck_rkn.remote.runner", level="ERROR"):
+            self.assertEqual(deploy_outline_server(FakeRunner(exit_code=7)), 7)
+            self.assertEqual(
+                deploy_outline_server(FakeRunner(error=RemoteTimeoutError())), 1
+            )
 
     def test_cli_dispatches_ru_deploy_outline(self) -> None:
         with (
-            patch("fck_rkn.agents.ru_server.load_config", return_value=make_settings()),
+            patch("fck_rkn.agents.ru_server.load_agent_settings"),
+            patch("fck_rkn.agents.ru_server.ru_server_runner"),
             patch("fck_rkn.agents.ru_server.deploy_outline_server", return_value=0) as deploy,
         ):
             self.assertEqual(main(["deploy-outline"]), 0)
         deploy.assert_called_once()
 
     def test_stop_tunnel_stops_only_the_forward_container(self) -> None:
-        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-        with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed) as run:
-            result = stop_tunnel(make_settings())
-
-        command = next(a for a in run.call_args.args[0] if a.startswith("--command="))
-        self.assertEqual(result, 0)
-        self.assertIn("docker stop", command)
-        self.assertIn("fck-rkn-squid-forward", command)
-        self.assertNotIn("fck-rkn-outline-client", command)
+        runner = FakeRunner()
+        self.assertEqual(stop_tunnel(runner), 0)
+        self.assertIn("docker stop", runner.command)
+        self.assertIn("fck-rkn-squid-forward", runner.command)
+        self.assertNotIn("fck-rkn-outline-client", runner.command)
 
     def test_cli_dispatches_recover_tunnel(self) -> None:
         with (
-            patch("fck_rkn.agents.ru_server.load_config", return_value=make_settings()),
+            patch("fck_rkn.agents.ru_server.load_agent_settings"),
+            patch("fck_rkn.agents.ru_server.ru_server_runner"),
             patch("fck_rkn.agents.ru_server.recover_tunnel", return_value=0) as recover,
         ):
             self.assertEqual(main(["recover-tunnel"]), 0)
         recover.assert_called_once()
+
+    def test_cli_fails_with_exit_2_on_invalid_agent_configuration(self) -> None:
+        with (
+            patch("fck_rkn.agents.ru_server.load_agent_settings", side_effect=ValueError),
+            self.assertLogs("fck_rkn.agents.ru_server", level="ERROR"),
+        ):
+            self.assertEqual(main(["recover-tunnel"]), 2)
 
     def test_forward_and_client_use_separate_containers(self) -> None:
         self.assertNotIn("fck-rkn-outline-client", build_forward_deploy_command())
         self.assertNotIn("fck-rkn-squid-forward", build_client_deploy_command())
 
     def test_forward_fails_without_leaking_output_and_rejects_bad_key(self) -> None:
-        completed = subprocess.CompletedProcess(
-            args=[], returncode=1, stdout="", stderr="test-secret"
-        )
-        with (
-            patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed),
-            self.assertLogs("fck_rkn.agents.ru_server", level="ERROR") as logs,
-        ):
-            result = deploy_squid_forward(make_settings(), make_access_url())
+        runner = FakeRunner(exit_code=1, stdout="test-secret")
+        with self.assertLogs("fck_rkn.remote.runner", level="ERROR") as logs:
+            result = deploy_squid_forward(runner, make_access_url())
         self.assertEqual(result, 1)
         self.assertNotIn("test-secret", "\n".join(logs.output))
 
-        with patch("fck_rkn.agents.ru_server.subprocess.run") as run:
-            self.assertEqual(deploy_squid_forward(make_settings(), "bad"), 1)
-        run.assert_not_called()
+        runner = FakeRunner()
+        self.assertEqual(deploy_squid_forward(runner, "bad"), 1)
+        self.assertEqual(runner.calls, [])

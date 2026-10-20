@@ -36,11 +36,13 @@ from fck_rkn.agents.ru_server_test import (
 )
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import (
+    RU_INSTANCE_NAME,
     ensure_eu_server,
     ensure_ru_server,
     stop_test_project_vms,
     validate_project_access,
 )
+from fck_rkn.gcp.runner import GcloudIapRunner
 
 
 logger = logging.getLogger(__name__)
@@ -289,6 +291,10 @@ def main() -> int:
     if ru_instance is None:
         return exit_code
 
+    ru_runner = GcloudIapRunner(
+        RU_INSTANCE_NAME, settings.GCP_PROJECT_ID, settings.GCP_ZONE
+    )
+
     logger.info("Creating the Outline access key for the RU feasibility probe")
     access_url = create_outline_user(settings, RU_PROBE_OUTLINE_USER)
     if access_url is None:
@@ -297,7 +303,7 @@ def main() -> int:
         return 13
 
     logger.info("Invoking ru-server-agent Outline client deployment")
-    client_deploy_exit_code = deploy_outline_client(settings, access_url)
+    client_deploy_exit_code = deploy_outline_client(ru_runner, access_url)
     if client_deploy_exit_code != 0:
         logger.error(
             "ru-server-agent Outline client deployment failed with exit "
@@ -312,7 +318,7 @@ def main() -> int:
         return 16
 
     logger.info("Invoking ru-server-test-agent Outline client check")
-    client_check_exit_code = check_outline_client(settings, access_url)
+    client_check_exit_code = check_outline_client(ru_runner, access_url)
     if client_check_exit_code != 0:
         logger.error(
             "ru-server-test-agent Outline client check failed with exit "
@@ -329,7 +335,7 @@ def main() -> int:
     logger.info("RU Outline client verified")
 
     logger.info("Invoking ru-server-agent EU Squid forward deployment")
-    forward_deploy_exit_code = deploy_squid_forward(settings, access_url)
+    forward_deploy_exit_code = deploy_squid_forward(ru_runner, access_url)
     if forward_deploy_exit_code != 0:
         logger.error(
             "ru-server-agent Squid forward deployment failed with exit "
@@ -344,7 +350,7 @@ def main() -> int:
         return 18
 
     logger.info("Invoking ru-server-test-agent Squid forward check")
-    forward_check_exit_code = check_squid_forward(settings)
+    forward_check_exit_code = check_squid_forward(ru_runner)
     if forward_check_exit_code != 0:
         logger.error(
             "ru-server-test-agent Squid forward check failed with exit "
@@ -368,7 +374,7 @@ def main() -> int:
     )
     for description, step, failure_code in tunnel_loss_steps:
         logger.info("Running RU %s", description)
-        step_exit_code = step(settings)
+        step_exit_code = step(ru_runner)
         if step_exit_code != 0:
             logger.error(
                 "RU %s failed with exit status %d", description, step_exit_code

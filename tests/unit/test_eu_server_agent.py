@@ -283,7 +283,7 @@ class EuServerAgentTests(unittest.TestCase):
                     OUTLINE_DEPLOY_TIMEOUT_SECONDS,
                 ),
             ),
-            self.assertLogs("fck_rkn.agents.outline", level="ERROR"),
+            self.assertLogs("fck_rkn.remote.runner", level="ERROR"),
         ):
             result = deploy_outline(self.settings)
 

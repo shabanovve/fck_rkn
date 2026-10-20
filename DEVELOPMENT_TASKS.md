@@ -307,13 +307,19 @@ behavior that requires them.
   stays in `config.py` for `test_env_host` and `fck_rkn/gcp/`; agents still
   import it until 49d and 49e.
 
-### 49d. Make `ru-server-agent` and `ru-server-test-agent` use `RemoteRunner`
+### 49d. [x] Make `ru-server-agent` and `ru-server-test-agent` use `RemoteRunner`
 
 - **Change:** Replace `run_remote_with_input` and the `RU_INSTANCE_NAME` /
   `gcloud` usage in `ru_server.py` and `ru_server_test.py` with a runner
   passed in by the caller. `test_env_host` supplies `GcloudIapRunner`.
 - **Test:** Existing RU tests use a fake runner; add a check that no module
   under `fck_rkn/agents/` references `gcloud`, `IAP` or `fck_rkn.gcp`.
+- **Done:** RU agent functions and `outline.deploy_outline_on` take a
+  `RemoteRunner`; their CLIs build an `SshRunner` from `AgentSettings`; the
+  orchestrator passes `GcloudIapRunner`. `tests/unit/fake_runner.py` is the
+  shared fake; `test_platform_independence.py` checks the migrated modules
+  (`eu_server*.py` are added in 49e). `eu_server.deploy_outline` still builds
+  a `GcloudIapRunner` until 49e.
 
 ### 49e. Make `eu-server-agent` and `eu-server-test-agent` use `RemoteRunner`
 

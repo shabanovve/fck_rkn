@@ -7,7 +7,6 @@ import base64
 import binascii
 import json
 import logging
-import subprocess
 import sys
 from urllib.parse import unquote, urlsplit
 
@@ -16,9 +15,9 @@ from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import SQUID_PORT
 from fck_rkn.agents.outline import deploy_outline_on
-from fck_rkn.config import TestEnvironmentSettings, load_config
-from fck_rkn.gcp.compute import RU_INSTANCE_NAME
+from fck_rkn.agent_config import load_agent_settings, ru_server_runner
 from fck_rkn.remote import render
+from fck_rkn.remote.runner import RemoteRunner, execute
 
 
 logger = logging.getLogger(__name__)
@@ -61,55 +60,26 @@ def parse_access_url(access_url: str) -> tuple[str, str, str, int]:
 
 
 def run_remote_with_input(
-    settings: TestEnvironmentSettings,
+    runner: RemoteRunner,
     remote_command: str,
     stdin_text: str,
     description: str,
     timeout: int = PROBE_TIMEOUT_SECONDS,
-) -> int:
+) -> int :
     """Run remote_command on ru-server, passing secrets only through stdin."""
-    command = [
-        "gcloud",
-        "compute",
-        "ssh",
-        RU_INSTANCE_NAME,
-        f"--project={settings.GCP_PROJECT_ID}",
-        f"--zone={settings.GCP_ZONE}",
-        "--tunnel-through-iap",
-        f"--command={remote_command}",
-        "--quiet",
-    ]
-    logger.info("%s on %s", description, RU_INSTANCE_NAME)
-    try:
-        result = subprocess.run(
-            command,
-            input=stdin_text,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error("%s exceeded the %d second timeout", description, timeout)
-        return 1
-    except OSError as error:
-        logger.error("Could not start gcloud SSH command: %s", error)
-        return 1
-
-    if result.stdout:
-        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-    if result.returncode != 0:
-        logger.error(
-            "%s failed with exit status %d; sensitive command output was suppressed",
-            description,
-            result.returncode,
-        )
-        return result.returncode or 1
-    return 0
+    logger.info("%s on ru-server", description)
+    return execute(
+        runner,
+        remote_command,
+        description,
+        timeout,
+        stdin=stdin_text,
+        print_output=True,
+    )
 
 
 def run_remote_with_key(
-    settings: TestEnvironmentSettings,
+    runner: RemoteRunner,
     access_url: str,
     remote_command: str,
     description: str,
@@ -121,7 +91,7 @@ def run_remote_with_key(
         logger.error("%s", error)
         return 1
     return run_remote_with_input(
-        settings,
+        runner,
         remote_command,
         f"{method} {password} {host} {port}\n",
         description,
@@ -188,7 +158,7 @@ def build_forward_config(method: str, password: str, host: str, port: int) -> st
 
 
 def deploy_squid_forward(
-    settings: TestEnvironmentSettings,
+    runner: RemoteRunner,
     access_url: str,
 ) -> int:
     """Forward ru-server localhost TCP/3128 to EU Squid through EU Outline."""
@@ -198,19 +168,19 @@ def deploy_squid_forward(
         logger.error("%s", error)
         return 1
     result = run_remote_with_input(
-        settings,
+        runner,
         build_forward_deploy_command(),
         build_forward_config(method, password, host, port),
         "Deploying the EU Squid TCP forward in Docker",
         timeout=CLIENT_DEPLOY_TIMEOUT_SECONDS,
     )
     if result == 0:
-        logger.info("EU Squid forward deployment completed on %s", RU_INSTANCE_NAME)
+        logger.info("EU Squid forward deployment completed on %s", "ru-server")
     return result
 
 
 def deploy_outline_client(
-    settings: TestEnvironmentSettings,
+    runner: RemoteRunner,
     access_url: str,
 ) -> int:
     """Run the Outline client (ss-local) in Docker on ru-server using the test key."""
@@ -221,14 +191,14 @@ def deploy_outline_client(
         return 1
     client_config = build_client_config(method, password, host, port)
     result = run_remote_with_input(
-        settings,
+        runner,
         build_client_deploy_command(),
         client_config,
         "Deploying the Outline client in Docker",
         timeout=CLIENT_DEPLOY_TIMEOUT_SECONDS,
     )
     if result == 0:
-        logger.info("Outline client deployment completed on %s", RU_INSTANCE_NAME)
+        logger.info("Outline client deployment completed on %s", "ru-server")
     return result
 
 
@@ -244,44 +214,44 @@ def build_recovery_command() -> str:
     )
 
 
-def recover_tunnel(settings: TestEnvironmentSettings) -> int:
+def recover_tunnel(runner: RemoteRunner) -> int:
     """Restore the Outline tunnel with bounded retries, never bypassing it."""
     result = run_remote_with_input(
-        settings,
+        runner,
         build_recovery_command(),
         "",
         "Recovering the Outline tunnel (client traffic stays blocked on failure)",
         timeout=RECOVERY_TIMEOUT_SECONDS,
     )
     if result == 0:
-        logger.info("Outline tunnel is up on %s", RU_INSTANCE_NAME)
+        logger.info("Outline tunnel is up on %s", "ru-server")
     return result
 
 
-def deploy_outline_server(settings: TestEnvironmentSettings) -> int:
+def deploy_outline_server(runner: RemoteRunner) -> int:
     """Run the approved Outline Server container on ru-server (private address).
 
     Uses the same patched image and installer as eu-server; the existing client
     (1080) and forward (3128) listeners do not conflict with ports 10000/10001.
     """
-    return deploy_outline_on(settings, RU_INSTANCE_NAME)
+    return deploy_outline_on(runner)
 
 
-def stop_tunnel(settings: TestEnvironmentSettings) -> int:
+def stop_tunnel(runner: RemoteRunner) -> int:
     """Simulate tunnel loss by stopping the forward container."""
     result = run_remote_with_input(
-        settings,
+        runner,
         render("stop_tunnel.sh", container_name=FORWARD_CONTAINER_NAME),
         "",
         "Simulating tunnel loss by stopping the Squid forward",
     )
     if result == 0:
-        logger.info("Outline tunnel stopped on %s", RU_INSTANCE_NAME)
+        logger.info("Outline tunnel stopped on %s", "ru-server")
     return result
 
 
 def run_outline_squid_probe(
-    settings: TestEnvironmentSettings,
+    runner: RemoteRunner,
     access_url: str,
 ) -> int:
     """Try to reach the EU Squid endpoint from ru-server through EU Outline."""
@@ -294,13 +264,13 @@ def run_outline_squid_probe(
         target_url=PROBE_TARGET_URL,
     )
     result = run_remote_with_key(
-        settings,
+        runner,
         access_url,
         remote_command,
         f"Probing EU Squid TCP/{SQUID_PORT} through the Outline tunnel",
     )
     if result == 0:
-        logger.info("EU Squid is reachable from %s through Outline", RU_INSTANCE_NAME)
+        logger.info("EU Squid is reachable from ru-server through Outline")
     return result
 
 
@@ -326,27 +296,27 @@ def main(argv: list[str] | None = None) -> int:
         stream=sys.stderr,
     )
     try:
-        settings = load_config()
+        runner = ru_server_runner(load_agent_settings())
     except (OSError, SettingsError, ValidationError, ValueError) as error:
         logger.error(
-            "Could not load valid test configuration (%s)",
+            "Could not load valid agent configuration (%s)",
             type(error).__name__,
         )
         return 2
 
     if args.action == "probe-outline-squid":
         # The key is read from stdin so it never appears in argv or shell history.
-        return run_outline_squid_probe(settings, sys.stdin.readline())
+        return run_outline_squid_probe(runner, sys.stdin.readline())
     if args.action == "deploy-outline-client":
-        return deploy_outline_client(settings, sys.stdin.readline())
+        return deploy_outline_client(runner, sys.stdin.readline())
     if args.action == "deploy-squid-forward":
-        return deploy_squid_forward(settings, sys.stdin.readline())
+        return deploy_squid_forward(runner, sys.stdin.readline())
     if args.action == "recover-tunnel":
-        return recover_tunnel(settings)
+        return recover_tunnel(runner)
     if args.action == "deploy-outline":
-        return deploy_outline_server(settings)
+        return deploy_outline_server(runner)
     if args.action == "stop-tunnel":
-        return stop_tunnel(settings)
+        return stop_tunnel(runner)
     return 1
 
 

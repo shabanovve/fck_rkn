@@ -8,6 +8,7 @@ from unittest.mock import call, patch
 from google.cloud import compute_v1
 
 from fck_rkn.config import TestEnvironmentSettings
+from fck_rkn.gcp.runner import GcloudIapRunner
 from fck_rkn.orchestration.test_environment import main
 
 
@@ -125,21 +126,24 @@ class OrchestratorPingTests(unittest.TestCase):
         check_project.assert_called_once_with(self.settings)
         provision.assert_called_once_with(self.settings)
         self.ru_lookup_mock.assert_called_once_with(self.settings)
+        ru_runner = GcloudIapRunner(
+            "ru-server", "fck-rkn-test", "europe-north1-a"
+        )
         self.ru_client_deploy_mock.assert_called_once_with(
-            self.settings, "ss://configured-key"
+            ru_runner, "ss://configured-key"
         )
         self.ru_client_check_mock.assert_called_once_with(
-            self.settings, "ss://configured-key"
+            ru_runner, "ss://configured-key"
         )
         self.ru_forward_deploy_mock.assert_called_once_with(
-            self.settings, "ss://configured-key"
+            ru_runner, "ss://configured-key"
         )
         self.assertEqual(
             self.ru_forward_check_mock.call_args_list,
-            [call(self.settings), call(self.settings)],
+            [call(ru_runner), call(ru_runner)],
         )
         for mock in self.ru_tunnel_mocks.values():
-            mock.assert_called_once_with(self.settings)
+            mock.assert_called_once_with(ru_runner)
         ping.assert_called_once_with(self.settings)
         deploy.assert_called_once_with(self.settings)
         squid_check.assert_called_once_with(self.settings)

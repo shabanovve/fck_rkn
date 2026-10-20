@@ -22,8 +22,9 @@ from fck_rkn.agents.ru_server import (
     parse_access_url,
     run_remote_with_input,
 )
-from fck_rkn.config import TestEnvironmentSettings, load_config
+from fck_rkn.agent_config import load_agent_settings, ru_server_runner
 from fck_rkn.remote import render
+from fck_rkn.remote.runner import RemoteRunner
 
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ CLIENT_CHECK_COMMAND = render(
 
 
 def check_outline_client(
-    settings: TestEnvironmentSettings,
+    runner: RemoteRunner,
     access_url: str,
 ) -> int:
     """Verify the ru-server Outline client runs and is bound to the test key."""
@@ -50,7 +51,7 @@ def check_outline_client(
         logger.error("%s", error)
         return 1
     return run_remote_with_input(
-        settings,
+        runner,
         CLIENT_CHECK_COMMAND,
         build_client_config(method, password, host, port),
         "Checking the Outline client connection",
@@ -65,10 +66,10 @@ FORWARD_CHECK_COMMAND = render(
 )
 
 
-def check_squid_forward(settings: TestEnvironmentSettings) -> int:
+def check_squid_forward(runner: RemoteRunner) -> int:
     """Verify RU localhost TCP/3128 reaches the real EU Squid and carries HTTP."""
     return run_remote_with_input(
-        settings,
+        runner,
         FORWARD_CHECK_COMMAND,
         "",
         f"Checking the RU forward to EU Squid TCP/{SQUID_PORT}",
@@ -83,13 +84,13 @@ TUNNEL_BLOCKED_CHECK_COMMAND = render(
 )
 
 
-def check_tunnel_blocked(settings: TestEnvironmentSettings) -> int:
+def check_tunnel_blocked(runner: RemoteRunner) -> int:
     """Verify no traffic reaches EU Squid while the tunnel is down.
 
     Resumption after reconnection is verified by check_squid_forward.
     """
     return run_remote_with_input(
-        settings,
+        runner,
         TUNNEL_BLOCKED_CHECK_COMMAND,
         "",
         "Checking that traffic is blocked while the tunnel is down",
@@ -111,22 +112,22 @@ def main(argv: list[str] | None = None) -> int:
         stream=sys.stderr,
     )
     try:
-        settings = load_config()
+        runner = ru_server_runner(load_agent_settings())
     except (OSError, SettingsError, ValidationError, ValueError) as error:
         logger.error(
-            "Could not load valid test configuration (%s)",
+            "Could not load valid agent configuration (%s)",
             type(error).__name__,
         )
         return 2
 
     if args.action == "squid-forward":
-        return check_squid_forward(settings)
+        return check_squid_forward(runner)
     if args.action == "tunnel-blocked":
-        return check_tunnel_blocked(settings)
+        return check_tunnel_blocked(runner)
 
     # The key is read from stdin so it never appears in argv or shell history.
     access_url = sys.stdin.readline()
-    return check_outline_client(settings, access_url)
+    return check_outline_client(runner, access_url)
 
 
 if __name__ == "__main__":

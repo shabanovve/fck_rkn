@@ -25,6 +25,7 @@ from fck_rkn.agents.outline import (  # noqa: F401
 )
 from fck_rkn.config import TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import INSTANCE_NAME
+from fck_rkn.gcp.runner import GcloudIapRunner
 from fck_rkn.remote import render
 
 
@@ -181,7 +182,9 @@ def follow_squid_logs(settings: TestEnvironmentSettings) -> int:
 
 def deploy_outline(settings: TestEnvironmentSettings) -> int:
     """Install Outline Server on eu-server."""
-    return deploy_outline_on(settings, INSTANCE_NAME)
+    # Temporary until task 49e moves eu-server onto a caller-supplied runner.
+    runner = GcloudIapRunner(INSTANCE_NAME, settings.GCP_PROJECT_ID, settings.GCP_ZONE)
+    return deploy_outline_on(runner)
 
 
 def create_outline_user(
