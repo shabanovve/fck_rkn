@@ -88,7 +88,7 @@ def connect_to_outline(runner: RemoteRunner, access_url: str) -> int:
         "Connecting test-client to RU Outline in Docker",
         CLIENT_DEPLOY_TIMEOUT_SECONDS,
         stdin=build_client_config(method, password, host, port),
-        print_output=True,
+        stream_output=True,
     )
     if result == 0:
         logger.info("test-client connection to RU Outline is deployed")
@@ -145,7 +145,7 @@ def deploy_squid_tunnel(
         stdin=build_squid_tunnel_config(
             method, password, host, port, squid_address.strip()
         ),
-        print_output=True,
+        stream_output=True,
     )
     if result == 0:
         logger.info("test-client EU Squid tunnel is deployed")
