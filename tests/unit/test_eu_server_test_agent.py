@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import os
+import socket
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest.mock import patch
@@ -15,15 +20,18 @@ from fck_rkn.agents.eu_server import (
     SQUID_PORT,
 )
 from fck_rkn.agents.eu_server_test import (
+    MTPROXY_CHECK_COMMAND,
     OUTLINE_HEALTH_CHECK_COMMAND,
     SQUID_HTTP_CHECK_COMMAND,
     SQUID_STARTUP_CHECK_COMMAND,
     SSH_COMMAND_TIMEOUT_SECONDS,
+    check_mtproxy,
     check_outline_health,
     check_squid_http,
     check_squid_startup,
     main,
 )
+from fck_rkn.remote import render
 from fck_rkn.remote.runner import RemoteTimeoutError
 
 
@@ -186,6 +194,86 @@ class EuServerTestAgentTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         check.assert_called_once_with(make_runner.return_value)
+
+
+SECRET = "0123456789abcdef0123456789abcdef"
+
+
+class MtproxyCheckTests(unittest.TestCase):
+    def test_check_runs_the_script_on_eu(self) -> None:
+        runner = FakeRunner(stdout="ok\n")
+        self.assertEqual(check_mtproxy(runner), 0)
+        self.assertEqual(runner.command, MTPROXY_CHECK_COMMAND)
+        self.assertEqual(runner.calls[0][2], SSH_COMMAND_TIMEOUT_SECONDS)
+
+    def test_check_fails_without_leaking_remote_output(self) -> None:
+        with self.assertLogs("fck_rkn.remote.runner", "ERROR") as logs:
+            result = check_mtproxy(FakeRunner(exit_code=1, stdout="test-secret"))
+        self.assertEqual(result, 1)
+        self.assertNotIn("test-secret", "\n".join(logs.output))
+
+    def test_cli_dispatches_mtproxy_check(self) -> None:
+        with (
+            patch("fck_rkn.agents.eu_server_test.load_agent_settings"),
+            patch("fck_rkn.agents.eu_server_test.eu_server_runner") as make_runner,
+            patch(
+                "fck_rkn.agents.eu_server_test.check_mtproxy", return_value=0
+            ) as check,
+        ):
+            self.assertEqual(main(["mtproxy"]), 0)
+        check.assert_called_once_with(make_runner.return_value)
+
+    def run_script(self, secret: str | None, mode: int, running: bool = True):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, body in (
+                ("sudo", 'exec "$@"\n'),
+                ("docker", f"echo {'true' if running else 'false'}\n"),
+            ):
+                tool = root / name
+                tool.write_text("#!/bin/sh\n" + body)
+                tool.chmod(0o755)
+            if secret is not None:
+                (root / "secret").write_text(secret)
+                (root / "secret").chmod(mode)
+            script = render(
+                "mtproxy_check.sh",
+                container_name="c",
+                port=port,
+                state_directory=str(root),
+            )
+            env = {**os.environ, "PATH": f"{root}:{os.environ['PATH']}"}
+            try:
+                return subprocess.run(
+                    ["bash", "-c", script], env=env, capture_output=True, text=True
+                )
+            finally:
+                listener.close()
+
+    def test_script_passes_for_a_healthy_proxy_and_never_prints_the_secret(
+        self,
+    ) -> None:
+        result = self.run_script(SECRET, 0o600)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(SECRET, result.stdout + result.stderr)
+
+    def test_script_fails_for_each_broken_condition(self) -> None:
+        cases = (
+            (SECRET, 0o600, False, "not running"),
+            (None, 0o600, True, "missing or malformed"),
+            ("short", 0o600, True, "missing or malformed"),
+            (SECRET, 0o644, True, "not root-only"),
+        )
+        for secret, mode, running, message in cases:
+            with self.subTest(message=message, secret=secret, mode=mode):
+                result = self.run_script(secret, mode, running)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertNotIn(SECRET, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

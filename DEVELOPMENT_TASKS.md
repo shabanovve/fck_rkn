@@ -580,10 +580,15 @@ behavior that requires them.
   running container unchanged. Host port 8443 maps to the image's 443. The
   image tag is not pinned yet.
 
-### 71. Add MTProxy test to `eu-server-test-agent`
+### 71. [x] Add MTProxy test to `eu-server-test-agent`
 
 - **Test:** Add a health/connectivity check for MTProxy and assert its secret
   does not appear in output.
+- **Done:** `eu-server-test-agent mtproxy` checks that the container runs, the
+  TCP port accepts connections, and the secret file holds 32 hex characters
+  with mode 600. It uses `grep -q`/`stat`, so the secret is never printed. The
+  tests run the real script against fakes and assert the secret is absent from
+  its output. The check does not inspect the container's own logs.
 
 ### 72. Deploy and test MTProxy
 

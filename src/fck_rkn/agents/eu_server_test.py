@@ -10,6 +10,9 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import (
+    MTPROXY_CONTAINER_NAME,
+    MTPROXY_PORT,
+    MTPROXY_STATE_DIRECTORY,
     OUTLINE_ACCESS_KEY_PORT,
     SQUID_CONTAINER_NAME,
     SQUID_PORT,
@@ -28,6 +31,12 @@ SQUID_STARTUP_CHECK_COMMAND = render(
     port=SQUID_PORT,
 )
 SQUID_HTTP_CHECK_COMMAND = render("squid_http_check.sh", port=SQUID_PORT)
+MTPROXY_CHECK_COMMAND = render(
+    "mtproxy_check.sh",
+    container_name=MTPROXY_CONTAINER_NAME,
+    port=MTPROXY_PORT,
+    state_directory=MTPROXY_STATE_DIRECTORY,
+)
 
 
 def check_squid_startup(runner: RemoteRunner) -> int:
@@ -50,6 +59,15 @@ def check_squid_http(runner: RemoteRunner) -> int:
     )
     if result == 0:
         logger.info("HTTP GET youtube.com through Squid succeeded")
+    return result
+
+
+def check_mtproxy(runner: RemoteRunner) -> int:
+    """Check MTProxy container, TCP listener and secret file without printing it."""
+    logger.info("Checking MTProxy container and TCP port %d on eu-server", MTPROXY_PORT)
+    result = _run_check(runner, MTPROXY_CHECK_COMMAND, "MTProxy check")
+    if result == 0:
+        logger.info("MTProxy is running and accepts connections")
     return result
 
 
@@ -91,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "action",
         nargs="?",
-        choices=("startup", "http", "outline"),
+        choices=("startup", "http", "outline", "mtproxy"),
         default="startup",
         help="Check to run (default: startup)",
     )
@@ -108,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.action == "http":
         return check_squid_http(runner)
+    if args.action == "mtproxy":
+        return check_mtproxy(runner)
     if args.action == "outline":
         return check_outline_health(runner)
     return check_squid_startup(runner)
