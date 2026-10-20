@@ -201,7 +201,10 @@ failures, `5` for provisioning or readiness failures, and `6` if the remote
 ping agent fails, `7` if Squid deployment fails, and `8` if the Squid startup
 test fails, `9` if the HTTP-through-Squid test fails, `10` if Outline
 deployment fails, and `11` if the Outline health check fails
-(container not running, API unavailable, or VPN port closed).
+(container not running, API unavailable, or VPN port closed). Later RU
+steps use `12`–`19`; the tunnel-loss test returns `20` if the tunnel cannot be
+stopped, `21` if traffic is not blocked while it is down, `22` if recovery
+fails, and `23` if the forward does not resume after recovery.
 
 ## Manual VM shutdown
 

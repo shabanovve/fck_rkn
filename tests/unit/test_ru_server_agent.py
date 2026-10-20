@@ -16,6 +16,7 @@ from fck_rkn.agents.ru_server import (
     main,
     parse_access_url,
     recover_tunnel,
+    stop_tunnel,
     run_outline_squid_probe,
 )
 from fck_rkn.config import TestEnvironmentSettings
@@ -202,6 +203,17 @@ class RuServerSquidForwardTests(unittest.TestCase):
         completed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="x")
         with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed):
             self.assertEqual(recover_tunnel(make_settings()), 1)
+
+    def test_stop_tunnel_stops_only_the_forward_container(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        with patch("fck_rkn.agents.ru_server.subprocess.run", return_value=completed) as run:
+            result = stop_tunnel(make_settings())
+
+        command = next(a for a in run.call_args.args[0] if a.startswith("--command="))
+        self.assertEqual(result, 0)
+        self.assertIn("docker stop", command)
+        self.assertIn("fck-rkn-squid-forward", command)
+        self.assertNotIn("fck-rkn-outline-client", command)
 
     def test_cli_dispatches_recover_tunnel(self) -> None:
         with (

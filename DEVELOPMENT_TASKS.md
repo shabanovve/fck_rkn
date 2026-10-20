@@ -252,10 +252,13 @@ behavior that requires them.
   forward container is stopped and no request reaches EU Squid. After the
   tunnel is restored, `squid-forward` verifies resumption. Task 48 wires them.
 
-### 48. Deploy and test tunnel-loss recovery
+### 48. [x] Deploy and test tunnel-loss recovery
 
 - **Orchestration:** Make `test_env_host` trigger tunnel loss, run the
   test-agent check, restore the tunnel, and verify recovery.
+- **Done:** After the forward check, `test_env_host` runs
+  `ru-server-agent stop-tunnel` (exit 20), `tunnel-blocked` (21),
+  `recover-tunnel` (22) and a second `squid-forward` check (23).
 
 ## Outline Server on `ru-server`
 

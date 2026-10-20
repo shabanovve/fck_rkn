@@ -23,8 +23,17 @@ from fck_rkn.agents.eu_server_test import (
     check_squid_http,
     check_squid_startup,
 )
-from fck_rkn.agents.ru_server import deploy_outline_client, deploy_squid_forward
-from fck_rkn.agents.ru_server_test import check_outline_client, check_squid_forward
+from fck_rkn.agents.ru_server import (
+    deploy_outline_client,
+    deploy_squid_forward,
+    recover_tunnel,
+    stop_tunnel,
+)
+from fck_rkn.agents.ru_server_test import (
+    check_outline_client,
+    check_squid_forward,
+    check_tunnel_blocked,
+)
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import (
     ensure_eu_server,
@@ -350,6 +359,26 @@ def main() -> int:
         return 19
 
     logger.info("RU forward to EU Squid verified")
+
+    tunnel_loss_steps = (
+        ("tunnel loss simulation", stop_tunnel, 20),
+        ("blocked-traffic check", check_tunnel_blocked, 21),
+        ("tunnel recovery", recover_tunnel, 22),
+        ("post-recovery forward check", check_squid_forward, 23),
+    )
+    for description, step, failure_code in tunnel_loss_steps:
+        logger.info("Running RU %s", description)
+        step_exit_code = step(settings)
+        if step_exit_code != 0:
+            logger.error(
+                "RU %s failed with exit status %d", description, step_exit_code
+            )
+            print(
+                f"RU {description} failed with exit status {step_exit_code}.",
+                file=sys.stderr,
+            )
+            return failure_code
+    logger.info("RU tunnel-loss blocking and recovery verified")
 
     print(
         f"{ru_instance.name} is available in project "

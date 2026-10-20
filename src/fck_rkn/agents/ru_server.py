@@ -257,6 +257,19 @@ def recover_tunnel(settings: TestEnvironmentSettings) -> int:
     return result
 
 
+def stop_tunnel(settings: TestEnvironmentSettings) -> int:
+    """Simulate tunnel loss by stopping the forward container."""
+    result = run_remote_with_input(
+        settings,
+        render("stop_tunnel.sh", container_name=FORWARD_CONTAINER_NAME),
+        "",
+        "Simulating tunnel loss by stopping the Squid forward",
+    )
+    if result == 0:
+        logger.info("Outline tunnel stopped on %s", RU_INSTANCE_NAME)
+    return result
+
+
 def run_outline_squid_probe(
     settings: TestEnvironmentSettings,
     access_url: str,
@@ -290,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:
             "deploy-outline-client",
             "deploy-squid-forward",
             "recover-tunnel",
+            "stop-tunnel",
         ),
         help="Action to run",
     )
@@ -318,6 +332,8 @@ def main(argv: list[str] | None = None) -> int:
         return deploy_squid_forward(settings, sys.stdin.readline())
     if args.action == "recover-tunnel":
         return recover_tunnel(settings)
+    if args.action == "stop-tunnel":
+        return stop_tunnel(settings)
     return 1
 
 

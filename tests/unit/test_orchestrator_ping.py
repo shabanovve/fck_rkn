@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from google.cloud import compute_v1
 
@@ -59,6 +59,18 @@ class OrchestratorPingTests(unittest.TestCase):
             "fck_rkn.orchestration.test_environment.check_squid_forward",
             return_value=0,
         )
+        self.ru_tunnel_mocks = {}
+        for name in (
+            "stop_tunnel",
+            "check_tunnel_blocked",
+            "recover_tunnel",
+        ):
+            tunnel_patch = patch(
+                f"fck_rkn.orchestration.test_environment.{name}",
+                return_value=0,
+            )
+            self.ru_tunnel_mocks[name] = tunnel_patch.start()
+            self.addCleanup(tunnel_patch.stop)
         self.ru_forward_deploy_mock = self.ru_forward_deploy.start()
         self.ru_forward_check_mock = self.ru_forward_check.start()
         self.addCleanup(self.ru_forward_deploy.stop)
@@ -122,7 +134,12 @@ class OrchestratorPingTests(unittest.TestCase):
         self.ru_forward_deploy_mock.assert_called_once_with(
             self.settings, "ss://configured-key"
         )
-        self.ru_forward_check_mock.assert_called_once_with(self.settings)
+        self.assertEqual(
+            self.ru_forward_check_mock.call_args_list,
+            [call(self.settings), call(self.settings)],
+        )
+        for mock in self.ru_tunnel_mocks.values():
+            mock.assert_called_once_with(self.settings)
         ping.assert_called_once_with(self.settings)
         deploy.assert_called_once_with(self.settings)
         squid_check.assert_called_once_with(self.settings)
@@ -458,6 +475,38 @@ class OrchestratorPingTests(unittest.TestCase):
 
         self.assertEqual(result, 19)
         self.assertIn("forward check failed", stderr.getvalue())
+        self.ru_tunnel_mocks["stop_tunnel"].assert_not_called()
+
+    def test_tunnel_loss_steps_run_in_order_and_fail_with_own_codes(self) -> None:
+        for name, code in (
+            ("stop_tunnel", 20),
+            ("check_tunnel_blocked", 21),
+            ("recover_tunnel", 22),
+        ):
+            with self.subTest(step=name):
+                for mock in self.ru_tunnel_mocks.values():
+                    mock.reset_mock(return_value=False)
+                    mock.return_value = 0
+                self.ru_tunnel_mocks[name].return_value = 1
+
+                result, stderr = self.run_main_with_healthy_eu()
+
+                self.assertEqual(result, code)
+                self.assertIn("failed with exit status 1", stderr.getvalue())
+
+    def test_fails_when_forward_does_not_resume_after_recovery(self) -> None:
+        self.ru_forward_check_mock.side_effect = [0, 1]
+
+        result, _ = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 23)
+
+    def test_recovery_is_not_attempted_when_traffic_is_not_blocked(self) -> None:
+        self.ru_tunnel_mocks["check_tunnel_blocked"].return_value = 1
+
+        self.run_main_with_healthy_eu()
+
+        self.ru_tunnel_mocks["recover_tunnel"].assert_not_called()
 
     def test_forward_is_not_deployed_when_client_check_fails(self) -> None:
         self.ru_client_check_mock.return_value = 1
