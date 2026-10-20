@@ -57,6 +57,12 @@ class OrchestratorPingTests(unittest.TestCase):
         )
         self.client_lookup_mock = self.client_lookup.start()
         self.addCleanup(self.client_lookup.stop)
+        self.client_ensure = patch(
+            "fck_rkn.orchestration.test_environment.ensure_test_client",
+            return_value=compute_v1.Instance(name="test-client"),
+        )
+        self.client_ensure_mock = self.client_ensure.start()
+        self.addCleanup(self.client_ensure.stop)
         self.ru_outline_deploy = patch(
             "fck_rkn.orchestration.test_environment.deploy_outline_server",
             return_value=0,
@@ -168,6 +174,7 @@ class OrchestratorPingTests(unittest.TestCase):
         provision.assert_called_once_with(self.settings)
         self.ru_lookup_mock.assert_called_once_with(self.settings)
         self.client_lookup_mock.assert_called_once_with(self.settings)
+        self.client_ensure_mock.assert_called_once_with(self.settings)
         ru_runner = GcloudIapRunner(
             "ru-server", "fck-rkn-test", "europe-north1-a"
         )
@@ -627,6 +634,14 @@ class OrchestratorPingTests(unittest.TestCase):
 
         self.assertEqual(result, 29)
         self.assertIn("wrong network", stderr.getvalue())
+
+    def test_fails_when_test_client_is_not_ready(self) -> None:
+        self.client_ensure_mock.side_effect = RuntimeError("quota")
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 29)
+        self.assertIn("quota", stderr.getvalue())
 
     def test_recovery_is_not_attempted_when_traffic_is_not_blocked(self) -> None:
         self.ru_tunnel_mocks["check_tunnel_blocked"].return_value = 1

@@ -31,11 +31,13 @@ from fck_rkn.gcp.compute import (
     _validate_instance_configuration,
     build_eu_server,
     build_ru_server,
+    build_test_client,
     build_cloud_router,
     build_ssh_firewall_rules,
     ensure_cloud_nat,
     ensure_eu_server,
     ensure_ru_server,
+    ensure_test_client,
     lookup_ru_server,
     lookup_test_client,
 )
@@ -157,6 +159,75 @@ class ComputeProvisioningTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "Existing test-client"):
             lookup_test_client(make_settings(), instances_client)
+
+    def test_test_client_is_created_and_waited_for_until_ssh_ready(self) -> None:
+        settings = make_settings()
+        running = build_test_client(settings)
+        running.status = "RUNNING"
+        instances_client = Mock()
+        instances_client.get.side_effect = [NotFound("missing"), running, running]
+        completed = subprocess.CompletedProcess(args=[], returncode=0)
+
+        with (
+            patch("fck_rkn.gcp.compute._require_gcloud_cli"),
+            patch("fck_rkn.gcp.compute.ensure_cloud_nat"),
+            patch("fck_rkn.gcp.compute._ensure_ssh_firewall_rule"),
+            patch(
+                "fck_rkn.gcp.compute.subprocess.run", return_value=completed
+            ) as run,
+        ):
+            result = ensure_test_client(
+                settings,
+                instances_client,
+                firewalls_client=Mock(),
+                routers_client=Mock(),
+            )
+
+        self.assertIs(result, running)
+        resource = instances_client.insert.call_args.kwargs["instance_resource"]
+        self.assertEqual(resource.name, "test-client")
+        self.assertEqual(run.call_args.args[0][3], "test-client")
+
+    def test_test_client_resource_matches_the_test_environment(self) -> None:
+        resource = build_test_client(make_settings())
+
+        self.assertEqual(resource.name, "test-client")
+        self.assertEqual(
+            resource.machine_type, "zones/europe-north1-a/machineTypes/e2-micro"
+        )
+        self.assertEqual(
+            resource.disks[0].initialize_params.source_image,
+            "projects/ubuntu-os-cloud/global/images/family/"
+            "ubuntu-2404-lts-amd64",
+        )
+        interface = resource.network_interfaces[0]
+        self.assertEqual(
+            interface.network, "projects/fck-rkn-test/global/networks/default"
+        )
+        self.assertFalse(interface.access_configs)
+
+    def test_test_client_running_wait_times_out(self) -> None:
+        instance = build_test_client(make_settings())
+        instance.status = "PROVISIONING"
+        instances_client = Mock()
+        instances_client.get.return_value = instance
+
+        with (
+            patch("fck_rkn.gcp.compute.INSTANCE_READY_TIMEOUT_SECONDS", 0),
+            self.assertRaisesRegex(TimeoutError, "test-client did not reach RUNNING"),
+        ):
+            _wait_for_running(
+                make_settings(), instances_client, instance_name="test-client"
+            )
+
+    def test_test_client_ssh_wait_times_out(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=255)
+        with (
+            patch("fck_rkn.gcp.compute.SSH_READY_TIMEOUT_SECONDS", 0),
+            patch("fck_rkn.gcp.compute.subprocess.run", return_value=completed),
+            self.assertRaisesRegex(TimeoutError, "authenticate to test-client"),
+        ):
+            _wait_for_ssh(make_settings(), instance_name="test-client")
 
     def test_ru_server_creation_passes_expected_resource_to_gcp(self) -> None:
         settings = make_settings()

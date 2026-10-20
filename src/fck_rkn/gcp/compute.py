@@ -388,6 +388,11 @@ def build_ru_server(settings: TestEnvironmentSettings) -> compute_v1.Instance:
     return _build_test_server(settings, RU_INSTANCE_NAME)
 
 
+def build_test_client(settings: TestEnvironmentSettings) -> compute_v1.Instance:
+    """Build the Ubuntu VM resource for test-client."""
+    return _build_test_server(settings, TEST_CLIENT_INSTANCE_NAME)
+
+
 def _build_test_server(
     settings: TestEnvironmentSettings,
     instance_name: str,
@@ -550,6 +555,22 @@ def lookup_test_client(
 ) -> compute_v1.Instance | None:
     """Look up test-client in the configured project and zone without creating it."""
     return _lookup_in_test_network(settings, TEST_CLIENT_INSTANCE_NAME, instances_client)
+
+
+def ensure_test_client(
+    settings: TestEnvironmentSettings,
+    instances_client: compute_v1.InstancesClient | None = None,
+    firewalls_client: compute_v1.FirewallsClient | None = None,
+    routers_client: compute_v1.RoutersClient | None = None,
+) -> compute_v1.Instance:
+    """Create or reuse test-client, then wait for authenticated SSH readiness."""
+    return _ensure_server(
+        settings,
+        build_test_client(settings),
+        instances_client,
+        firewalls_client,
+        routers_client,
+    )
 
 
 def _validate_network(

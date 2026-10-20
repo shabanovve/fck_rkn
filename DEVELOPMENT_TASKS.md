@@ -452,24 +452,35 @@ behavior that requires them.
 - **Done:** Covered together with 55 in `tests/unit/test_compute_provisioning.py`
   (present, absent, wrong network) and `tests/unit/test_orchestrator_ping.py`.
 
-### 57. Add `test-client` creation
+### 57. [x] Add `test-client` creation
 
 - **Change:** When absent, make `test_env_host` create an Ubuntu VM named
   `test-client` in the isolated test network.
+- **Done:** `gcp.compute.build_test_client` builds the VM like the other test
+  servers (Ubuntu family from settings, test subnet, no external IP).
+  `ensure_test_client` creates it when absent through the shared
+  `_ensure_server`, which also waits for RUNNING and SSH readiness (59). The
+  orchestrator logs the lookup result, then calls `ensure_test_client`; any
+  error stops with exit code 29.
 
-### 58. Test `test-client` creation
+### 58. [x] Test `test-client` creation
 
 - **Test:** In Docker, verify the expected VM name, project, zone, Ubuntu
   image, and network.
+- **Done:** `test_test_client_resource_matches_the_test_environment` and
+  `test_test_client_is_created_and_waited_for_until_ssh_ready`.
 
-### 59. Add `test-client` readiness wait
+### 59. [x] Add `test-client` readiness wait
 
 - **Change:** Make `test_env_host` wait until the test client is running and
   SSH-ready.
+- **Done:** Covered by 57: `ensure_test_client` waits for RUNNING and SSH.
 
-### 60. Test `test-client` readiness wait
+### 60. [x] Test `test-client` readiness wait
 
 - **Test:** In Docker, verify ready, provisioning failure, and timeout.
+- **Done:** Ready, running-wait timeout and SSH-wait timeout are tested for
+  `test-client`; a failure from `ensure_test_client` gives exit code 29.
 
 ### 61. Add Outline connection to `test-client-agent`
 
