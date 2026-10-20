@@ -10,7 +10,7 @@ class FakeRunner:
     ) -> None:
         self.result = RemoteResult(exit_code, stdout, stderr)
         self.error = error
-        self.calls: list[tuple[str, str | None, int, bool]] = []
+        self.calls: list[tuple[str, object, int, bool]] = []
 
     def run(self, command, stdin, timeout, stream_output=False):
         self.calls.append((command, stdin, timeout, stream_output))
@@ -23,5 +23,5 @@ class FakeRunner:
         return self.calls[-1][0]
 
     @property
-    def stdin(self) -> str | None:
+    def stdin(self) -> object:
         return self.calls[-1][1]

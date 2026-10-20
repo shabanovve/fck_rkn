@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 
@@ -32,13 +33,14 @@ class RemoteRunner(Protocol):
     Implementations must pass stdin to the command without exposing it in
     argv, raise RemoteTimeoutError on timeout and RemoteStartError when the
     transport cannot start. With stream_output the output goes straight to the
-    caller's stdout/stderr and the result carries no captured text.
+    caller's stdout/stderr and the result carries no captured text. A Path
+    stdin is streamed from that file, for binary payloads.
     """
 
     def run(
         self,
         command: str,
-        stdin: str | None,
+        stdin: str | Path | None,
         timeout: int | None,
         stream_output: bool = False,
     ) -> RemoteResult: ...
@@ -49,7 +51,7 @@ def execute(
     command: str,
     description: str,
     timeout: int | None,
-    stdin: str | None = None,
+    stdin: str | Path | None = None,
     stream_output: bool = False,
     print_output: bool = False,
     print_stderr: bool = False,

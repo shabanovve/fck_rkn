@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from fck_rkn.remote.runner import RemoteResult
 from fck_rkn.remote.subprocess_runner import run_transport
@@ -30,7 +31,7 @@ class GcloudIapRunner:
     def run(
         self,
         command: str,
-        stdin: str | None,
+        stdin: str | Path | None,
         timeout: int | None,
         stream_output: bool = False,
     ) -> RemoteResult:

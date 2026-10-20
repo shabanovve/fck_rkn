@@ -1,4 +1,5 @@
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -68,6 +69,28 @@ class SshRunnerTests(unittest.TestCase):
 
         self.assertEqual(run.call_args.kwargs["input"], "secret")
         self.assertNotIn("secret", " ".join(run.call_args.args[0]))
+
+    def test_run_streams_a_file_stdin_as_binary(self) -> None:
+        completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        with tempfile.TemporaryDirectory() as directory:
+            payload = Path(directory) / "payload.bin"
+            payload.write_bytes(b"\x1f\x8b\x00binary")
+            seen = {}
+
+            def fake_run(argv, **kwargs):
+                seen["data"] = kwargs["stdin"].read()
+                seen["kwargs"] = kwargs
+                return completed
+
+            with patch(RUN, side_effect=fake_run):
+                self.runner.run("cmd", payload, 9)
+
+        self.assertEqual(seen["data"], b"\x1f\x8b\x00binary")
+        self.assertNotIn("input", seen["kwargs"])
+
+    def test_missing_stdin_file_is_a_start_failure(self) -> None:
+        with self.assertRaises(RemoteStartError):
+            self.runner.run("cmd", Path("/nonexistent/payload.bin"), 9)
 
 
 if __name__ == "__main__":

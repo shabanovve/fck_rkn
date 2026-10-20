@@ -394,7 +394,7 @@ behavior that requires them.
   Not yet wired into the orchestrator (51d); the VM scripts still build
   until 51c.
 
-### 51b. Support binary stdin in runners
+### 51b. [x] Support binary stdin in runners
 
 - **Change:** `RemoteRunner.run` currently takes text `stdin`. Allow `bytes`
   (or a file object / path) in `RemoteRunner`, `run_transport`, `SshRunner`
@@ -402,6 +402,9 @@ behavior that requires them.
   loading it into memory or exposing it in argv.
 - **Test:** Runner tests with a binary payload; existing text callers are
   unchanged.
+- **Done:** `stdin` may be a `Path`; `run_transport` streams the file as raw
+  bytes (a missing file raises `RemoteStartError`). `RemoteRunner`, `execute`,
+  `SshRunner` and `GcloudIapRunner` accept `str | Path | None`.
 
 ### 51c. Load the prebuilt image on a VM instead of building
 

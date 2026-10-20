@@ -34,7 +34,7 @@ class SshRunner:
     def run(
         self,
         command: str,
-        stdin: str | None,
+        stdin: str | Path | None,
         timeout: int | None,
         stream_output: bool = False,
     ) -> RemoteResult:
