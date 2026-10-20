@@ -608,10 +608,16 @@ behavior that requires them.
   container and state directory. Tunnel-loss handling for this forward
   (stop/recovery) is task 75.
 
-### 74. Add RU MTProxy path test
+### 74. [x] Add RU MTProxy path test
 
 - **Test:** Add a `ru-server-test-agent` check that proves MTProxy traffic
   reaches EU only through the approved Outline path.
+- **Done:** `ru-server-test-agent mtproxy-forward` checks that the forward
+  container runs, its config goes through the Outline server and ends at the
+  MTProxy port, the Outline server is reachable, and localhost TCP/8443
+  accepts a handshake-sized write. Limit: it does not complete an MTProto
+  handshake, because the secret stays on EU; this must be confirmed on real
+  VMs. Denial during tunnel loss is task 75.
 
 ### 75. Deploy and test RU MTProxy forwarding
 

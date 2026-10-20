@@ -21,6 +21,9 @@ from fck_rkn.agents.ru_server import (
     CLIENT_STATE_DIRECTORY,
     FORWARD_CONTAINER_NAME,
     FORWARD_LOCAL_PORT,
+    MTPROXY_FORWARD_CONTAINER_NAME,
+    MTPROXY_FORWARD_LOCAL_PORT,
+    MTPROXY_FORWARD_STATE_DIRECTORY,
     PROBE_TARGET_URL,
     build_client_config,
     parse_access_url,
@@ -80,6 +83,24 @@ def check_squid_forward(runner: RemoteRunner) -> int:
     )
 
 
+MTPROXY_FORWARD_CHECK_COMMAND = render(
+    "mtproxy_forward_check.sh",
+    container_name=MTPROXY_FORWARD_CONTAINER_NAME,
+    state_directory=MTPROXY_FORWARD_STATE_DIRECTORY,
+    local_port=MTPROXY_FORWARD_LOCAL_PORT,
+)
+
+
+def check_mtproxy_forward(runner: RemoteRunner) -> int:
+    """Verify RU localhost TCP/8443 forwards to EU MTProxy only through Outline."""
+    return run_remote_with_input(
+        runner,
+        MTPROXY_FORWARD_CHECK_COMMAND,
+        "",
+        "Checking the RU forward to EU MTProxy",
+    )
+
+
 TUNNEL_BLOCKED_CHECK_COMMAND = render(
     "tunnel_blocked_check.sh",
     container_name=FORWARD_CONTAINER_NAME,
@@ -120,7 +141,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run ru-server service checks.")
     parser.add_argument(
         "action",
-        choices=("outline-client", "outline-health", "squid-forward", "tunnel-blocked"),
+        choices=(
+            "outline-client",
+            "outline-health",
+            "squid-forward",
+            "mtproxy-forward",
+            "tunnel-blocked",
+        ),
         help="Check to run",
     )
     args = parser.parse_args(argv)
@@ -141,6 +168,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.action == "squid-forward":
         return check_squid_forward(runner)
+    if args.action == "mtproxy-forward":
+        return check_mtproxy_forward(runner)
     if args.action == "outline-health":
         return check_outline_health(runner)
     if args.action == "tunnel-blocked":
