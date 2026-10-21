@@ -21,6 +21,9 @@ behavior that requires them.
 - Never target production `fck_rkn` from test code or `test_env_host`.
 - Give every GCP test VM outbound Internet access through Cloud NAT; do not
   assign external IPs to VMs.
+- Keep SSH TCP/22 reachable on every VM through IAP from the configured
+  `GCP_IAP_SOURCE_RANGE`, and deny access from other sources. Firewall
+  changes must not break IAP SSH management.
 - Install firewall rules for plan item 10 only on `ru-server` and
   `eu-server`, inside their Ubuntu guests. Do not install these rules on
   `test-client`; GCP firewall rules may supplement but not replace guest
@@ -710,7 +713,9 @@ behavior that requires them.
   and run the matching test-agent checks after the RU Outline endpoint and
   both test-client local tunnels to RU have been deployed. Include an
   isolated source in the configured crawler ranges to verify its requests
-  are blocked. Fail if any defined allow/deny check has the wrong result.
+  are blocked. Verify IAP SSH remains reachable on each VM after the RU
+  policy is installed. Fail if any defined allow/deny check has the wrong
+  result.
 - **Scope:** Verify direct test-client denial to RU services here. EU firewall
   rules are not installed until task 82, so defer direct test-client-to-EU
   denial to that orchestration rather than asserting a result before EU
@@ -753,7 +758,8 @@ behavior that requires them.
 
 - **Orchestration:** Make `test_env_host` install EU server firewall rules
   and run the matching test-agent checks after the RU-to-EU paths are
-  deployed. Fail if any defined allow/deny check has the wrong result.
+  deployed. Verify IAP SSH remains reachable on each VM after policy changes.
+  Fail if any defined allow/deny check has the wrong result.
 
 ### 83. Verify plan item 10 end to end
 
@@ -763,7 +769,8 @@ behavior that requires them.
   firewalls are active. Report each case and fail on any mismatch. Do not
   install firewall rules on `test-client` or assert outcomes for
   `Not defined` pairs. Exercise failed-update rollback and verify the
-  previously active rules continue to serve traffic.
+  previously active rules continue to serve traffic. Verify IAP SSH remains
+  reachable on every VM and SSH from other sources is denied.
 
 ### 89. Add service and tunnel metrics
 

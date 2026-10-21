@@ -212,12 +212,14 @@ Internet access outside the approved path is denied.
 source/destination pair; it is not an instruction to allow or deny traffic.
 Resolve these pairs before implementing a policy that depends on them.
 
-- Keep management access separate from client/service traffic. Permit SSH
-  only through IAP TCP forwarding on TCP/22, sourced from the configured IAP
-  TCP forwarding CIDR; do not treat this as permission for general traffic
-  between servers and other hosts. Read the CIDR from ignored local
-  `config/test.env` (`GCP_IAP_SOURCE_RANGE`) in the test environment. Do not
-  hard-code or commit a concrete IAP CIDR.
+- Keep management access separate from client/service traffic. The SSH
+  management port (TCP/22) must be reachable on every VM through IAP TCP
+  forwarding, sourced from the configured IAP TCP forwarding CIDR, and
+  denied from other sources. Firewall changes must preserve this access.
+  Do not treat SSH permission as permission for general traffic between
+  servers and other hosts. Read the CIDR from ignored local `config/test.env`
+  (`GCP_IAP_SOURCE_RANGE`) in the test environment. Do not hard-code or commit
+  a concrete IAP CIDR.
 - Install and enforce these firewall rules only on `ru-server` and
   `eu-server`; do not install firewall rules for this policy on
   `test-client`. Add network tests that verify each allowed path and
@@ -249,10 +251,11 @@ Resolve these pairs before implementing a policy that depends on them.
 
 **Acceptance:** only the flows listed above succeed, direct client access to
 EU services is blocked, and `ru-server` sends requests only to the approved
-proxy services. Policy firewall rules are installed only on the two servers,
-not on `test-client`. Failed updates preserve the previous saved and active
-rules and report an error. Unspecified pairs remain unresolved until
-explicitly decided.
+proxy services. SSH TCP/22 remains reachable on every VM through IAP and is
+not reachable from other sources. Policy firewall rules are installed only
+on the two servers, not on `test-client`. Failed updates preserve the
+previous saved and active rules and report an error. Unspecified pairs remain
+unresolved until explicitly decided.
 
 ## Cross-cutting implementation requirements
 

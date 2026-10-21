@@ -46,6 +46,19 @@ class RuFirewallRuleTests(unittest.TestCase):
         self.assertIn("policy drop;", rules)
         self.assertNotIn("    ct state established,related accept\n", rules)
 
+    def test_iap_ssh_allow_precedes_crawler_drops(self) -> None:
+        rules = build_ru_firewall_rules(
+            valid_config(
+                rkn_ipv4=["35.235.240.0/20"],
+                rkn_ipv6=["2001:db8::/32"],
+            )
+        )
+        iap_allow = "ip saddr 35.235.240.0/20 tcp dport 22 accept"
+        crawler_drop = "ip saddr @rkn_ipv4 drop"
+
+        self.assertLess(rules.index(iap_allow), rules.index(crawler_drop))
+        self.assertLess(rules.index(iap_allow), rules.index("tcp dport 22 drop"))
+
     def test_keeps_ipv6_inputs_and_normalizes_networks(self) -> None:
         rules = build_ru_firewall_rules(
             valid_config(

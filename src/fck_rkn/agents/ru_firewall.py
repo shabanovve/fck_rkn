@@ -147,10 +147,10 @@ table inet {TABLE_NAME} {{
   chain input {{
     type filter hook input priority -5; policy accept;
     iifname "lo" accept
+{iap_allow}
 {chr(10).join(crawler_rules)}
 {client_allow}
 {client_deny}
-{iap_allow}
     tcp dport 22 drop
 {outline_reply}
   }}
