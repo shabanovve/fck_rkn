@@ -82,7 +82,6 @@ listener. The temporary client container is removed after the check.
 - Permissions to inspect the project, create Compute Engine instances, manage
   the scoped VPC firewall rules, create/read regional Cloud Routers, use the
   selected subnet, establish IAP TCP forwarding, and log in through OS Login.
-- The IAP source range configured locally, as described below.
 
 Sign in to both the CLI and ADC with the intended Google account:
 
@@ -112,12 +111,9 @@ not already exist:
 cp -n config/test.env.example config/test.env
 ```
 
-Open `config/test.env` locally and set `GCP_IAP_SOURCE_RANGE` to the current
-IAP TCP forwarding source range from Google's
-[official IAP TCP forwarding documentation](https://cloud.google.com/iap/docs/using-tcp-forwarding).
-Do not put a concrete IP address, CIDR range, or credential in a Git-tracked
-file. Keep `GCP_PROJECT_ID` set to `fck-rkn-test`; the program rejects other
-projects.
+Keep `GCP_PROJECT_ID` set to `fck-rkn-test`; the program rejects other
+projects. SSH/TCP 22 is permitted from any source by the scoped test firewall
+rule; IAP remains the recommended operator connection method.
 
 The remaining template defaults specify the VM zone, machine type, Ubuntu
 image family, VPC/subnet, and SSH network tag/firewall rule names. Local
@@ -178,9 +174,9 @@ check after the Squid startup check.
 - If it already exists, the tool reuses it only when its configuration meets
   the expected private-network, OS Login, and SSH-tag settings. It does not
   silently modify a mismatched VM.
-- The tool creates or verifies VM-scoped SSH firewall rules for IAP access.
-  Conflicting existing rules cause provisioning to stop rather than being
-  overwritten.
+- The tool creates or verifies VM-scoped SSH firewall rules that allow
+  TCP/22 from any source. It migrates its previously managed IAP-only rule;
+  unrelated conflicting rules cause provisioning to stop.
 - The tool waits for the VM to enter `RUNNING`, then runs a short
   `gcloud compute ssh --tunnel-through-iap` command to verify OS Login SSH.
 - Cloud NAT is created or verified before VM provisioning and provides
@@ -194,14 +190,13 @@ check after the Squid startup check.
 | Symptom | What to check |
 |---|---|
 | Configuration syntax error | The CLI prints the filename and line number, not the contents. Fix that line to use `KEY=value` syntax. |
-| `GCP_IAP_SOURCE_RANGE` missing or invalid | Add the current documented IAP TCP forwarding range to the ignored `config/test.env`. |
 | ADC authentication or project access failure | Repeat `gcloud auth application-default login`, confirm the active account and project, and verify the APIs and IAM permissions. |
 | No active `gcloud` account | Run `gcloud auth login` and confirm the intended account is active. |
 | Firewall rule conflicts | Review the named rule in GCP. The tool will not overwrite a rule whose settings differ from the required configuration. |
 | Cloud Router/NAT conflicts | Review the dedicated router in the VM region. The tool will not overwrite a router whose NAT settings differ from the required configuration. |
 | VM configuration mismatch | Review the existing `eu-server`; the tool refuses to silently alter it. |
 | VM does not reach `RUNNING` | Check Compute Engine operation errors, quota, billing, selected zone, image, machine type, and subnet. |
-| IAP SSH readiness times out | Confirm IAP TCP forwarding permission, OS Login access, enabled IAP API, the configured IAP source range, and the VM's scoped firewall rules. |
+| IAP SSH readiness times out | Confirm IAP TCP forwarding permission, OS Login access, the enabled IAP API, and the VM's scoped SSH firewall rule. |
 
 The process returns status `0` on success, `2` for invalid or unreadable
 configuration, `3` for authentication failures, `4` for project-access

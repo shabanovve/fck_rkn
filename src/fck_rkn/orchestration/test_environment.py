@@ -170,7 +170,6 @@ def build_ru_firewall_configuration(
     test_client_address: str,
     eu_server_address: str,
     eu_access_url: str,
-    iap_source_range: str,
     other_host_address: str,
     rkn_ipv4: list[str],
     rkn_ipv6: list[str],
@@ -191,7 +190,6 @@ def build_ru_firewall_configuration(
             "other_host_address": ipaddress.ip_address(
                 other_host_address
             ).compressed,
-            "iap_source_range": str(ipaddress.ip_network(iap_source_range, strict=True)),
             "rkn_ipv4": rkn_ipv4,
             "rkn_ipv6": rkn_ipv6,
         }
@@ -298,13 +296,10 @@ def _run(image_directory: Path) -> int:
                 }
             )
             if missing:
-                message = f"  Missing required setting(s): {', '.join(missing)}."
-                if "GCP_IAP_SOURCE_RANGE" in missing:
-                    message += (
-                        " Set it in config/test.env to the current CIDR from "
-                        "Google's official IAP TCP forwarding documentation."
-                    )
-                print(message, file=sys.stderr)
+                print(
+                    f"  Missing required setting(s): {', '.join(missing)}.",
+                    file=sys.stderr,
+                )
             else:
                 print(details, file=sys.stderr)
         else:
@@ -769,7 +764,6 @@ def _run(image_directory: Path) -> int:
             test_client_address=test_client_private_address,
             eu_server_address=eu_private_address,
             eu_access_url=access_url,
-            iap_source_range=settings.GCP_IAP_SOURCE_RANGE,
             other_host_address=OTHER_HOST_TEST_ADDRESS,
             rkn_ipv4=rkn_ipv4,
             rkn_ipv6=rkn_ipv6,

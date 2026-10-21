@@ -295,7 +295,6 @@ class RuServerFirewallTests(unittest.TestCase):
                 "eu_server_address": "10.0.0.2",
                 "eu_outline_address": "10.0.0.2",
                 "eu_outline_port": 10001,
-                "iap_source_range": "35.235.240.0/20",
                 "rkn_ipv4": ["192.0.2.0/24"],
                 "rkn_ipv6": ["2001:db8::/32"],
             }

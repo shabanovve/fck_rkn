@@ -213,13 +213,11 @@ source/destination pair; it is not an instruction to allow or deny traffic.
 Resolve these pairs before implementing a policy that depends on them.
 
 - Keep management access separate from client/service traffic. The SSH
-  management port (TCP/22) must be reachable on every VM through IAP TCP
-  forwarding, sourced from the configured IAP TCP forwarding CIDR, and
-  denied from other sources. Firewall changes must preserve this access.
-  Do not treat SSH permission as permission for general traffic between
-  servers and other hosts. Read the CIDR from ignored local `config/test.env`
-  (`GCP_IAP_SOURCE_RANGE`) in the test environment. Do not hard-code or commit
-  a concrete IAP CIDR.
+  management port (TCP/22) must be reachable on every VM from any source.
+  Firewall rules must not block SSH based on source address. IAP remains an
+  approved connection method, but it is not the only permitted SSH source.
+  Do not treat SSH permission as permission for other traffic between servers
+  and other hosts.
 - Install and enforce these firewall rules only on `ru-server` and
   `eu-server`; do not install firewall rules for this policy on
   `test-client`. Add network tests that verify each allowed path and
@@ -236,9 +234,9 @@ Resolve these pairs before implementing a policy that depends on them.
 - Block requests to `ru-server` from the RKN crawler IP ranges using the
   general mixed IPv4/IPv6 blacklist in
   `C24Be/AS_Network_List/blacklists_nftables/blacklist.nft`, fetched from
-  that repository's `main` branch. This is the confirmed source for the RKN
-  crawler IP list. The upstream project regenerates blacklist artifacts
-  daily.
+  that repository's `main` branch, except SSH TCP/22 which is allowed from
+  any source. This is the confirmed source for the RKN crawler IP list. The
+  upstream project regenerates blacklist artifacts daily.
 - Update firewall configuration transactionally: stage and validate the
   complete replacement rules and blacklist before activation. Require
   non-empty blacklist data with both IPv4 and IPv6 sets and at least one
@@ -251,11 +249,11 @@ Resolve these pairs before implementing a policy that depends on them.
 
 **Acceptance:** only the flows listed above succeed, direct client access to
 EU services is blocked, and `ru-server` sends requests only to the approved
-proxy services. SSH TCP/22 remains reachable on every VM through IAP and is
-not reachable from other sources. Policy firewall rules are installed only
-on the two servers, not on `test-client`. Failed updates preserve the
-previous saved and active rules and report an error. Unspecified pairs remain
-unresolved until explicitly decided.
+proxy services. SSH TCP/22 remains reachable on every VM from any source.
+Policy firewall rules are installed only on the two servers, not on
+`test-client`. Failed updates preserve the previous saved and active rules and
+report an error. Unspecified pairs remain unresolved until explicitly
+decided.
 
 ## Cross-cutting implementation requirements
 
@@ -299,10 +297,10 @@ milestones:
 4. Should `test_env_host` run on an operator workstation or a dedicated
    runner? Which authentication method should it use (for example,
    Application Default Credentials or a dedicated service account)?
-5. Agents must authenticate over SSH using OS Login through IAP TCP
-   forwarding. Test VMs must not have external IPs, and their outbound
-   Internet access must use Cloud NAT. Allow TCP/22 only from the IAP TCP
-   forwarding source range configured locally on a VM-specific network tag.
+5. **Resolved:** Agents use OS Login through IAP TCP forwarding for SSH.
+   Test VMs must not have external IPs, and their outbound Internet access
+   must use Cloud NAT. Allow SSH TCP/22 from any source on a VM-specific
+   network tag; guest firewalls must also permit SSH from any source.
 6. Which VPC/subnet and remaining ingress/egress rules should be used?
 7. Should `ping youtube.com` be a strict pass/fail requirement? ICMP may be
    blocked independently of DNS and HTTP connectivity.

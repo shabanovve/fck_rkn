@@ -17,7 +17,6 @@ for port in 3128 8443; do
     expect_blocked "$eu_server_address" "$port" "EU TCP/$port"
   fi
 done
-expect_blocked @RU_SERVER_ADDRESS@ 22 "RU SSH from a non-IAP client"
 
 if [[ -n "$eu_server_address" ]]; then
   echo "test-client cannot directly reach RU or EU web-proxy/MTProxy services"

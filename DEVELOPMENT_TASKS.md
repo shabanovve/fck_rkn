@@ -21,9 +21,9 @@ behavior that requires them.
 - Never target production `fck_rkn` from test code or `test_env_host`.
 - Give every GCP test VM outbound Internet access through Cloud NAT; do not
   assign external IPs to VMs.
-- Keep SSH TCP/22 reachable on every VM through IAP from the configured
-  `GCP_IAP_SOURCE_RANGE`, and deny access from other sources. Firewall
-  changes must not break IAP SSH management.
+- Keep SSH TCP/22 reachable on every VM from any source. Firewall changes
+  must not block SSH based on source address; IAP remains an approved access
+  method but is not the only allowed source.
 - Install firewall rules for plan item 10 only on `ru-server` and
   `eu-server`, inside their Ubuntu guests. Do not install these rules on
   `test-client`; GCP firewall rules may supplement but not replace guest
@@ -58,10 +58,10 @@ behavior that requires them.
   running and SSH-ready.
 - **Approved test settings:** `europe-north1-a`, `e2-micro`, Ubuntu 24.04 LTS,
   the `default` VPC/subnet, OS Login through IAP, no external IP, and outbound
-  Internet access through Cloud NAT. Allow SSH ingress only from the IAP TCP
-  forwarding source range configured in untracked local settings; scope SSH
-  firewall rules to `eu-server` and reject conflicting existing resources
-  without changing them. Never include the literal range in tracked files.
+  Internet access through Cloud NAT. Allow SSH ingress from any IPv4 source;
+  scope SSH firewall rules to test VMs and reject conflicting existing
+  resources without changing them. Migrate the previously managed IAP-only
+  SSH rule to the all-source rule. Never include the literal range in tracked files.
 
 
 ## First `eu-server-agent` behavior: successful ping over SSH
@@ -638,7 +638,8 @@ behavior that requires them.
 
 - **Recorded in plan item 10:** Server-only nftables enforcement; service
   ports and Outline path; runtime address/interface resolution; confirmed
-  RKN crawler blacklist source and artifact; IAP-only SSH management; and
+  RKN crawler blacklist source and artifact; source-unrestricted SSH access;
+  and
   validation plus rollback behavior for failed firewall/list updates.
 - **Constraint:** Implement only the defined matrix pairs. Do not add policy
   for `Not defined` pairs. Include the separately required daily blacklist
@@ -654,16 +655,16 @@ behavior that requires them.
   `eu-server` only for the approved web-proxy and MTProto services through the
   EU Outline endpoint; deny requests
   from `ru-server` to `test-client` and any other host. Block requests to
-  `ru-server` from the configured RKN crawler IPs. Leave other
-  `any-host`-to-`ru-server` sources unspecified, except approved IAP SSH
-  management. Stage and validate changes before activating them; on failure
+  `ru-server` from the configured RKN crawler IPs, except SSH TCP/22 which is
+  accepted from any source. Leave other `any-host`-to-`ru-server` sources
+  unspecified. Stage and validate changes before activating them; on failure
   leave the previous saved and active rules untouched, report the error, and
   continue with the previous rules. If no previous valid rules exist, fail
   without applying partial rules. Do not install plan item 10 rules on
   `test-client`.
 - **Implementation started:** `ru-server-agent apply-firewall` accepts
   JSON on stdin containing `test_client_address`, `eu_server_address`,
-  `eu_outline_address`, `eu_outline_port`, `iap_source_range`, `rkn_ipv4`, and
+  `eu_outline_address`, `eu_outline_port`, `rkn_ipv4`, and
   `rkn_ipv6`. It validates runtime addresses and non-empty IPv4/IPv6 crawler
   ranges, generates the RU-only nftables policy, and stages the replacement
   before activation. The test-client Squid and MTProxy tunnel actions target
@@ -695,7 +696,7 @@ behavior that requires them.
   invalid nftables replacement, compare saved/active policy before and after,
   and verify an invalid first install leaves no policy files. Added
   `test-client-agent check-firewall-paths` for denied direct
-  client-to-RU/EU service access and non-IAP SSH. Runtime host addresses are
+  client-to-RU/EU service access. Runtime host addresses are
   validated and supplied through the existing private-address settings or
   stdin; the RU check also requires populated active IPv4/IPv6 crawler sets.
   No new firewall is installed on `test-client`. Live VM execution and a
@@ -713,9 +714,8 @@ behavior that requires them.
   and run the matching test-agent checks after the RU Outline endpoint and
   both test-client local tunnels to RU have been deployed. Include an
   isolated source in the configured crawler ranges to verify its requests
-  are blocked. Verify IAP SSH remains reachable on each VM after the RU
-  policy is installed. Fail if any defined allow/deny check has the wrong
-  result.
+  are blocked, except SSH TCP/22 which is intentionally not source-filtered.
+  Fail if any defined allow/deny check has the wrong result.
 - **Scope:** Verify direct test-client denial to RU services here. EU firewall
   rules are not installed until task 82, so defer direct test-client-to-EU
   denial to that orchestration rather than asserting a result before EU
@@ -734,7 +734,7 @@ behavior that requires them.
   plan-item-10 rules in the Ubuntu guest firewall on `eu-server`. Allow
   approved web-proxy and MTProto requests from `ru-server` through the VPN.
   Deny direct service requests from `test-client` and service requests from
-  any other host; allow SSH management only through the approved IAP path.
+  any other host; permit SSH TCP/22 regardless of source.
   Do not define or enforce rules for EU-originated traffic to
   `test-client`, `ru-server`, or other hosts, since those pairs are
   `Not defined`. Do not install plan item 10 rules on `test-client`.
@@ -747,8 +747,8 @@ behavior that requires them.
 
 - **Test:** Extend `eu-server-test-agent` to verify approved
   VPN-carried proxy/MTProto requests from RU succeed, direct client service
-  requests and non-IAP service requests from other hosts are denied, and
-  approved IAP SSH management works. Do not assert any result for
+  requests and non-IAP service requests from other hosts are denied, and SSH
+  TCP/22 remains accessible regardless of source. Do not assert any result for
   EU-originated traffic to pairs marked `Not defined`. Verify a failed
   update reports an error while the previous saved configuration and live
   firewall rules remain active, and that an initial invalid configuration is
@@ -758,8 +758,9 @@ behavior that requires them.
 
 - **Orchestration:** Make `test_env_host` install EU server firewall rules
   and run the matching test-agent checks after the RU-to-EU paths are
-  deployed. Verify IAP SSH remains reachable on each VM after policy changes.
-  Fail if any defined allow/deny check has the wrong result.
+  deployed. Verify SSH TCP/22 remains reachable from any source on each VM
+  after policy changes. Fail if any defined allow/deny check has the wrong
+  result.
 
 ### 83. Verify plan item 10 end to end
 
@@ -769,8 +770,8 @@ behavior that requires them.
   firewalls are active. Report each case and fail on any mismatch. Do not
   install firewall rules on `test-client` or assert outcomes for
   `Not defined` pairs. Exercise failed-update rollback and verify the
-  previously active rules continue to serve traffic. Verify IAP SSH remains
-  reachable on every VM and SSH from other sources is denied.
+  previously active rules continue to serve traffic. Verify SSH TCP/22
+  remains reachable from any source on every VM.
 
 ### 89. Add service and tunnel metrics
 

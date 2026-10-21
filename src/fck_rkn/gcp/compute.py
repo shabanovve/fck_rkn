@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ipaddress
 import logging
 import shutil
 import subprocess
@@ -107,68 +106,70 @@ def stop_test_project_vms(settings: TestEnvironmentSettings) -> list[str]:
 
 def build_ssh_firewall_rules(
     settings: TestEnvironmentSettings,
-) -> tuple[compute_v1.Firewall, compute_v1.Firewall]:
-    """Allow IAP SSH and explicitly deny SSH from every other IPv4 source."""
-    logger.info("Building IAP-only SSH firewall rules")
+) -> compute_v1.Firewall:
+    """Allow SSH ingress from any IPv4 source to test VM SSH targets."""
+    logger.info("Building SSH ingress firewall rule")
     network = (
         f"projects/{settings.GCP_PROJECT_ID}/global/networks/"
         f"{settings.GCP_NETWORK}"
     )
     allow_rule = compute_v1.Firewall(
         name=settings.GCP_SSH_FIREWALL_RULE,
-        description="Allow IAP TCP forwarding to test VMs over SSH.",
+        description="Allow SSH access to test VMs.",
         network=network,
         direction="INGRESS",
         priority=900,
-        source_ranges=[settings.GCP_IAP_SOURCE_RANGE],
+        source_ranges=["0.0.0.0/0"],
         target_tags=[settings.GCP_SSH_NETWORK_TAG],
         allowed=[compute_v1.Allowed(I_p_protocol="tcp", ports=["22"])],
     )
-    deny_rule = compute_v1.Firewall(
-        name=f"{settings.GCP_SSH_FIREWALL_RULE}-deny",
-        description="Deny SSH to test VMs from all non-IAP IPv4 sources.",
-        network=network,
-        direction="INGRESS",
-        priority=1000,
-        source_ranges=[str(ipaddress.IPv4Network((0, 0)))],
-        target_tags=[settings.GCP_SSH_NETWORK_TAG],
-        denied=[compute_v1.Denied(I_p_protocol="tcp", ports=["22"])],
-    )
-    return allow_rule, deny_rule
+    return allow_rule
 
 
 def _ensure_ssh_firewall_rule(
     settings: TestEnvironmentSettings,
     firewalls_client: compute_v1.FirewallsClient,
 ) -> None:
-    logger.info("Checking scoped IAP SSH firewall rules")
-    for desired in build_ssh_firewall_rules(settings):
-        logger.info("Checking firewall rule %s", desired.name)
+    logger.info("Checking scoped SSH firewall rule")
+    desired = build_ssh_firewall_rules(settings)
+    logger.info("Checking firewall rule %s", desired.name)
+    try:
+        existing = firewalls_client.get(
+            project=settings.GCP_PROJECT_ID,
+            firewall=desired.name,
+        )
+    except NotFound:
+        logger.info("Creating missing firewall rule %s", desired.name)
         try:
+            logger.info(
+                "Waiting for firewall rule operation %s to complete",
+                desired.name,
+            )
+            operation = firewalls_client.insert(
+                project=settings.GCP_PROJECT_ID,
+                firewall_resource=desired,
+            )
+            operation.result(timeout=INSTANCE_OPERATION_TIMEOUT_SECONDS)
+            logger.info("Firewall rule %s created", desired.name)
+        except AlreadyExists:
             existing = firewalls_client.get(
                 project=settings.GCP_PROJECT_ID,
                 firewall=desired.name,
             )
-        except NotFound:
-            logger.info("Creating missing firewall rule %s", desired.name)
-            try:
-                logger.info(
-                    "Waiting for firewall rule operation %s to complete",
-                    desired.name,
-                )
-                operation = firewalls_client.insert(
-                    project=settings.GCP_PROJECT_ID,
-                    firewall_resource=desired,
-                )
-                operation.result(timeout=INSTANCE_OPERATION_TIMEOUT_SECONDS)
-                logger.info("Firewall rule %s created", desired.name)
-                continue
-            except AlreadyExists:
-                existing = firewalls_client.get(
-                    project=settings.GCP_PROJECT_ID,
-                    firewall=desired.name,
-                )
+        else:
+            existing = None
+    if existing is not None:
         mismatches = _firewall_rule_mismatches(existing, desired)
+        if mismatches == ["source_ranges"] and existing.source_ranges:
+            logger.info("Updating managed SSH firewall rule to allow all sources")
+            operation = firewalls_client.patch(
+                project=settings.GCP_PROJECT_ID,
+                firewall=desired.name,
+                firewall_resource=desired,
+            )
+            operation.result(timeout=INSTANCE_OPERATION_TIMEOUT_SECONDS)
+            logger.info("SSH firewall rule now allows all IPv4 sources")
+            mismatches = []
         if mismatches:
             logger.error(
                 "Firewall rule %s differs in: %s",
@@ -181,6 +182,18 @@ def _ensure_ssh_firewall_rule(
                 f"(mismatched fields: {', '.join(mismatches)})"
             )
         logger.info("Firewall rule %s matches the required settings", desired.name)
+
+    legacy_deny_name = f"{settings.GCP_SSH_FIREWALL_RULE}-deny"
+    logger.info("Removing legacy SSH deny rule %s if present", legacy_deny_name)
+    try:
+        operation = firewalls_client.delete(
+            project=settings.GCP_PROJECT_ID,
+            firewall=legacy_deny_name,
+        )
+    except NotFound:
+        return
+    operation.result(timeout=INSTANCE_OPERATION_TIMEOUT_SECONDS)
+    logger.info("Removed legacy SSH deny rule %s", legacy_deny_name)
 
 
 def _firewall_rule_matches(

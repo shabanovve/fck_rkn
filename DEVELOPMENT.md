@@ -183,8 +183,8 @@ repository.
 ### SSH through IAP
 
 - Use Identity-Aware Proxy (IAP) TCP forwarding for SSH to test VMs. Do not
-  assign them external IP addresses and do not allow SSH from an operator's
-  public IP CIDR.
+  assign them external IP addresses. SSH TCP/22 is permitted from any source
+  on the scoped VM network tag; IAP is the approved operator access method.
 - Enable both the Compute Engine API and the IAP API in the isolated
   `fck-rkn-test` project:
 
@@ -202,16 +202,14 @@ repository.
   Cloud NAT, instances, and scoped firewall rules; do not grant project-wide
   Owner access. Cloud NAT and its automatically allocated public IP addresses
   can incur charges.
-- On the VM's dedicated network tag, allow ingress TCP/22 only from Google's
-  IAP TCP forwarding range currently published in Google's official
-  documentation. Set `GCP_IAP_SOURCE_RANGE` in ignored `config/test.env` to
-  that range. Do not add a public-wide or operator-IP allow rule for SSH.
-  Keep other ingress restrictions in place.
+- On the VM's dedicated network tag, allow ingress TCP/22 from any IPv4
+  source. VMs have no external IPs. IAP TCP forwarding remains the approved
+  operator connection method, but SSH is not restricted by source CIDR.
 - Connect using `gcloud compute ssh` with the `--tunnel-through-iap` option.
   This keeps SSH reachable when the operator's public IP changes and avoids
   exposing the VM directly to the Internet.
 - `test_env_host` must provision VMs without external IPs, configure the
-  scoped IAP-only SSH firewall rule, and wait for SSH readiness through IAP.
+  scoped SSH firewall rule, and wait for SSH readiness through IAP.
   Its implementation and configuration must not depend on a fixed public IP
   or `GCP_SSH_SOURCE_CIDR`.
 - For setup, execution, expected behavior, and troubleshooting, see
@@ -293,12 +291,9 @@ repository.
    project-wide Owner access.
 
 5. Create the ignored `config/test.env` from the example and confirm that it
-   targets `fck-rkn-test`. If it contains the obsolete
-   `GCP_SSH_SOURCE_CIDR` setting from an earlier setup, remove that line.
-   Replace the `GCP_IAP_SOURCE_RANGE` placeholder with the current IPv4 `/20`
-   range from Google's official IAP TCP forwarding documentation. Keep the
-   literal range only in ignored local configuration, never in a tracked file.
-   Then run the orchestrator from the repository root:
+   targets `fck-rkn-test`. If it contains the obsolete `GCP_SSH_SOURCE_CIDR`
+   or `GCP_IAP_SOURCE_RANGE` setting from an earlier setup, those entries are
+   no longer required. Then run the orchestrator from the repository root:
 
    ```sh
    .venv/bin/python -m fck_rkn
@@ -325,10 +320,8 @@ repository.
   API must be enabled.
 - If configuration parsing fails, the CLI reports the filename and malformed
   line number without printing that line's contents. Fix the indicated entry
-  so it uses `KEY=value` syntax. If it reports `GCP_IAP_SOURCE_RANGE` missing,
-  add that setting to the ignored `config/test.env` using the current range
-  from Google's official IAP TCP forwarding documentation. Do not copy real
-  IP ranges or credentials into tracked files or share the local config file.
+  so it uses `KEY=value` syntax. Do not copy credentials into tracked files or
+  share the local config file.
 - The CLI writes timestamped INFO logs to the console while validating
   configuration, checking GCP access, applying firewall rules, provisioning
   the VM, and waiting for IAP SSH readiness. Logs describe progress and error
@@ -336,11 +329,8 @@ repository.
 - The `eu-server` provisioning defaults in `config/test.env.example` use the
   `europe-north1-a` zone, `e2-micro`, Ubuntu 24.04 LTS, and the `default` VPC
   and subnet. VMs must have no external IP. SSH uses OS Login through IAP;
-  firewall rules allow TCP/22 only from the locally configured IAP source
-  range, targeting the VM's dedicated SSH network tag. Set
-  `GCP_IAP_SOURCE_RANGE` in ignored `config/test.env` to the current range
-  from Google's official IAP TCP forwarding documentation; do not copy the
-  literal range into tracked files. Ensure the active `gcloud` account is the
+  firewall rules allow TCP/22 from any IPv4 source, targeting the VM's
+  dedicated SSH network tag. Ensure the active `gcloud` account is the
   same operator identity as ADC and has permission to create Compute Engine
   instances, manage VPC firewall rules, use the selected subnet, use IAP TCP
   forwarding, and log in through OS Login before running the orchestrator.

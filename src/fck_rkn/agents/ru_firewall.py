@@ -57,13 +57,6 @@ def _address_match(
     return f"{family} {prefix} {address.compressed}"
 
 
-def _network_match(
-    prefix: str, network: ipaddress.IPv4Network | ipaddress.IPv6Network
-) -> str:
-    family = "ip" if network.version == 4 else "ip6"
-    return f"{family} {prefix} {network.with_prefixlen}"
-
-
 def build_ru_firewall_rules(config_json: str) -> str:
     """Validate runtime firewall inputs and return a complete nftables table."""
     try:
@@ -87,13 +80,6 @@ def build_ru_firewall_rules(config_json: str) -> str:
         raise ValueError("eu_outline_port must be between 1 and 65535")
     if outline_port in EU_SERVICE_PORTS:
         raise ValueError("eu_outline_port conflicts with a direct EU service port")
-    try:
-        iap_network = ipaddress.ip_network(
-            config.get("iap_source_range"), strict=True
-        )
-    except (TypeError, ValueError) as error:
-        raise ValueError("iap_source_range must be a valid CIDR network") from error
-
     ipv4 = _network_list(config.get("rkn_ipv4"), "rkn_ipv4", 4)
     ipv6 = _network_list(config.get("rkn_ipv6"), "rkn_ipv6", 6)
 
@@ -102,14 +88,7 @@ def build_ru_firewall_rules(config_json: str) -> str:
         f"{RU_OUTLINE_ACCESS_PORT} accept"
     )
     client_deny = f"    {_address_match('saddr', client)} drop"
-    iap_allow = (
-        f"    {_network_match('saddr', iap_network)} "
-        f"tcp dport 22 accept"
-    )
-    iap_reply = (
-        f"    {_network_match('daddr', iap_network)} tcp sport 22 "
-        "ct state established,related accept"
-    )
+    ssh_reply = "    tcp sport 22 ct state established,related accept"
     outline_reply = (
         f"    {_address_match('saddr', outline_server)} tcp sport "
         f"{outline_port} ct state established,related accept"
@@ -147,11 +126,10 @@ table inet {TABLE_NAME} {{
   chain input {{
     type filter hook input priority -5; policy accept;
     iifname "lo" accept
-{iap_allow}
+    tcp dport 22 accept
 {chr(10).join(crawler_rules)}
 {client_allow}
 {client_deny}
-    tcp dport 22 drop
 {outline_reply}
   }}
   chain output {{
@@ -160,7 +138,7 @@ table inet {TABLE_NAME} {{
     oifname "lo" ct state established,related ct original proto-dst {{ {', '.join(map(str, EU_SERVICE_PORTS))} }} accept
 {direct_service_deny}
 {outline_allow}
-{iap_reply}
+{ssh_reply}
 {client_reply}
 {client_egress_deny}
   }}

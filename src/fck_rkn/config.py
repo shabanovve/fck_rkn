@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ipaddress
 import logging
 import re
 from pathlib import Path
@@ -45,7 +44,6 @@ class TestEnvironmentSettings(BaseSettings):
     GCP_IMAGE_FAMILY: str = "ubuntu-2404-lts-amd64"
     GCP_NETWORK: str = "default"
     GCP_SUBNETWORK: str = "default"
-    GCP_IAP_SOURCE_RANGE: str
     GCP_SSH_NETWORK_TAG: str = "fck-rkn-test-eu-server-ssh"
     GCP_SSH_FIREWALL_RULE: str = "fck-rkn-test-eu-server-ssh"
 
@@ -71,27 +69,6 @@ class TestEnvironmentSettings(BaseSettings):
         if not GCP_ZONE_PATTERN.fullmatch(value):
             raise ValueError("must be a GCP zone such as europe-north1-a")
         return value
-
-    @field_validator("GCP_IAP_SOURCE_RANGE")
-    @classmethod
-    def validate_iap_source_range(cls, value: str) -> str:
-        logger.info("Validating configured IAP source range")
-        try:
-            network = ipaddress.ip_network(value, strict=True)
-        except ValueError as error:
-            raise ValueError(
-                "must be the IPv4 CIDR range currently documented for "
-                "Google Cloud IAP TCP forwarding"
-            ) from error
-        if not isinstance(network, ipaddress.IPv4Network):
-            raise ValueError("must be an IPv4 CIDR range")
-        if network.prefixlen != 20 or not network.network_address.is_global:
-            raise ValueError(
-                "must be the public IPv4 /20 range documented for "
-                "Google Cloud IAP TCP forwarding"
-            )
-        return value
-
 
 def load_config(path: Path | None = None) -> TestEnvironmentSettings:
     """Load and validate the test configuration before cloud API operations."""

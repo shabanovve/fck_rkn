@@ -63,7 +63,7 @@ class TestClientAgentTests(unittest.TestCase):
         self.assertIn("10.0.0.2", runner.command)
         self.assertIn("direct test-client path", runner.command)
         self.assertIn("3128 8443", runner.command)
-        self.assertIn("non-IAP client", runner.command)
+        self.assertNotIn("SSH", runner.command)
         self.assertEqual(runner.stdin, "")
 
     def test_restricted_paths_check_can_limit_scope_to_ru_before_eu_firewall(self) -> None:

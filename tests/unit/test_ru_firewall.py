@@ -12,7 +12,6 @@ def valid_config(**overrides: object) -> str:
         "eu_server_address": "10.0.0.2",
         "eu_outline_address": "10.0.0.2",
         "eu_outline_port": 10001,
-        "iap_source_range": "35.235.240.0/20",
         "rkn_ipv4": ["192.0.2.0/24"],
         "rkn_ipv6": ["2001:db8::/32"],
     }
@@ -37,8 +36,9 @@ class RuFirewallRuleTests(unittest.TestCase):
             "{ 3128, 8443 } accept",
             rules,
         )
-        self.assertIn("ip saddr 35.235.240.0/20 tcp dport 22 accept", rules)
-        self.assertIn("tcp dport 22 drop", rules)
+        self.assertIn("    tcp dport 22 accept", rules)
+        self.assertIn("tcp sport 22 ct state established,related accept", rules)
+        self.assertNotIn("tcp dport 22 drop", rules)
         self.assertIn("ip daddr 10.0.0.2 tcp dport 10001 accept", rules)
         self.assertIn("ip daddr 10.0.0.2 tcp dport { 3128, 8443 } drop", rules)
         self.assertIn("ip daddr 10.0.0.3 drop", rules)
@@ -46,18 +46,18 @@ class RuFirewallRuleTests(unittest.TestCase):
         self.assertIn("policy drop;", rules)
         self.assertNotIn("    ct state established,related accept\n", rules)
 
-    def test_iap_ssh_allow_precedes_crawler_drops(self) -> None:
+    def test_ssh_is_allowed_from_all_sources_before_crawler_drops(self) -> None:
         rules = build_ru_firewall_rules(
             valid_config(
                 rkn_ipv4=["35.235.240.0/20"],
                 rkn_ipv6=["2001:db8::/32"],
             )
         )
-        iap_allow = "ip saddr 35.235.240.0/20 tcp dport 22 accept"
+        ssh_allow = "tcp dport 22 accept"
         crawler_drop = "ip saddr @rkn_ipv4 drop"
 
-        self.assertLess(rules.index(iap_allow), rules.index(crawler_drop))
-        self.assertLess(rules.index(iap_allow), rules.index("tcp dport 22 drop"))
+        self.assertLess(rules.index(ssh_allow), rules.index(crawler_drop))
+        self.assertNotIn("tcp dport 22 drop", rules)
 
     def test_keeps_ipv6_inputs_and_normalizes_networks(self) -> None:
         rules = build_ru_firewall_rules(
@@ -65,14 +65,13 @@ class RuFirewallRuleTests(unittest.TestCase):
                 test_client_address="2001:db8:1::2",
                 eu_server_address="2001:db8:2::1",
                 eu_outline_address="2001:db8:2::1",
-                iap_source_range="2001:db8:3::/64",
                 rkn_ipv4=["198.51.100.0/24"],
                 rkn_ipv6=["2001:db8:ffff::/48"],
             )
         )
 
         self.assertIn("ip6 saddr 2001:db8:1::2 tcp dport 10001 accept", rules)
-        self.assertIn("ip6 saddr 2001:db8:3::/64 tcp dport 22 accept", rules)
+        self.assertIn("tcp dport 22 accept", rules)
         self.assertIn("ip6 daddr 2001:db8:2::1 tcp dport 10001 accept", rules)
 
     def test_rejects_missing_or_invalid_blacklists(self) -> None:
@@ -92,7 +91,6 @@ class RuFirewallRuleTests(unittest.TestCase):
             {"eu_outline_address": "outline-name"},
             {"eu_outline_port": 0},
             {"eu_outline_port": True},
-            {"iap_source_range": "35.235.240.0/19"},
         ):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 build_ru_firewall_rules(valid_config(**changes))

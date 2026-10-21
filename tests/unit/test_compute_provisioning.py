@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ipaddress
 import subprocess
 import tempfile
 import unittest
@@ -47,7 +46,6 @@ from fck_rkn.orchestration.test_environment import main as orchestrator_main
 def make_settings(**overrides: str) -> TestEnvironmentSettings:
     values = {
         "GCP_PROJECT_ID": "fck-rkn-test",
-        "GCP_IAP_SOURCE_RANGE": "configured-iap-source-range",
     }
     values.update(overrides)
     return TestEnvironmentSettings.model_construct(**values)
@@ -392,26 +390,14 @@ class ComputeProvisioningTests(unittest.TestCase):
         self.assertEqual(instance.tags.items, ["fck-rkn-test-eu-server-ssh"])
         self.assertFalse(instance.network_interfaces[0].access_configs)
 
-    def test_firewall_rules_allow_iap_and_deny_other_ipv4(self) -> None:
-        allow_rule, deny_rule = build_ssh_firewall_rules(make_settings())
+    def test_firewall_rule_allows_ssh_from_any_ipv4_source(self) -> None:
+        allow_rule = build_ssh_firewall_rules(make_settings())
 
-        self.assertEqual(
-            allow_rule.source_ranges,
-            ["configured-iap-source-range"],
-        )
+        self.assertEqual(allow_rule.source_ranges, ["0.0.0.0/0"])
         self.assertEqual(allow_rule.target_tags, ["fck-rkn-test-eu-server-ssh"])
         self.assertEqual(allow_rule.priority, 900)
         self.assertEqual(allow_rule.allowed[0].I_p_protocol, "tcp")
         self.assertEqual(allow_rule.allowed[0].ports, ["22"])
-        self.assertEqual(len(deny_rule.source_ranges), 1)
-        self.assertEqual(deny_rule.target_tags, allow_rule.target_tags)
-        self.assertEqual(deny_rule.priority, 1000)
-        self.assertEqual(len(deny_rule.source_ranges), 1)
-        deny_range = ipaddress.ip_network(deny_rule.source_ranges[0])
-        self.assertEqual(deny_range.prefixlen, 0)
-        self.assertTrue(deny_range.network_address.is_unspecified)
-        self.assertEqual(deny_rule.denied[0].I_p_protocol, "tcp")
-        self.assertEqual(deny_rule.denied[0].ports, ["22"])
 
     def test_cloud_nat_targets_selected_subnet_with_auto_allocated_ips(self) -> None:
         router = build_cloud_router(make_settings())
@@ -509,15 +495,6 @@ class ComputeProvisioningTests(unittest.TestCase):
             TestEnvironmentSettings(
                 _env_file=None,
                 GCP_PROJECT_ID="fck-rkn-production",
-                GCP_IAP_SOURCE_RANGE="not-an-ip-cidr",
-            )
-
-    def test_rejects_invalid_iap_source_range_configuration(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "currently documented"):
-            TestEnvironmentSettings(
-                _env_file=None,
-                GCP_PROJECT_ID="fck-rkn-test",
-                GCP_IAP_SOURCE_RANGE="not-an-ip-cidr",
             )
 
     def test_dotenv_syntax_error_reports_line_without_contents(self) -> None:
@@ -525,7 +502,7 @@ class ComputeProvisioningTests(unittest.TestCase):
             config_path = Path(directory) / "test.env"
             config_path.write_text(
                 "GCP_PROJECT_ID=fck-rkn-test\n"
-                "GCP_IAP_SOURCE_RANGE='unterminated\n",
+                "GCP_ZONE='unterminated\n",
                 encoding="utf-8",
             )
 
@@ -535,7 +512,7 @@ class ComputeProvisioningTests(unittest.TestCase):
         self.assertEqual(raised.exception.line, 2)
         self.assertNotIn("unterminated", str(raised.exception))
 
-    def test_missing_iap_setting_is_reported_as_missing_field(self) -> None:
+    def test_project_settings_do_not_require_an_iap_source_range(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "test.env"
             config_path.write_text(
@@ -543,13 +520,7 @@ class ComputeProvisioningTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with self.assertRaises(ValidationError) as raised:
-                load_config(config_path)
-
-        self.assertEqual(
-            raised.exception.errors(include_input=False)[0]["loc"],
-            ("GCP_IAP_SOURCE_RANGE",),
-        )
+            self.assertEqual(load_config(config_path).GCP_PROJECT_ID, "fck-rkn-test")
 
     def test_cli_reports_bad_env_line_without_exposing_its_contents(self) -> None:
         output = StringIO()
@@ -570,7 +541,7 @@ class ComputeProvisioningTests(unittest.TestCase):
         self.assertIn("KEY=value", output.getvalue())
         self.assertNotIn("secret", output.getvalue())
 
-    def test_cli_tells_operator_to_add_missing_iap_setting(self) -> None:
+    def test_cli_reports_missing_project_setting(self) -> None:
         output = StringIO()
         with (
             patch(
@@ -580,7 +551,7 @@ class ComputeProvisioningTests(unittest.TestCase):
                     [
                         {
                             "type": "missing",
-                            "loc": ("GCP_IAP_SOURCE_RANGE",),
+                            "loc": ("GCP_PROJECT_ID",),
                             "input": {},
                         }
                     ],
@@ -591,9 +562,7 @@ class ComputeProvisioningTests(unittest.TestCase):
             result = orchestrator_main()
 
         self.assertEqual(result, 2)
-        self.assertIn("GCP_IAP_SOURCE_RANGE", output.getvalue())
-        self.assertIn("official IAP TCP forwarding documentation", output.getvalue())
-        self.assertEqual(output.getvalue().count("GCP_IAP_SOURCE_RANGE"), 1)
+        self.assertIn("GCP_PROJECT_ID", output.getvalue())
 
     def test_reuses_existing_instance_without_inserting_duplicate(self) -> None:
         settings = make_settings()
@@ -630,28 +599,62 @@ class ComputeProvisioningTests(unittest.TestCase):
     def test_creates_missing_scoped_firewall_rules(self) -> None:
         settings = make_settings()
         firewalls_client = Mock()
-        firewalls_client.get.side_effect = [
-            NotFound("allow rule missing"),
-            NotFound("deny rule missing"),
-        ]
+        firewalls_client.get.side_effect = [NotFound("allow rule missing")]
+        firewalls_client.delete.side_effect = NotFound("legacy rule missing")
         operation = Mock()
         firewalls_client.insert.return_value = operation
 
         _ensure_ssh_firewall_rule(settings, firewalls_client)
 
-        self.assertEqual(firewalls_client.insert.call_count, 2)
+        self.assertEqual(firewalls_client.insert.call_count, 1)
         inserted_rules = [
             call.kwargs["firewall_resource"]
             for call in firewalls_client.insert.call_args_list
         ]
         self.assertEqual(
             [rule.name for rule in inserted_rules],
-            [
-                settings.GCP_SSH_FIREWALL_RULE,
-                f"{settings.GCP_SSH_FIREWALL_RULE}-deny",
-            ],
+            [settings.GCP_SSH_FIREWALL_RULE],
         )
-        self.assertEqual(operation.result.call_count, 2)
+        self.assertEqual(operation.result.call_count, 1)
+        firewalls_client.delete.assert_called_once_with(
+            project=settings.GCP_PROJECT_ID,
+            firewall=f"{settings.GCP_SSH_FIREWALL_RULE}-deny",
+        )
+
+    def test_removes_legacy_ssh_deny_rule(self) -> None:
+        settings = make_settings()
+        firewalls_client = Mock()
+        firewalls_client.get.return_value = build_ssh_firewall_rules(settings)
+        delete_operation = Mock()
+        firewalls_client.delete.return_value = delete_operation
+
+        _ensure_ssh_firewall_rule(settings, firewalls_client)
+
+        firewalls_client.delete.assert_called_once_with(
+            project=settings.GCP_PROJECT_ID,
+            firewall=f"{settings.GCP_SSH_FIREWALL_RULE}-deny",
+        )
+        delete_operation.result.assert_called_once()
+
+    def test_migrates_existing_iap_only_ssh_rule_to_any_source(self) -> None:
+        settings = make_settings()
+        old_rule = build_ssh_firewall_rules(settings)
+        old_rule.source_ranges = ["35.235.240.0/20"]
+        firewalls_client = Mock()
+        firewalls_client.get.return_value = old_rule
+        patch_operation = Mock()
+        firewalls_client.patch.return_value = patch_operation
+        firewalls_client.delete.side_effect = NotFound("legacy rule missing")
+
+        _ensure_ssh_firewall_rule(settings, firewalls_client)
+
+        desired = build_ssh_firewall_rules(settings)
+        firewalls_client.patch.assert_called_once_with(
+            project=settings.GCP_PROJECT_ID,
+            firewall=desired.name,
+            firewall_resource=desired,
+        )
+        patch_operation.result.assert_called_once()
 
     def test_creates_missing_instance_and_waits_for_ssh(self) -> None:
         settings = make_settings()
@@ -815,7 +818,7 @@ class ComputeProvisioningTests(unittest.TestCase):
 
     def test_rejects_existing_firewall_rule_with_unapproved_settings(self) -> None:
         settings = make_settings()
-        desired_allow, _ = build_ssh_firewall_rules(settings)
+        desired_allow = build_ssh_firewall_rules(settings)
         mismatched = compute_v1.Firewall(
             name=desired_allow.name,
             network=desired_allow.network,
@@ -832,7 +835,7 @@ class ComputeProvisioningTests(unittest.TestCase):
 
     def test_accepts_canonical_gcp_network_url_in_existing_rule(self) -> None:
         settings = make_settings()
-        desired_allow, _ = build_ssh_firewall_rules(settings)
+        desired_allow = build_ssh_firewall_rules(settings)
         existing = compute_v1.Firewall(
             name=desired_allow.name,
             network=(
@@ -850,7 +853,7 @@ class ComputeProvisioningTests(unittest.TestCase):
 
     def test_reports_mismatched_firewall_fields_without_values(self) -> None:
         settings = make_settings()
-        desired_allow, _ = build_ssh_firewall_rules(settings)
+        desired_allow = build_ssh_firewall_rules(settings)
         existing = compute_v1.Firewall(
             name=desired_allow.name,
             network="different-network",

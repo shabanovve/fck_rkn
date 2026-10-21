@@ -29,7 +29,6 @@ class OrchestratorPingTests(unittest.TestCase):
         self.settings = TestEnvironmentSettings.model_construct(
             GCP_PROJECT_ID="fck-rkn-test",
             GCP_ZONE="europe-north1-a",
-            GCP_IAP_SOURCE_RANGE="35.235.240.0/20",
         )
         self.instance = compute_v1.Instance(
             name="eu-server",
@@ -338,7 +337,6 @@ class OrchestratorPingTests(unittest.TestCase):
                 "eu_outline_address": "10.0.0.2",
                 "eu_outline_port": 10001,
                 "other_host_address": "1.1.1.1",
-                "iap_source_range": "35.235.240.0/20",
                 "rkn_ipv4": ["192.0.2.0/24"],
                 "rkn_ipv6": ["2001:db8::/32"],
             },
@@ -405,7 +403,6 @@ class OrchestratorPingTests(unittest.TestCase):
                 test_client_address="10.0.0.3",
                 eu_server_address="10.0.0.2",
                 eu_access_url=EU_OUTLINE_KEY,
-                iap_source_range="35.235.240.0/20",
                 other_host_address="1.1.1.1",
                 rkn_ipv4=["192.0.2.0/24"],
                 rkn_ipv6=["2001:db8::/32"],
