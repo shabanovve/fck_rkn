@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +19,7 @@ from fck_rkn.agents.test_client import (
     HTTP_REQUEST_COMMAND,
     check_squid_tunnel,
     check_mtproxy_tunnel,
+    check_restricted_service_paths,
     request_youtube,
     build_connection_deploy_command,
     check_outline_connection,
@@ -25,6 +29,7 @@ from fck_rkn.agents.test_client import (
     build_mtproxy_tunnel_config,
     main,
 )
+from fck_rkn.remote import render
 
 
 def make_access_url() -> str:
@@ -47,6 +52,62 @@ def make_settings(**overrides) -> AgentSettings:
 
 
 class TestClientAgentTests(unittest.TestCase):
+    def test_restricted_paths_check_tests_ru_and_eu_service_addresses(self) -> None:
+        runner = FakeRunner(stdout="blocked\n")
+
+        self.assertEqual(
+            check_restricted_service_paths(runner, "10.0.0.1", "10.0.0.2"), 0
+        )
+
+        self.assertIn("10.0.0.1", runner.command)
+        self.assertIn("10.0.0.2", runner.command)
+        self.assertIn("direct test-client path", runner.command)
+        self.assertIn("3128 8443", runner.command)
+        self.assertIn("non-IAP client", runner.command)
+        self.assertEqual(runner.stdin, "")
+
+    def test_restricted_paths_check_rejects_invalid_or_duplicate_addresses(self) -> None:
+        runner = FakeRunner()
+        with self.assertLogs("fck_rkn.agents.test_client", level="ERROR"):
+            self.assertEqual(
+                check_restricted_service_paths(runner, "ru-host", "10.0.0.2"), 1
+            )
+            self.assertEqual(
+                check_restricted_service_paths(runner, "10.0.0.2", "10.0.0.2"), 1
+            )
+        self.assertEqual(runner.calls, [])
+
+    def test_restricted_paths_script_fails_when_a_forbidden_port_is_open(self) -> None:
+        command = render(
+            "test_client_firewall_check.sh",
+            ru_server_address="10.0.0.1",
+            eu_server_address="10.0.0.2",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            timeout = Path(directory, "timeout")
+            timeout.write_text(
+                "#!/bin/sh\n"
+                'if [ "$OPEN_FORBIDDEN" = "$5:$6" ]; then exit 0; fi\n'
+                "exit 1\n"
+            )
+            timeout.chmod(0o755)
+            environment = {**os.environ, "PATH": f"{directory}:{os.environ['PATH']}"}
+            allowed = subprocess.run(
+                ["bash", "-c", command],
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+            forbidden = subprocess.run(
+                ["bash", "-c", command],
+                env={**environment, "OPEN_FORBIDDEN": "10.0.0.2:3128"},
+                capture_output=True,
+                text=True,
+            )
+        self.assertEqual(allowed.returncode, 0, allowed.stderr)
+        self.assertNotEqual(forbidden.returncode, 0)
+        self.assertIn("direct test-client path is reachable", forbidden.stderr)
+
     def test_connects_with_the_key_only_on_stdin(self) -> None:
         runner = FakeRunner(stdout="started\n")
 
@@ -229,6 +290,24 @@ class TestClientAgentTests(unittest.TestCase):
             stdin.readline.return_value = "ss://key\n"
             self.assertEqual(main(["connect-squid"]), 0)
         self.assertEqual(deploy.call_args.args[1:], ("ss://key\n",))
+
+    def test_cli_uses_configured_private_addresses_for_firewall_paths(self) -> None:
+        settings = make_settings(
+            RU_SERVER_PRIVATE_ADDRESS="10.0.0.1",
+            EU_SERVER_PRIVATE_ADDRESS="10.0.0.2",
+        )
+        with (
+            patch("fck_rkn.agents.test_client.load_agent_settings", return_value=settings),
+            patch("fck_rkn.agents.test_client.test_client_runner") as make_runner,
+            patch(
+                "fck_rkn.agents.test_client.check_restricted_service_paths",
+                return_value=0,
+            ) as check,
+        ):
+            self.assertEqual(main(["check-firewall-paths"]), 0)
+        check.assert_called_once_with(
+            make_runner.return_value, "10.0.0.1", "10.0.0.2"
+        )
 
     def test_cli_reads_the_key_from_stdin(self) -> None:
         with (

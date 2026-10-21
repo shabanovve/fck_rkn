@@ -672,7 +672,7 @@ behavior that requires them.
   and rollback after an activation failure. Live VM traffic verification is
   covered by tasks 78–79.
 
-### 78. Test RU server firewall rules
+### 78. [x] Test RU server firewall rules
 
 - **Test:** Extend `ru-server-test-agent` to verify allowed
   `test-client` web-proxy/MTProto requests and VPN-carried
@@ -685,13 +685,32 @@ behavior that requires them.
   `any-host`-to-`ru-server` sources. Verify a failed update reports an error
   while the previous saved configuration and live firewall rules remain
   active, and that an initial invalid configuration is not partially applied.
+- **Implementation started:** Added `ru-server-test-agent firewall-policy`
+  for live checks of the EU Outline transport, both approved RU forwards,
+  direct EU service denial, and representative RU-to-client/other-host egress
+  denial. Added `firewall-rollback` to exercise the real installer with an
+  invalid nftables replacement, compare saved/active policy before and after,
+  and verify an invalid first install leaves no policy files. Added
+  `test-client-agent check-firewall-paths` for denied direct
+  client-to-RU/EU service access and non-IAP SSH. Runtime host addresses are
+  validated and supplied through the existing private-address settings or
+  stdin; the RU check also requires populated active IPv4/IPv6 crawler sets.
+  No new firewall is installed on `test-client`. Live VM execution and a
+  source-address test from an isolated crawler-range network are performed
+  by orchestration task 79.
+- **Done:** Added test-agent checks for the defined RU allow/deny paths,
+  rollback behavior, and test-client direct-service denials. Targeted unit
+  tests verify these checks and their failure conditions. Running them on
+  provisioned VMs, including the isolated crawler-source case, belongs to
+  task 79 and is not a prerequisite for completing this test-agent task.
 
 ### 79. Deploy and test RU server firewall rules
 
 - **Orchestration:** Make `test_env_host` install RU server firewall rules
   and run the matching test-agent checks after the RU Outline endpoint and
-  both test-client local tunnels to RU have been deployed. Fail if any
-  defined allow/deny check has the wrong result.
+  both test-client local tunnels to RU have been deployed. Include an
+  isolated source in the configured crawler ranges to verify its requests
+  are blocked. Fail if any defined allow/deny check has the wrong result.
 
 ### 80. Add EU server firewall rules
 

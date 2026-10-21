@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import logging
 import sys
@@ -12,6 +13,7 @@ from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import MTPROXY_PORT, SQUID_PORT
 from fck_rkn.agent_config import load_agent_settings, test_client_runner
+from fck_rkn.remote import render
 from fck_rkn.agents.ru_server import (
     CLIENT_DEPLOY_TIMEOUT_SECONDS,
     CLIENT_IMAGE,
@@ -21,7 +23,6 @@ from fck_rkn.agents.ru_server import (
     parse_access_url,
     run_remote_with_input,
 )
-from fck_rkn.remote import render
 from fck_rkn.remote.runner import RemoteRunner, execute
 
 
@@ -250,6 +251,32 @@ def check_mtproxy_tunnel(runner: RemoteRunner) -> int:
     )
 
 
+def check_restricted_service_paths(
+    runner: RemoteRunner, ru_server_address: str, eu_server_address: str
+) -> int:
+    """Verify direct client service access is blocked on RU and EU."""
+    try:
+        ru_address = ipaddress.ip_address(ru_server_address).compressed
+        eu_address = ipaddress.ip_address(eu_server_address).compressed
+    except ValueError as error:
+        logger.error("Firewall test server addresses must be IP addresses")
+        return 1
+    if ru_address == eu_address:
+        logger.error("RU and EU firewall test addresses must be distinct")
+        return 1
+    command = render(
+        "test_client_firewall_check.sh",
+        ru_server_address=ru_address,
+        eu_server_address=eu_address,
+    )
+    return run_remote_with_input(
+        runner,
+        command,
+        "",
+        "Checking that test-client cannot connect directly to RU or EU services",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run test-client actions.")
     parser.add_argument(
@@ -261,6 +288,7 @@ def main(argv: list[str] | None = None) -> int:
             "check-squid",
             "connect-mtproxy",
             "check-mtproxy",
+            "check-firewall-paths",
             "request-youtube",
         ),
         help="Action to run",
@@ -285,6 +313,12 @@ def main(argv: list[str] | None = None) -> int:
         return check_squid_tunnel(runner)
     if args.action == "check-mtproxy":
         return check_mtproxy_tunnel(runner)
+    if args.action == "check-firewall-paths":
+        return check_restricted_service_paths(
+            runner,
+            settings.RU_SERVER_PRIVATE_ADDRESS,
+            settings.EU_SERVER_PRIVATE_ADDRESS,
+        )
     if args.action == "request-youtube":
         return request_youtube(runner)
 
