@@ -704,13 +704,24 @@ behavior that requires them.
   provisioned VMs, including the isolated crawler-source case, belongs to
   task 79 and is not a prerequisite for completing this test-agent task.
 
-### 79. Deploy and test RU server firewall rules
+### 79. [x] Deploy and test RU server firewall rules
 
 - **Orchestration:** Make `test_env_host` install RU server firewall rules
   and run the matching test-agent checks after the RU Outline endpoint and
   both test-client local tunnels to RU have been deployed. Include an
   isolated source in the configured crawler ranges to verify its requests
   are blocked. Fail if any defined allow/deny check has the wrong result.
+- **Scope:** Verify direct test-client denial to RU services here. EU firewall
+  rules are not installed until task 82, so defer direct test-client-to-EU
+  denial to that orchestration rather than asserting a result before EU
+  enforcement exists.
+- **Done:** `test_env_host` fetches and validates the
+  crawler blacklist, builds firewall input from runtime VM addresses, applies
+  RU rules, and runs policy, rollback, isolated crawler-source, and direct
+  client-to-RU checks before the final proxy request. Unit coverage exercises
+  configuration validation, successful workflow ordering, and failure
+  handling. Running the orchestration on VMs is not a prerequisite for
+  completing this task.
 
 ### 80. Add EU server firewall rules
 

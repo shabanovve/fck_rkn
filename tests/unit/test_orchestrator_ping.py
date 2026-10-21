@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import json
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -12,7 +13,15 @@ from fck_rkn.config import TestEnvironmentSettings
 from fck_rkn.gcp.runner import GcloudIapRunner
 
 EU_RUNNER = GcloudIapRunner("eu-server", "fck-rkn-test", "europe-north1-a")
-from fck_rkn.orchestration.test_environment import main
+EU_OUTLINE_KEY = (
+    "ss://dGVzdC1tZXRob2Q6dGVzdC1zZWNyZXQ=@10.0.0.2:10001/?outline=1"
+)
+from fck_rkn.orchestration.test_environment import (
+    _blacklist_networks,
+    _crawler_probe_address,
+    build_ru_firewall_configuration,
+    main,
+)
 
 
 class OrchestratorPingTests(unittest.TestCase):
@@ -20,12 +29,13 @@ class OrchestratorPingTests(unittest.TestCase):
         self.settings = TestEnvironmentSettings.model_construct(
             GCP_PROJECT_ID="fck-rkn-test",
             GCP_ZONE="europe-north1-a",
+            GCP_IAP_SOURCE_RANGE="35.235.240.0/20",
         )
         self.instance = compute_v1.Instance(
             name="eu-server",
             status="RUNNING",
             network_interfaces=[
-                compute_v1.NetworkInterface(network_i_p="eu.internal")
+                compute_v1.NetworkInterface(network_i_p="10.0.0.2")
             ],
         )
         self.outline_deploy = patch(
@@ -57,7 +67,7 @@ class OrchestratorPingTests(unittest.TestCase):
             return_value=compute_v1.Instance(
                 name="ru-server",
                 network_interfaces=[
-                    compute_v1.NetworkInterface(network_i_p="ru.internal")
+                    compute_v1.NetworkInterface(network_i_p="10.0.0.1")
                 ],
             ),
         )
@@ -71,7 +81,12 @@ class OrchestratorPingTests(unittest.TestCase):
         self.addCleanup(self.client_lookup.stop)
         self.client_ensure = patch(
             "fck_rkn.orchestration.test_environment.ensure_test_client",
-            return_value=compute_v1.Instance(name="test-client"),
+            return_value=compute_v1.Instance(
+                name="test-client",
+                network_interfaces=[
+                    compute_v1.NetworkInterface(network_i_p="10.0.0.3")
+                ],
+            ),
         )
         self.client_ensure_mock = self.client_ensure.start()
         self.addCleanup(self.client_ensure.stop)
@@ -105,6 +120,24 @@ class OrchestratorPingTests(unittest.TestCase):
         self.client_check_mock = self.client_check.start()
         self.addCleanup(self.client_connect.stop)
         self.addCleanup(self.client_check.stop)
+        self.client_mtproxy_deploy = patch(
+            "fck_rkn.orchestration.test_environment.deploy_mtproxy_tunnel",
+            return_value=0,
+        )
+        self.client_mtproxy_check = patch(
+            "fck_rkn.orchestration.test_environment.check_mtproxy_tunnel",
+            return_value=0,
+        )
+        self.client_restricted_paths = patch(
+            "fck_rkn.orchestration.test_environment.check_restricted_service_paths",
+            return_value=0,
+        )
+        self.client_mtproxy_deploy_mock = self.client_mtproxy_deploy.start()
+        self.client_mtproxy_check_mock = self.client_mtproxy_check.start()
+        self.client_restricted_paths_mock = self.client_restricted_paths.start()
+        self.addCleanup(self.client_mtproxy_deploy.stop)
+        self.addCleanup(self.client_mtproxy_check.stop)
+        self.addCleanup(self.client_restricted_paths.stop)
         self.ru_outline_deploy = patch(
             "fck_rkn.orchestration.test_environment.deploy_outline_server",
             return_value=0,
@@ -131,7 +164,7 @@ class OrchestratorPingTests(unittest.TestCase):
             self.addCleanup(image_patch.stop)
         self.ru_key = patch(
             "fck_rkn.orchestration.test_environment.create_outline_user",
-            return_value="ss://configured-key",
+            return_value=EU_OUTLINE_KEY,
         )
         self.ru_client_deploy = patch(
             "fck_rkn.orchestration.test_environment.deploy_outline_client",
@@ -176,6 +209,21 @@ class OrchestratorPingTests(unittest.TestCase):
         self.addCleanup(self.ru_client_check.stop)
         self.ru_key_mock = self.ru_key.start()
         self.addCleanup(self.ru_key.stop)
+        self.firewall_mocks = {}
+        for name in (
+            "apply_ru_firewall",
+            "check_firewall_policy",
+            "check_firewall_rollback",
+            "check_firewall_crawler_source",
+            "fetch_rkn_blacklist",
+        ):
+            value = (["192.0.2.0/24"], ["2001:db8::/32"]) if name == "fetch_rkn_blacklist" else 0
+            firewall_patch = patch(
+                f"fck_rkn.orchestration.test_environment.{name}",
+                return_value=value,
+            )
+            self.firewall_mocks[name] = firewall_patch.start()
+            self.addCleanup(firewall_patch.stop)
 
     def test_invokes_ping_only_after_project_and_vm_checks_pass(self) -> None:
         output = StringIO()
@@ -233,17 +281,17 @@ class OrchestratorPingTests(unittest.TestCase):
             [call(EU_RUNNER, archive), call(ru_runner, archive)],
         )
         self.ru_outline_deploy_mock.assert_called_once_with(
-            ru_runner, "ru.internal"
+            ru_runner, "10.0.0.1"
         )
         self.ru_outline_health_mock.assert_called_once_with(ru_runner)
         self.ru_client_deploy_mock.assert_called_once_with(
-            ru_runner, "ss://configured-key"
+            ru_runner, EU_OUTLINE_KEY
         )
         self.ru_client_check_mock.assert_called_once_with(
-            ru_runner, "ss://configured-key"
+            ru_runner, EU_OUTLINE_KEY
         )
         self.ru_forward_deploy_mock.assert_called_once_with(
-            ru_runner, "ss://configured-key"
+            ru_runner, EU_OUTLINE_KEY
         )
         client_runner = GcloudIapRunner(
             "test-client", "fck-rkn-test", "europe-north1-a"
@@ -253,10 +301,10 @@ class OrchestratorPingTests(unittest.TestCase):
             call(ru_runner, "test-client"),
         )
         self.client_connect_mock.assert_called_once_with(
-            client_runner, "ss://configured-key"
+            client_runner, EU_OUTLINE_KEY
         )
         self.client_check_mock.assert_called_once_with(
-            client_runner, "ss://configured-key"
+            client_runner, EU_OUTLINE_KEY
         )
         self.assertEqual(
             self.ru_forward_check_mock.call_args_list,
@@ -264,7 +312,7 @@ class OrchestratorPingTests(unittest.TestCase):
         )
         for name, mock in self.ru_tunnel_mocks.items():
             if name == "deploy_mtproxy_forward":
-                mock.assert_called_once_with(ru_runner, "ss://configured-key")
+                mock.assert_called_once_with(ru_runner, EU_OUTLINE_KEY)
             elif name == "check_mtproxy_forward":
                 self.assertEqual(mock.call_args_list, [call(ru_runner)] * 2)
             else:
@@ -274,9 +322,99 @@ class OrchestratorPingTests(unittest.TestCase):
         squid_check.assert_called_once_with(EU_RUNNER)
         http_check.assert_called_once_with(EU_RUNNER)
         self.outline_deploy_mock.assert_called_once_with(
-            EU_RUNNER, "eu.internal"
+            EU_RUNNER, "10.0.0.2"
         )
         self.outline_check_mock.assert_called_once_with(EU_RUNNER)
+        self.firewall_mocks["fetch_rkn_blacklist"].assert_called_once_with()
+        self.firewall_mocks["apply_ru_firewall"].assert_called_once()
+        firewall_payload = self.firewall_mocks[
+            "apply_ru_firewall"
+        ].call_args.args[1]
+        self.assertEqual(
+            json.loads(firewall_payload),
+            {
+                "test_client_address": "10.0.0.3",
+                "eu_server_address": "10.0.0.2",
+                "eu_outline_address": "10.0.0.2",
+                "eu_outline_port": 10001,
+                "other_host_address": "1.1.1.1",
+                "iap_source_range": "35.235.240.0/20",
+                "rkn_ipv4": ["192.0.2.0/24"],
+                "rkn_ipv6": ["2001:db8::/32"],
+            },
+        )
+        self.firewall_mocks["check_firewall_policy"].assert_called_once_with(
+            ru_runner, firewall_payload
+        )
+        self.firewall_mocks["check_firewall_rollback"].assert_called_once_with(
+            ru_runner
+        )
+        self.firewall_mocks["check_firewall_crawler_source"].assert_called_once_with(
+            ru_runner, "10.0.0.1", "192.0.2.0"
+        )
+        self.client_mtproxy_deploy_mock.assert_called_once_with(
+            client_runner, EU_OUTLINE_KEY
+        )
+        self.client_mtproxy_check_mock.assert_called_once_with(client_runner)
+        self.client_restricted_paths_mock.assert_called_once_with(
+            client_runner, "10.0.0.1", None
+        )
+
+    def test_parses_non_empty_ipv4_and_ipv6_blacklist_sets(self) -> None:
+        artifact = """table inet filter {
+          set blacklist_v4 {
+            type ipv4_addr
+            elements = { 192.0.2.0/24, 198.51.100.1 }
+          }
+          set blacklist_v6 {
+            type ipv6_addr
+            elements = { 2001:db8::/32 }
+          }
+        }"""
+
+        self.assertEqual(
+            _blacklist_networks(artifact, "blacklist_v4", 4),
+            ["192.0.2.0/24", "198.51.100.1/32"],
+        )
+        self.assertEqual(
+            _blacklist_networks(artifact, "blacklist_v6", 6),
+            ["2001:db8::/32"],
+        )
+        self.assertEqual(
+            _crawler_probe_address(["192.0.2.0/24"]),
+            "192.0.2.0",
+        )
+
+    def test_rejects_empty_missing_malformed_or_wrong_family_blacklist(self) -> None:
+        for artifact, set_name, version in (
+            ("", "blacklist_v4", 4),
+            ("set blacklist_v4 { elements = { } }", "blacklist_v4", 4),
+            ("set blacklist_v4 { elements = { invalid } }", "blacklist_v4", 4),
+            (
+                "set blacklist_v4 { elements = { 2001:db8::/32 } }",
+                "blacklist_v4",
+                4,
+            ),
+        ):
+            with self.subTest(artifact=artifact), self.assertRaises(ValueError):
+                _blacklist_networks(artifact, set_name, version)
+
+    def test_builds_ru_firewall_inputs_from_runtime_addresses_and_outline_key(self) -> None:
+        config = json.loads(
+            build_ru_firewall_configuration(
+                test_client_address="10.0.0.3",
+                eu_server_address="10.0.0.2",
+                eu_access_url=EU_OUTLINE_KEY,
+                iap_source_range="35.235.240.0/20",
+                other_host_address="1.1.1.1",
+                rkn_ipv4=["192.0.2.0/24"],
+                rkn_ipv6=["2001:db8::/32"],
+            )
+        )
+
+        self.assertEqual(config["eu_outline_address"], "10.0.0.2")
+        self.assertEqual(config["eu_outline_port"], 10001)
+        self.assertEqual(config["test_client_address"], "10.0.0.3")
 
     def test_fails_workflow_when_ping_agent_returns_nonzero(self) -> None:
         stderr = StringIO()
@@ -483,7 +621,7 @@ class OrchestratorPingTests(unittest.TestCase):
 
         self.assertEqual(result, 10)
         self.outline_deploy_mock.assert_called_once_with(
-            EU_RUNNER, "eu.internal"
+            EU_RUNNER, "10.0.0.2"
         )
         self.outline_check_mock.assert_not_called()
         self.assertIn("Outline deployment failed", stderr.getvalue())
@@ -528,7 +666,7 @@ class OrchestratorPingTests(unittest.TestCase):
 
         self.assertEqual(result, 11)
         self.outline_deploy_mock.assert_called_once_with(
-            EU_RUNNER, "eu.internal"
+            EU_RUNNER, "10.0.0.2"
         )
         self.outline_check_mock.assert_called_once_with(EU_RUNNER)
         self.assertIn("Outline health check failed", stderr.getvalue())
@@ -576,7 +714,7 @@ class OrchestratorPingTests(unittest.TestCase):
         self.assertIn("Outline access key", stderr.getvalue())
 
     def test_fails_when_test_client_key_cannot_be_created(self) -> None:
-        self.ru_key_mock.side_effect = ["ss://configured-key", None]
+        self.ru_key_mock.side_effect = [EU_OUTLINE_KEY, None]
 
         result, stderr = self.run_main_with_healthy_eu()
 
@@ -650,13 +788,69 @@ class OrchestratorPingTests(unittest.TestCase):
             GcloudIapRunner("test-client", "fck-rkn-test", "europe-north1-a")
         )
 
-    def test_squid_tunnel_is_deployed_with_the_test_key_and_eu_address(self) -> None:
+    def test_firewall_orchestration_failures_stop_at_the_failing_check(self) -> None:
+        failure_cases = (
+            ("apply_ru_firewall", 47, "check_firewall_policy"),
+            ("check_firewall_policy", 48, "check_firewall_rollback"),
+            ("check_firewall_rollback", 49, "check_firewall_crawler_source"),
+            ("check_firewall_crawler_source", 50, "check_restricted_service_paths"),
+            ("check_restricted_service_paths", 51, "client_request"),
+        )
+        for failing_step, expected_code, later_step in failure_cases:
+            with self.subTest(step=failing_step):
+                for mock in self.firewall_mocks.values():
+                    mock.reset_mock(return_value=False, side_effect=False)
+                    if mock is self.firewall_mocks["fetch_rkn_blacklist"]:
+                        mock.return_value = (["192.0.2.0/24"], ["2001:db8::/32"])
+                    else:
+                        mock.return_value = 0
+                self.client_restricted_paths_mock.reset_mock(return_value=False)
+                self.client_restricted_paths_mock.return_value = 0
+                self.client_request_mock.reset_mock(return_value=False)
+                self.client_request_mock.return_value = 0
+                if failing_step == "check_restricted_service_paths":
+                    self.client_restricted_paths_mock.return_value = 1
+                else:
+                    self.firewall_mocks[failing_step].return_value = 1
+
+                result, stderr = self.run_main_with_healthy_eu()
+
+                self.assertEqual(result, expected_code)
+                if later_step == "client_request":
+                    self.client_request_mock.assert_not_called()
+                elif later_step == "check_restricted_service_paths":
+                    self.client_restricted_paths_mock.assert_not_called()
+                else:
+                    self.firewall_mocks[later_step].assert_not_called()
+                self.assertIn("failed", stderr.getvalue().lower())
+
+    def test_firewall_blacklist_fetch_failure_stops_before_installation(self) -> None:
+        self.firewall_mocks["fetch_rkn_blacklist"].side_effect = RuntimeError(
+            "upstream unavailable"
+        )
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 46)
+        self.firewall_mocks["apply_ru_firewall"].assert_not_called()
+        self.assertIn("Preparing RU firewall inputs failed", stderr.getvalue())
+
+    def test_firewall_install_failure_stops_before_firewall_tests(self) -> None:
+        self.firewall_mocks["apply_ru_firewall"].return_value = 1
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 47)
+        self.firewall_mocks["check_firewall_policy"].assert_not_called()
+        self.assertIn("firewall installation failed", stderr.getvalue())
+
+    def test_squid_tunnel_is_deployed_with_the_test_key_and_ru_local_target(self) -> None:
         result, _ = self.run_main_with_healthy_eu()
 
         self.assertEqual(result, 0)
         args = self.squid_tunnel_deploy_mock.call_args.args
-        self.assertEqual(args[1], "ss://configured-key")
-        self.assertTrue(args[2])
+        self.assertEqual(args[1], EU_OUTLINE_KEY)
+        self.assertEqual(len(args), 2)
         self.squid_tunnel_check_mock.assert_called_once()
 
     def test_stops_when_the_image_cannot_be_built_or_exported(self) -> None:
@@ -808,7 +1002,7 @@ class OrchestratorPingTests(unittest.TestCase):
         self.ru_tunnel_mocks["deploy_mtproxy_forward"].assert_called_once()
         self.assertEqual(
             self.ru_tunnel_mocks["deploy_mtproxy_forward"].call_args.args[1],
-            "ss://configured-key",
+            EU_OUTLINE_KEY,
         )
 
     def test_fails_when_test_client_lookup_fails(self) -> None:

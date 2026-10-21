@@ -66,6 +66,16 @@ class TestClientAgentTests(unittest.TestCase):
         self.assertIn("non-IAP client", runner.command)
         self.assertEqual(runner.stdin, "")
 
+    def test_restricted_paths_check_can_limit_scope_to_ru_before_eu_firewall(self) -> None:
+        runner = FakeRunner(stdout="blocked\n")
+
+        self.assertEqual(check_restricted_service_paths(runner, "10.0.0.1", None), 0)
+
+        self.assertIn("10.0.0.1", runner.command)
+        self.assertNotIn("@EU_SERVER_ADDRESS@", runner.command)
+        self.assertIn('if [[ -n "$eu_server_address" ]]', runner.command)
+        self.assertNotIn("10.0.0.2", runner.command)
+
     def test_restricted_paths_check_rejects_invalid_or_duplicate_addresses(self) -> None:
         runner = FakeRunner()
         with self.assertLogs("fck_rkn.agents.test_client", level="ERROR"):

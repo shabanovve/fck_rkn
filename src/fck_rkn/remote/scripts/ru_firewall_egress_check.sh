@@ -66,5 +66,6 @@ done
 expect_blocked "$eu_server" 22 "RU-to-EU SSH"
 expect_blocked "$test_client" 22 "RU-to-test-client SSH"
 expect_blocked "$other_host" "$outline_port" "RU-to-other-host Outline port"
+expect_blocked "$other_host" 443 "RU-to-other-host HTTPS"
 
 echo "RU firewall allows the EU Outline transport and blocks representative direct egress"

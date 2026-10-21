@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import ipaddress
+import json
 import logging
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
@@ -29,6 +33,7 @@ from fck_rkn.agents.eu_server_test import (
 )
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.ru_server import (
+    apply_ru_firewall,
     deploy_outline_client,
     deploy_mtproxy_forward,
     deploy_outline_server,
@@ -37,15 +42,22 @@ from fck_rkn.agents.ru_server import (
     recover_tunnel,
     stop_mtproxy_forward,
     stop_tunnel,
+    parse_access_url,
 )
 from fck_rkn.agents.test_client import (
+    check_mtproxy_tunnel,
+    check_restricted_service_paths,
     check_outline_connection,
     check_squid_tunnel,
     connect_to_outline,
+    deploy_mtproxy_tunnel,
     deploy_squid_tunnel,
     request_youtube,
 )
 from fck_rkn.agents.ru_server_test import (
+    check_firewall_crawler_source,
+    check_firewall_policy,
+    check_firewall_rollback,
     check_outline_client,
     check_outline_health as check_ru_outline_health,
     check_mtproxy_forward,
@@ -75,6 +87,115 @@ from fck_rkn.orchestration.outline_image import (
 logger = logging.getLogger(__name__)
 RU_PROBE_OUTLINE_USER = "ru-server-feasibility-probe"
 TEST_CLIENT_OUTLINE_USER = "test-client"
+RKN_BLACKLIST_URL = (
+    "https://raw.githubusercontent.com/C24Be/AS_Network_List/main/"
+    "blacklists_nftables/blacklist.nft"
+)
+RKN_BLACKLIST_TIMEOUT_SECONDS = 30
+OTHER_HOST_TEST_ADDRESS = "1.1.1.1"
+
+
+def _blacklist_networks(content: str, set_name: str, version: int) -> list[str]:
+    """Extract and validate one non-empty address set from the upstream nft file."""
+    marker = f"set {set_name}"
+    set_start = content.find(marker)
+    if set_start < 0:
+        raise ValueError(f"RKN blacklist is missing {set_name}")
+    elements_start = content.find("elements", set_start)
+    if elements_start < 0:
+        raise ValueError(f"RKN blacklist set {set_name} has no elements")
+    opening_brace = content.find("{", elements_start)
+    closing_brace = content.find("}", opening_brace + 1)
+    if opening_brace < 0 or closing_brace < 0:
+        raise ValueError(f"RKN blacklist set {set_name} is malformed")
+    values: set[str] = set()
+    for raw_value in content[opening_brace + 1 : closing_brace].split(","):
+        value = raw_value.strip()
+        if not value:
+            continue
+        try:
+            network = ipaddress.ip_network(value, strict=False)
+        except ValueError as error:
+            raise ValueError(
+                f"RKN blacklist set {set_name} contains an invalid network"
+            ) from error
+        if network.version != version:
+            raise ValueError(
+                f"RKN blacklist set {set_name} contains the wrong IP version"
+            )
+        values.add(network.with_prefixlen)
+    if not values:
+        raise ValueError(f"RKN blacklist set {set_name} is empty")
+    return sorted(
+        values,
+        key=lambda value: (
+            int(ipaddress.ip_network(value).network_address),
+            ipaddress.ip_network(value).prefixlen,
+        ),
+    )
+
+
+def fetch_rkn_blacklist() -> tuple[list[str], list[str]]:
+    """Fetch the confirmed mixed IPv4/IPv6 crawler blacklist artifact."""
+    request = urllib.request.Request(
+        RKN_BLACKLIST_URL,
+        headers={"User-Agent": "fck-rkn-test-firewall"},
+    )
+    try:
+        with urllib.request.urlopen(
+            request, timeout=RKN_BLACKLIST_TIMEOUT_SECONDS
+        ) as response:
+            content = response.read().decode("utf-8")
+    except (OSError, UnicodeError, urllib.error.URLError) as error:
+        raise RuntimeError("Could not fetch the RKN crawler blacklist") from error
+    ipv4 = _blacklist_networks(content, "blacklist_v4", 4)
+    ipv6 = _blacklist_networks(content, "blacklist_v6", 6)
+    return ipv4, ipv6
+
+
+def _crawler_probe_address(networks: list[str]) -> str:
+    if not networks:
+        raise ValueError("The RKN IPv4 crawler ranges are empty")
+    try:
+        network = ipaddress.ip_network(networks[0], strict=True)
+    except ValueError as error:
+        raise ValueError("The first RKN IPv4 crawler range is invalid") from error
+    if network.version != 4:
+        raise ValueError("The crawler-source probe requires an IPv4 range")
+    return str(network.network_address)
+
+
+def build_ru_firewall_configuration(
+    *,
+    test_client_address: str,
+    eu_server_address: str,
+    eu_access_url: str,
+    iap_source_range: str,
+    other_host_address: str,
+    rkn_ipv4: list[str],
+    rkn_ipv6: list[str],
+) -> str:
+    """Build the non-secret runtime input accepted by the RU firewall agent."""
+    try:
+        _, _, outline_address, outline_port = parse_access_url(eu_access_url)
+    except ValueError as error:
+        raise ValueError("EU Outline access URL is invalid") from error
+    return json.dumps(
+        {
+            "test_client_address": ipaddress.ip_address(
+                test_client_address
+            ).compressed,
+            "eu_server_address": ipaddress.ip_address(eu_server_address).compressed,
+            "eu_outline_address": ipaddress.ip_address(outline_address).compressed,
+            "eu_outline_port": outline_port,
+            "other_host_address": ipaddress.ip_address(
+                other_host_address
+            ).compressed,
+            "iap_source_range": str(ipaddress.ip_network(iap_source_range, strict=True)),
+            "rkn_ipv4": rkn_ipv4,
+            "rkn_ipv6": rkn_ipv6,
+        }
+    )
 
 
 def _shutdown_vms(settings: TestEnvironmentSettings) -> int:
@@ -597,11 +718,6 @@ def _run(image_directory: Path) -> int:
             33,
         ),
         ("Squid tunnel check", lambda: check_squid_tunnel(client_runner), 34),
-        (
-            "youtube.com request through the proxy path",
-            lambda: request_youtube(client_runner),
-            35,
-        ),
     )
     for description, step, failure_code in squid_tunnel_steps:
         logger.info("Running test-client %s", description)
@@ -618,9 +734,117 @@ def _run(image_directory: Path) -> int:
                 file=sys.stderr,
             )
             return failure_code
-    logger.info(
-        "test-client reached youtube.com only through EU Squid via RU Outline"
+    mtproxy_tunnel_steps = (
+        (
+            "MTProxy tunnel deployment",
+            lambda: deploy_mtproxy_tunnel(client_runner, client_access_url),
+            44,
+        ),
+        (
+            "MTProxy tunnel check",
+            lambda: check_mtproxy_tunnel(client_runner),
+            45,
+        ),
     )
+    for description, step, failure_code in mtproxy_tunnel_steps:
+        logger.info("Running test-client %s", description)
+        step_exit_code = step()
+        if step_exit_code != 0:
+            logger.error(
+                "test-client %s failed with exit status %d",
+                description,
+                step_exit_code,
+            )
+            print(
+                f"test-client {description} failed with exit status "
+                f"{step_exit_code}.",
+                file=sys.stderr,
+            )
+            return failure_code
+
+    try:
+        test_client_private_address = private_address_of(test_client)
+        rkn_ipv4, rkn_ipv6 = fetch_rkn_blacklist()
+        firewall_config = build_ru_firewall_configuration(
+            test_client_address=test_client_private_address,
+            eu_server_address=eu_private_address,
+            eu_access_url=access_url,
+            iap_source_range=settings.GCP_IAP_SOURCE_RANGE,
+            other_host_address=OTHER_HOST_TEST_ADDRESS,
+            rkn_ipv4=rkn_ipv4,
+            rkn_ipv6=rkn_ipv6,
+        )
+    except (OSError, RuntimeError, ValueError) as error:
+        logger.error("Preparing RU firewall inputs failed: %s", error)
+        print(f"Preparing RU firewall inputs failed: {error}", file=sys.stderr)
+        return 46
+
+    logger.info("Installing the plan-item-10 firewall on ru-server")
+    firewall_apply_exit_code = apply_ru_firewall(ru_runner, firewall_config)
+    if firewall_apply_exit_code != 0:
+        logger.error(
+            "ru-server-agent firewall installation failed with exit status %d",
+            firewall_apply_exit_code,
+        )
+        print(
+            "ru-server-agent firewall installation failed with exit status "
+            f"{firewall_apply_exit_code}.",
+            file=sys.stderr,
+        )
+        return 47
+
+    firewall_checks = (
+        (
+            "RU firewall policy",
+            lambda: check_firewall_policy(ru_runner, firewall_config),
+            48,
+        ),
+        ("RU firewall rollback", lambda: check_firewall_rollback(ru_runner), 49),
+        (
+            "isolated crawler-source rejection",
+            lambda: check_firewall_crawler_source(
+                ru_runner,
+                ru_private_address,
+                _crawler_probe_address(rkn_ipv4),
+            ),
+            50,
+        ),
+        (
+            "test-client direct-service denial",
+            lambda: check_restricted_service_paths(
+                client_runner, ru_private_address, None
+            ),
+            51,
+        ),
+    )
+    for description, step, failure_code in firewall_checks:
+        logger.info("Running %s check", description)
+        step_exit_code = step()
+        if step_exit_code != 0:
+            logger.error(
+                "%s check failed with exit status %d", description, step_exit_code
+            )
+            print(
+                f"{description} check failed with exit status {step_exit_code}.",
+                file=sys.stderr,
+            )
+            return failure_code
+    logger.info("RU firewall allow, deny, rollback, and crawler-source checks passed")
+
+    logger.info("Running test-client youtube.com request through the proxy path")
+    client_request_exit_code = request_youtube(client_runner)
+    if client_request_exit_code != 0:
+        logger.error(
+            "test-client youtube.com request failed with exit status %d",
+            client_request_exit_code,
+        )
+        print(
+            "test-client youtube.com request failed with exit status "
+            f"{client_request_exit_code}.",
+            file=sys.stderr,
+        )
+        return 35
+    logger.info("test-client reached youtube.com through RU and EU Outline")
 
     print(
         f"{ru_instance.name} is available in project "

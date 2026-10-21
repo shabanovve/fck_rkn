@@ -229,6 +229,52 @@ def check_firewall_rollback(runner: RemoteRunner) -> int:
     )
 
 
+def build_crawler_source_check_command() -> str:
+    return render("ru_firewall_crawler_source_check.sh")
+
+
+def check_firewall_crawler_source(
+    runner: RemoteRunner, ru_server_address: str, crawler_source_address: str
+) -> int:
+    """Send an isolated packet from a crawler-range source through RU input."""
+    try:
+        ru_address = ipaddress.ip_address(ru_server_address)
+        crawler_address = ipaddress.ip_address(crawler_source_address)
+    except (TypeError, ValueError) as error:
+        logger.error("RU and crawler test addresses must be valid IP addresses")
+        return 1
+    if ru_address.version != 4 or crawler_address.version != 4:
+        logger.error("The isolated crawler-source check requires IPv4 addresses")
+        return 1
+    return run_remote_with_input(
+        runner,
+        build_crawler_source_check_command(),
+        json.dumps(
+            {
+                "ru_server_address": ru_address.compressed,
+                "crawler_source_address": crawler_address.compressed,
+            }
+        ),
+        "Checking RU firewall rejection of an isolated crawler-range source",
+        timeout=60,
+    )
+
+
+def check_firewall_crawler_source_from_config(
+    runner: RemoteRunner, config_json: str
+) -> int:
+    try:
+        config = json.loads(config_json)
+        if not isinstance(config, dict):
+            raise ValueError("crawler-source test configuration must be an object")
+        ru_address = config["ru_server_address"]
+        crawler_address = config["crawler_source_address"]
+    except (KeyError, TypeError, ValueError) as error:
+        logger.error("Invalid crawler-source test configuration: %s", error)
+        return 1
+    return check_firewall_crawler_source(runner, ru_address, crawler_address)
+
+
 def check_firewall_policy(runner: RemoteRunner, config_json: str) -> int:
     """Check both permitted Outline forwards and the RU firewall egress policy."""
     for description, check in (
@@ -254,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
             "tunnel-blocked",
             "firewall-policy",
             "firewall-rollback",
+            "firewall-crawler-source",
         ),
         help="Check to run",
     )
@@ -285,6 +332,8 @@ def main(argv: list[str] | None = None) -> int:
         return check_tunnel_blocked(runner)
     if args.action == "firewall-rollback":
         return check_firewall_rollback(runner)
+    if args.action == "firewall-crawler-source":
+        return check_firewall_crawler_source_from_config(runner, sys.stdin.read())
     if args.action == "firewall-policy":
         return check_firewall_policy(runner, sys.stdin.read())
 

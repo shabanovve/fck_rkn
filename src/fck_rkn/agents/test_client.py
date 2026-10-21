@@ -252,16 +252,22 @@ def check_mtproxy_tunnel(runner: RemoteRunner) -> int:
 
 
 def check_restricted_service_paths(
-    runner: RemoteRunner, ru_server_address: str, eu_server_address: str
+    runner: RemoteRunner,
+    ru_server_address: str,
+    eu_server_address: str | None,
 ) -> int:
-    """Verify direct client service access is blocked on RU and EU."""
+    """Verify direct client service access is blocked on selected servers."""
     try:
         ru_address = ipaddress.ip_address(ru_server_address).compressed
-        eu_address = ipaddress.ip_address(eu_server_address).compressed
+        eu_address = (
+            ipaddress.ip_address(eu_server_address).compressed
+            if eu_server_address is not None
+            else ""
+        )
     except ValueError as error:
         logger.error("Firewall test server addresses must be IP addresses")
         return 1
-    if ru_address == eu_address:
+    if eu_address and ru_address == eu_address:
         logger.error("RU and EU firewall test addresses must be distinct")
         return 1
     command = render(
@@ -273,7 +279,7 @@ def check_restricted_service_paths(
         runner,
         command,
         "",
-        "Checking that test-client cannot connect directly to RU or EU services",
+        "Checking that test-client cannot connect directly to selected services",
     )
 
 
