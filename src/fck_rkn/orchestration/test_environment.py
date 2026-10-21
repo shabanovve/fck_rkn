@@ -593,9 +593,7 @@ def _run(image_directory: Path) -> int:
     squid_tunnel_steps = (
         (
             "Squid tunnel deployment",
-            lambda: deploy_squid_tunnel(
-                client_runner, client_access_url, eu_private_address
-            ),
+            lambda: deploy_squid_tunnel(client_runner, client_access_url),
             33,
         ),
         ("Squid tunnel check", lambda: check_squid_tunnel(client_runner), 34),

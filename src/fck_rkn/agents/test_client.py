@@ -10,7 +10,7 @@ import sys
 from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
-from fck_rkn.agents.eu_server import SQUID_PORT
+from fck_rkn.agents.eu_server import MTPROXY_PORT, SQUID_PORT
 from fck_rkn.agent_config import load_agent_settings, test_client_runner
 from fck_rkn.agents.ru_server import (
     CLIENT_DEPLOY_TIMEOUT_SECONDS,
@@ -31,6 +31,9 @@ CONNECTION_STATE_DIRECTORY = "/opt/fck-rkn-test-client-outline"
 SQUID_TUNNEL_CONTAINER_NAME = "fck-rkn-test-client-squid"
 SQUID_TUNNEL_STATE_DIRECTORY = "/opt/fck-rkn-test-client-squid"
 SQUID_TUNNEL_LOCAL_PORT = SQUID_PORT
+MTPROXY_TUNNEL_CONTAINER_NAME = "fck-rkn-test-client-mtproxy"
+MTPROXY_TUNNEL_STATE_DIRECTORY = "/opt/fck-rkn-test-client-mtproxy"
+MTPROXY_TUNNEL_LOCAL_PORT = MTPROXY_PORT
 
 
 def build_connection_deploy_command() -> str:
@@ -135,13 +138,13 @@ def request_youtube(runner: RemoteRunner) -> int:
 
 
 def build_squid_tunnel_config(
-    method: str, password: str, host: str, port: int, squid_address: str
+    method: str, password: str, host: str, port: int
 ) -> str:
-    """Return the ss-tunnel config exposing EU Squid on test-client localhost.
+    """Return the config forwarding through RU to the local Squid forward.
 
     Outline provides a local proxy, not a router or layer-3 gateway, so the
-    approved listener is a TCP forward from 127.0.0.1 through RU Outline to
-    the EU Squid private address.
+    approved path is a TCP forward from test-client through RU Outline to
+    RU's localhost listener, which itself forwards to EU through EU Outline.
     """
     return json.dumps(
         {
@@ -151,18 +154,13 @@ def build_squid_tunnel_config(
             "password": password,
             "local_address": "127.0.0.1",
             "local_port": SQUID_TUNNEL_LOCAL_PORT,
-            "tunnel_address": f"{squid_address}:{SQUID_PORT}",
+            "tunnel_address": f"127.0.0.1:{SQUID_PORT}",
         }
     )
 
 
-def deploy_squid_tunnel(
-    runner: RemoteRunner, access_url: str, squid_address: str
-) -> int:
-    """Forward test-client localhost TCP/3128 to EU Squid through RU Outline."""
-    if not squid_address.strip():
-        logger.error("The EU Squid address must not be empty")
-        return 1
+def deploy_squid_tunnel(runner: RemoteRunner, access_url: str) -> int:
+    """Forward test-client localhost TCP/3128 through RU to EU Squid."""
     try:
         method, password, host, port = parse_access_url(access_url)
     except ValueError as error:
@@ -181,9 +179,7 @@ def deploy_squid_tunnel(
         command,
         "Deploying the EU Squid tunnel on test-client",
         CLIENT_DEPLOY_TIMEOUT_SECONDS,
-        stdin=build_squid_tunnel_config(
-            method, password, host, port, squid_address.strip()
-        ),
+        stdin=build_squid_tunnel_config(method, password, host, port),
         stream_output=True,
     )
     if result == 0:
@@ -191,9 +187,82 @@ def deploy_squid_tunnel(
     return result
 
 
+def build_mtproxy_tunnel_config(
+    method: str, password: str, host: str, port: int
+) -> str:
+    """Return the ss-tunnel config to reach RU's localhost MTProxy forward."""
+    return json.dumps(
+        {
+            "server": host,
+            "server_port": port,
+            "method": method,
+            "password": password,
+            "local_address": "127.0.0.1",
+            "local_port": MTPROXY_TUNNEL_LOCAL_PORT,
+            "tunnel_address": f"127.0.0.1:{MTPROXY_PORT}",
+        }
+    )
+
+
+def deploy_mtproxy_tunnel(runner: RemoteRunner, access_url: str) -> int:
+    """Forward test-client localhost TCP/8443 through RU to EU MTProxy."""
+    try:
+        method, password, host, port = parse_access_url(access_url)
+    except ValueError as error:
+        logger.error("%s", error)
+        return 1
+    command = render(
+        "deploy_container.sh",
+        container_name=MTPROXY_TUNNEL_CONTAINER_NAME,
+        image=CLIENT_IMAGE,
+        state_directory=MTPROXY_TUNNEL_STATE_DIRECTORY,
+        entrypoint="ss-tunnel",
+        title="MTProxy tunnel",
+    )
+    result = execute(
+        runner,
+        command,
+        "Deploying the MTProxy tunnel on test-client",
+        CLIENT_DEPLOY_TIMEOUT_SECONDS,
+        stdin=build_mtproxy_tunnel_config(method, password, host, port),
+        stream_output=True,
+    )
+    if result == 0:
+        logger.info("test-client MTProxy tunnel is deployed")
+    return result
+
+
+MTPROXY_TUNNEL_CHECK_COMMAND = render(
+    "mtproxy_client_tunnel_check.sh",
+    container_name=MTPROXY_TUNNEL_CONTAINER_NAME,
+    state_directory=MTPROXY_TUNNEL_STATE_DIRECTORY,
+    local_port=MTPROXY_TUNNEL_LOCAL_PORT,
+)
+
+
+def check_mtproxy_tunnel(runner: RemoteRunner) -> int:
+    """Verify test-client TCP/8443 reaches its RU Outline forward."""
+    return run_remote_with_input(
+        runner,
+        MTPROXY_TUNNEL_CHECK_COMMAND,
+        "",
+        "Checking the test-client MTProxy tunnel listener",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run test-client actions.")
-    parser.add_argument("action", choices=("connect-outline", "check-outline", "connect-squid", "check-squid", "request-youtube"),
+    parser.add_argument(
+        "action",
+        choices=(
+            "connect-outline",
+            "check-outline",
+            "connect-squid",
+            "check-squid",
+            "connect-mtproxy",
+            "check-mtproxy",
+            "request-youtube",
+        ),
         help="Action to run",
     )
     args = parser.parse_args(argv)
@@ -214,15 +283,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.action == "check-squid":
         return check_squid_tunnel(runner)
+    if args.action == "check-mtproxy":
+        return check_mtproxy_tunnel(runner)
     if args.action == "request-youtube":
         return request_youtube(runner)
 
     # The key is read from stdin so it never appears in argv or shell history.
     access_url = sys.stdin.readline()
     if args.action == "connect-squid":
-        return deploy_squid_tunnel(
-            runner, access_url, settings.EU_SERVER_PRIVATE_ADDRESS
-        )
+        return deploy_squid_tunnel(runner, access_url)
+    if args.action == "connect-mtproxy":
+        return deploy_mtproxy_tunnel(runner, access_url)
     if args.action == "check-outline":
         return check_outline_connection(runner, access_url)
     return connect_to_outline(runner, access_url)

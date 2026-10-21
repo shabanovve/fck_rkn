@@ -522,11 +522,9 @@ behavior that requires them.
   address/listener. Do not assume Outline provides a router or layer-3
   gateway.
 - **Done:** Owner decision: the approved listener is a local TCP forward
-  on `test-client`, 127.0.0.1:3128, to EU Squid's private address through RU
-  Outline. `test-client-agent connect-squid` reads the RU key from stdin and
-  starts a persistent `ss-tunnel` container `fck-rkn-test-client-squid`; the
-  EU address comes from `EU_SERVER_PRIVATE_ADDRESS`. The orchestrator wiring
-  is task 66.
+  on `test-client`, 127.0.0.1:3128, through RU Outline to RU's local Squid
+  forward, which then reaches EU Squid through EU Outline. Task 77 updates the
+  previously direct-to-EU destination to this approved two-hop path.
 
 ### 65. [x] Add TCP/3128 check to `test-client-agent`
 
@@ -539,9 +537,9 @@ behavior that requires them.
 - **Orchestration:** Make `test_env_host` invoke the client check and verify
   that the path reaches EU Squid through RU.
 - **Done:** After the Outline connection, the orchestrator deploys the tunnel
-  with the EU private address (exit 33) and runs `check_squid_tunnel` (exit
-  34), which also sends an HTTP request through 127.0.0.1:3128 and requires a
-  Squid response.
+  to RU localhost TCP/3128 (exit 33) and runs `check_squid_tunnel` (exit 34),
+  which also sends an HTTP request through 127.0.0.1:3128 and requires a Squid
+  response. Task 77 updates the tunnel destination to RU's local forward.
 
 ### 67. [x] Add HTTP request to `test-client-agent`
 
@@ -643,13 +641,15 @@ behavior that requires them.
   for `Not defined` pairs. Include the separately required daily blacklist
   updates on both servers in dependent tasks.
 
-### 77. Add RU server firewall rules
+### 77. [x] Add RU server firewall rules
 
 - **Change:** Extend `ru-server-agent` to install and update only the
   plan-item-10 rules in the Ubuntu guest firewall on `ru-server`. Allow
-  `test-client` requests only for the approved web-proxy and MTProto paths
-  through Outline. Allow `ru-server` requests to `eu-server` only for the
-  approved web-proxy and MTProto services through the VPN; deny requests
+  `test-client` requests only to the RU Outline endpoint; its web-proxy and
+  MTProto tunnels must target the corresponding localhost forwards on
+  `ru-server`, not EU private service addresses. Allow `ru-server` requests to
+  `eu-server` only for the approved web-proxy and MTProto services through the
+  EU Outline endpoint; deny requests
   from `ru-server` to `test-client` and any other host. Block requests to
   `ru-server` from the configured RKN crawler IPs. Leave other
   `any-host`-to-`ru-server` sources unspecified, except approved IAP SSH
@@ -658,12 +658,27 @@ behavior that requires them.
   continue with the previous rules. If no previous valid rules exist, fail
   without applying partial rules. Do not install plan item 10 rules on
   `test-client`.
+- **Implementation started:** `ru-server-agent apply-firewall` accepts
+  JSON on stdin containing `test_client_address`, `eu_server_address`,
+  `eu_outline_address`, `eu_outline_port`, `iap_source_range`, `rkn_ipv4`, and
+  `rkn_ipv6`. It validates runtime addresses and non-empty IPv4/IPv6 crawler
+  ranges, generates the RU-only nftables policy, and stages the replacement
+  before activation. The test-client Squid and MTProxy tunnel actions target
+  RU localhost TCP/3128 and TCP/8443, respectively, so both requests traverse
+  the existing RU-to-EU Outline forwards.
+- **Done:** Added RU nftables rule generation and a staged installer that
+  validates the candidate and restores the previous saved and active policy
+  if activation fails. Targeted unit tests cover rule inputs, tunnel targets,
+  and rollback after an activation failure. Live VM traffic verification is
+  covered by tasks 78–79.
 
 ### 78. Test RU server firewall rules
 
-- **Test:** Extend `ru-server-test-agent` to verify the allowed
+- **Test:** Extend `ru-server-test-agent` to verify allowed
   `test-client` web-proxy/MTProto requests and VPN-carried
-  `ru-server`-to-`eu-server` proxy/MTProto requests succeed. Verify
+  `ru-server`-to-`eu-server` proxy/MTProto requests succeed. Extend
+  `test-client-agent` checks to verify both local tunnels target the RU
+  localhost forwards. Verify
   non-service client requests to RU, other RU-to-EU requests,
   RU-to-`test-client`, RU-to-other-host, and configured crawler-IP requests
   to RU are denied. Do not assert a result for other
@@ -674,8 +689,9 @@ behavior that requires them.
 ### 79. Deploy and test RU server firewall rules
 
 - **Orchestration:** Make `test_env_host` install RU server firewall rules
-  and run the matching test-agent checks after the required proxy paths are
-  deployed. Fail if any defined allow/deny check has the wrong result.
+  and run the matching test-agent checks after the RU Outline endpoint and
+  both test-client local tunnels to RU have been deployed. Fail if any
+  defined allow/deny check has the wrong result.
 
 ### 80. Add EU server firewall rules
 
