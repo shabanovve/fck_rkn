@@ -29,11 +29,12 @@ class RuFirewallRuleTests(unittest.TestCase):
         self.assertIn("ip saddr 10.0.0.3 tcp dport 10001 accept", rules)
         self.assertIn("ip saddr 10.0.0.3 drop", rules)
         self.assertIn(
-            'oifname "lo" tcp dport { 3128, 8443 } accept', rules
+            'oifname "lo" tcp dport { 3128, 8443, 10000, 10001 } accept',
+            rules,
         )
         self.assertIn(
             'oifname "lo" ct state established,related ct original proto-dst '
-            "{ 3128, 8443 } accept",
+            "{ 3128, 8443, 10000, 10001 } accept",
             rules,
         )
         self.assertIn(
