@@ -36,6 +36,9 @@ class RuFirewallRuleTests(unittest.TestCase):
             "{ 3128, 8443 } accept",
             rules,
         )
+        self.assertIn(
+            "ip daddr 169.254.169.254 tcp dport 80 accept", rules
+        )
         self.assertIn("    tcp dport 22 accept", rules)
         self.assertIn("tcp sport 22 ct state established,related accept", rules)
         self.assertNotIn("tcp dport 22 drop", rules)

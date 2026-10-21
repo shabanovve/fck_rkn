@@ -134,6 +134,7 @@ table inet {TABLE_NAME} {{
   }}
   chain output {{
     type filter hook output priority -5; policy drop;
+    ip daddr 169.254.169.254 tcp dport 80 accept
     oifname "lo" tcp dport {{ {', '.join(map(str, EU_SERVICE_PORTS))} }} accept
     oifname "lo" ct state established,related ct original proto-dst {{ {', '.join(map(str, EU_SERVICE_PORTS))} }} accept
 {direct_service_deny}
