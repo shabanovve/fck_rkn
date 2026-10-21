@@ -40,10 +40,22 @@ OUTLINE_IMAGE_LOAD_TIMEOUT_SECONDS = 900
 
 def load_outline_image(runner: RemoteRunner, archive: Path) -> int:
     """Load the gzip'd image archive on the runner target if it is missing."""
-    logger.info("Loading the Outline Server image")
+    try:
+        archive_size = archive.stat().st_size
+    except OSError as error:
+        logger.error("Could not read the Outline Server archive size: %s", error)
+        return 1
+    if archive_size <= 0:
+        logger.error("The Outline Server archive is empty")
+        return 1
+    logger.info("Loading the Outline Server image: 0%")
     return execute(
         runner,
-        render("load_outline_image.sh", image=OUTLINE_IMAGE),
+        render(
+            "load_outline_image.sh",
+            image=OUTLINE_IMAGE,
+            archive_size=archive_size,
+        ),
         "Outline Server image load",
         OUTLINE_IMAGE_LOAD_TIMEOUT_SECONDS,
         stdin=archive,
