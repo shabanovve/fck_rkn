@@ -213,20 +213,46 @@ source/destination pair; it is not an instruction to allow or deny traffic.
 Resolve these pairs before implementing a policy that depends on them.
 
 - Keep management access separate from client/service traffic. Permit SSH
-  only through IAP TCP forwarding as specified above; do not treat this as
-  permission for general traffic between servers and other hosts.
+  only through IAP TCP forwarding on TCP/22, sourced from the configured IAP
+  TCP forwarding CIDR; do not treat this as permission for general traffic
+  between servers and other hosts. Read the CIDR from ignored local
+  `config/test.env` (`GCP_IAP_SOURCE_RANGE`) in the test environment. Do not
+  hard-code or commit a concrete IAP CIDR.
 - Install and enforce these firewall rules only on `ru-server` and
   `eu-server`; do not install firewall rules for this policy on
   `test-client`. Add network tests that verify each allowed path and
   representative denied paths, including direct `test-client`-to-`eu-server`
   access and that requests from `ru-server` are restricted to the approved
   proxy services. Do not infer rules for pairs marked `Not defined`.
+- Use nftables for guest firewall enforcement. The web proxy and MTProxy
+  services on `eu-server` use TCP ports 3128 and 8443, respectively; access
+  from `ru-server` must use the approved Outline forwarding path. Obtain the
+  Outline listener address and port from the protected access-key/runtime
+  configuration. Resolve server addresses and network interfaces from
+  provisioning/runtime configuration; do not hard-code VM addresses or
+  interface names.
+- Block requests to `ru-server` from the RKN crawler IP ranges using the
+  general mixed IPv4/IPv6 blacklist in
+  `C24Be/AS_Network_List/blacklists_nftables/blacklist.nft`, fetched from
+  that repository's `main` branch. This is the confirmed source for the RKN
+  crawler IP list. The upstream project regenerates blacklist artifacts
+  daily.
+- Update firewall configuration transactionally: stage and validate the
+  complete replacement rules and blacklist before activation. Require
+  non-empty blacklist data with both IPv4 and IPv6 sets and at least one
+  network, and validate nftables syntax before activation. Treat unavailable,
+  empty, invalid, or un-installable replacement data as an update failure.
+  On failure, retain the previous saved configuration, report the error,
+  and keep the firewall running with its previous active rules; never leave
+  a partially applied policy. If there is no previous valid configuration,
+  fail without activating a partial one.
 
 **Acceptance:** only the flows listed above succeed, direct client access to
 EU services is blocked, and `ru-server` sends requests only to the approved
 proxy services. Policy firewall rules are installed only on the two servers,
-not on `test-client`. Unspecified pairs remain unresolved until explicitly
-decided.
+not on `test-client`. Failed updates preserve the previous saved and active
+rules and report an error. Unspecified pairs remain unresolved until
+explicitly decided.
 
 ## Cross-cutting implementation requirements
 

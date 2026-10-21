@@ -633,19 +633,15 @@ behavior that requires them.
 
 ## Implement plan item 10 traffic restrictions
 
-### 76. Specify inputs for the defined server firewall rules
+### 76. [x] Specify inputs for the defined server firewall rules
 
-- **Decision/configuration:** Record the required interfaces, addresses,
-  protocols, ports, and connection directions for the defined
-  `test-client`-to-`ru-server`, `ru-server`-to-`eu-server`, and
-  `any-host`-to-server cases. Identify the authoritative IP source and
-  update method for the RKN crawler system that must be blocked from
-  `ru-server`. Confirm the IAP SSH source range and required management
-  access.
-- **Constraint:** Do not define rules for matrix pairs marked `Not defined`.
-  Do not apply a blanket default-deny policy that would implicitly decide
-  those pairs. This task concerns only plan item 10; the README's daily
-  `C24Be/AS_Network_List` blacklist is tracked separately below.
+- **Recorded in plan item 10:** Server-only nftables enforcement; service
+  ports and Outline path; runtime address/interface resolution; confirmed
+  RKN crawler blacklist source and artifact; IAP-only SSH management; and
+  validation plus rollback behavior for failed firewall/list updates.
+- **Constraint:** Implement only the defined matrix pairs. Do not add policy
+  for `Not defined` pairs. Include the separately required daily blacklist
+  updates on both servers in dependent tasks.
 
 ### 77. Add RU server firewall rules
 
@@ -657,7 +653,11 @@ behavior that requires them.
   from `ru-server` to `test-client` and any other host. Block requests to
   `ru-server` from the configured RKN crawler IPs. Leave other
   `any-host`-to-`ru-server` sources unspecified, except approved IAP SSH
-  management. Do not install plan item 10 rules on `test-client`.
+  management. Stage and validate changes before activating them; on failure
+  leave the previous saved and active rules untouched, report the error, and
+  continue with the previous rules. If no previous valid rules exist, fail
+  without applying partial rules. Do not install plan item 10 rules on
+  `test-client`.
 
 ### 78. Test RU server firewall rules
 
@@ -667,7 +667,9 @@ behavior that requires them.
   non-service client requests to RU, other RU-to-EU requests,
   RU-to-`test-client`, RU-to-other-host, and configured crawler-IP requests
   to RU are denied. Do not assert a result for other
-  `any-host`-to-`ru-server` sources.
+  `any-host`-to-`ru-server` sources. Verify a failed update reports an error
+  while the previous saved configuration and live firewall rules remain
+  active, and that an initial invalid configuration is not partially applied.
 
 ### 79. Deploy and test RU server firewall rules
 
@@ -685,6 +687,10 @@ behavior that requires them.
   Do not define or enforce rules for EU-originated traffic to
   `test-client`, `ru-server`, or other hosts, since those pairs are
   `Not defined`. Do not install plan item 10 rules on `test-client`.
+  Stage and validate changes before activation; on failure leave the
+  previous saved and active rules untouched, report the error, and continue
+  with the previous rules. If no previous valid rules exist, fail without
+  applying partial rules.
 
 ### 81. Test EU server firewall rules
 
@@ -692,7 +698,10 @@ behavior that requires them.
   VPN-carried proxy/MTProto requests from RU succeed, direct client service
   requests and non-IAP service requests from other hosts are denied, and
   approved IAP SSH management works. Do not assert any result for
-  EU-originated traffic to pairs marked `Not defined`.
+  EU-originated traffic to pairs marked `Not defined`. Verify a failed
+  update reports an error while the previous saved configuration and live
+  firewall rules remain active, and that an initial invalid configuration is
+  not partially applied.
 
 ### 82. Deploy and test EU server firewall rules
 
@@ -707,7 +716,8 @@ behavior that requires them.
   permitted connections. Run them from `test_env_host` after both server
   firewalls are active. Report each case and fail on any mismatch. Do not
   install firewall rules on `test-client` or assert outcomes for
-  `Not defined` pairs.
+  `Not defined` pairs. Exercise failed-update rollback and verify the
+  previously active rules continue to serve traffic.
 
 ### 89. Add service and tunnel metrics
 
@@ -788,9 +798,9 @@ behavior that requires them.
   forwarding design.
 - The actual proxy listener/address meant by "router IP".
 - Protected secret store and test VPN-key handoff.
-- Exact `C24Be/AS_Network_List` artifact and freshness policy.
-- Authoritative source and update method for RKN crawler IPs; whether they
-  are the same list as `C24Be/AS_Network_List`.
+- README-required daily `C24Be/AS_Network_List` update policy on both servers,
+  including source freshness and the artifact used for that separate
+  requirement.
 - Russian destination source, DNS behavior, and shared-address policy.
 - MTProxy image/version and secret delivery.
 - Monitoring access, retention, alert recipients, and VM cleanup policy.
