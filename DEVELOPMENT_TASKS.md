@@ -21,12 +21,14 @@ behavior that requires them.
 - Never target production `fck_rkn` from test code or `test_env_host`.
 - Give every GCP test VM outbound Internet access through Cloud NAT; do not
   assign external IPs to VMs.
-- Enforce required firewall rules inside each Ubuntu VM. GCP firewall rules
-  may supplement, but must not replace, guest firewall enforcement.
+- Install firewall rules for plan item 10 only on `ru-server` and
+  `eu-server`, inside their Ubuntu guests. Do not install these rules on
+  `test-client`; GCP firewall rules may supplement but not replace guest
+  enforcement.
 - A deployment is not verified until `test_env_host` has run the matching
   test-agent check and it passed.
-- Firewall setup, firewall-policy testing, and firewall-list updates are
-  deferred to a later phase and are not implementation tasks in this list.
+- Implement and test plan item 10 through the tasks below. Do not infer
+  allow/deny behavior for pairs marked `Not defined`.
 - Stop at unresolved decisions listed at the end. Do not silently choose
   provider, security, network, cost, or service behavior.
 
@@ -629,6 +631,84 @@ behavior that requires them.
   connections (41), recovers it (42) and re-checks it (43). Not yet verified
   on real VMs.
 
+## Implement plan item 10 traffic restrictions
+
+### 76. Specify inputs for the defined server firewall rules
+
+- **Decision/configuration:** Record the required interfaces, addresses,
+  protocols, ports, and connection directions for the defined
+  `test-client`-to-`ru-server`, `ru-server`-to-`eu-server`, and
+  `any-host`-to-server cases. Identify the authoritative IP source and
+  update method for the RKN crawler system that must be blocked from
+  `ru-server`. Confirm the IAP SSH source range and required management
+  access.
+- **Constraint:** Do not define rules for matrix pairs marked `Not defined`.
+  Do not apply a blanket default-deny policy that would implicitly decide
+  those pairs. This task concerns only plan item 10; the README's daily
+  `C24Be/AS_Network_List` blacklist is tracked separately below.
+
+### 77. Add RU server firewall rules
+
+- **Change:** Extend `ru-server-agent` to install and update only the
+  plan-item-10 rules in the Ubuntu guest firewall on `ru-server`. Allow
+  `test-client` requests only for the approved web-proxy and MTProto paths
+  through Outline. Allow `ru-server` requests to `eu-server` only for the
+  approved web-proxy and MTProto services through the VPN; deny requests
+  from `ru-server` to `test-client` and any other host. Block requests to
+  `ru-server` from the configured RKN crawler IPs. Leave other
+  `any-host`-to-`ru-server` sources unspecified, except approved IAP SSH
+  management. Do not install plan item 10 rules on `test-client`.
+
+### 78. Test RU server firewall rules
+
+- **Test:** Extend `ru-server-test-agent` to verify the allowed
+  `test-client` web-proxy/MTProto requests and VPN-carried
+  `ru-server`-to-`eu-server` proxy/MTProto requests succeed. Verify
+  non-service client requests to RU, other RU-to-EU requests,
+  RU-to-`test-client`, RU-to-other-host, and configured crawler-IP requests
+  to RU are denied. Do not assert a result for other
+  `any-host`-to-`ru-server` sources.
+
+### 79. Deploy and test RU server firewall rules
+
+- **Orchestration:** Make `test_env_host` install RU server firewall rules
+  and run the matching test-agent checks after the required proxy paths are
+  deployed. Fail if any defined allow/deny check has the wrong result.
+
+### 80. Add EU server firewall rules
+
+- **Change:** Extend `eu-server-agent` to install and update only the
+  plan-item-10 rules in the Ubuntu guest firewall on `eu-server`. Allow
+  approved web-proxy and MTProto requests from `ru-server` through the VPN.
+  Deny direct service requests from `test-client` and service requests from
+  any other host; allow SSH management only through the approved IAP path.
+  Do not define or enforce rules for EU-originated traffic to
+  `test-client`, `ru-server`, or other hosts, since those pairs are
+  `Not defined`. Do not install plan item 10 rules on `test-client`.
+
+### 81. Test EU server firewall rules
+
+- **Test:** Extend `eu-server-test-agent` to verify approved
+  VPN-carried proxy/MTProto requests from RU succeed, direct client service
+  requests and non-IAP service requests from other hosts are denied, and
+  approved IAP SSH management works. Do not assert any result for
+  EU-originated traffic to pairs marked `Not defined`.
+
+### 82. Deploy and test EU server firewall rules
+
+- **Orchestration:** Make `test_env_host` install EU server firewall rules
+  and run the matching test-agent checks after the RU-to-EU paths are
+  deployed. Fail if any defined allow/deny check has the wrong result.
+
+### 83. Verify plan item 10 end to end
+
+- **Test/orchestration:** Add isolated network checks for all defined
+  allowed and denied paths in the matrix, including stateful responses for
+  permitted connections. Run them from `test_env_host` after both server
+  firewalls are active. Report each case and fail on any mismatch. Do not
+  install firewall rules on `test-client` or assert outcomes for
+  `Not defined` pairs.
+
 ### 89. Add service and tunnel metrics
 
 - **Change:** Add Prometheus metrics for service health, host resources, and
@@ -708,19 +788,20 @@ behavior that requires them.
   forwarding design.
 - The actual proxy listener/address meant by "router IP".
 - Protected secret store and test VPN-key handoff.
-- Exact ingress blacklist artifact and freshness policy.
+- Exact `C24Be/AS_Network_List` artifact and freshness policy.
+- Authoritative source and update method for RKN crawler IPs; whether they
+  are the same list as `C24Be/AS_Network_List`.
 - Russian destination source, DNS behavior, and shared-address policy.
 - MTProxy image/version and secret delivery.
 - Monitoring access, retention, alert recipients, and VM cleanup policy.
 
-## Deferred to the firewall phase
+## Deferred firewall work
 
-The following are intentionally outside this task list and must be planned as
-separate small change/test/orchestration cycles in the later firewall phase:
+The following are separate from plan item 10 and require their own
+change/test/orchestration tasks:
 
-- Guest-firewall setup and service-specific allow/deny rules on Ubuntu VMs.
-- Default-deny ingress/egress enforcement and IPv4/IPv6 policy tests.
 - The daily `C24Be/AS_Network_List` retrieval, validation, atomic activation,
   rollback, and reporting workflow.
 - Russian destination-list selection, parsing, and enforcement.
-- Firewall restrictions for proxy, tunnel, and monitoring access.
+- Firewall restrictions for monitoring access and other traffic not covered
+  by plan item 10.

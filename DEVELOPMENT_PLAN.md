@@ -194,14 +194,49 @@ can connect; unauthorized access is rejected.
 approved proxy path, and successfully completes the HTTP check. Direct
 Internet access outside the approved path is denied.
 
+### 10. Define and enforce traffic restrictions
+
+- Apply the following directional policy to service traffic. For pairs with
+  a defined policy, treat traffic not explicitly allowed as denied; allow
+  stateful response packets only for an explicitly approved connection.
+  Pairs marked `Not defined` have no specified rule.
+
+| Request source \ Request handler | `test-client` | `ru-server` | `eu-server` | Any other host |
+| --- | --- | --- | --- | --- |
+| `test-client` | Local traffic only | Allow only the web-proxy and MTProto service paths through the approved RU Outline connection, including the required connection to the RU Outline endpoint | Deny direct service traffic; reach EU services only through the approved path via `ru-server` | Not defined |
+| `ru-server` | Deny requests under the general rule; responses for permitted client-initiated flows only | Local traffic only | Allow only the approved web-proxy and MTProto requests through the VPN tunnel; no other outbound requests | Deny |
+| `eu-server` | Not defined | Not defined | Local traffic only | Not defined |
+| Any other host | Not defined | Deny requests only from IP addresses of the RKN crawler system; policy for other sources is not defined | Deny, except explicitly approved management access | Not defined |
+
+`Not defined` means this plan does not specify a firewall rule for that
+source/destination pair; it is not an instruction to allow or deny traffic.
+Resolve these pairs before implementing a policy that depends on them.
+
+- Keep management access separate from client/service traffic. Permit SSH
+  only through IAP TCP forwarding as specified above; do not treat this as
+  permission for general traffic between servers and other hosts.
+- Install and enforce these firewall rules only on `ru-server` and
+  `eu-server`; do not install firewall rules for this policy on
+  `test-client`. Add network tests that verify each allowed path and
+  representative denied paths, including direct `test-client`-to-`eu-server`
+  access and that requests from `ru-server` are restricted to the approved
+  proxy services. Do not infer rules for pairs marked `Not defined`.
+
+**Acceptance:** only the flows listed above succeed, direct client access to
+EU services is blocked, and `ru-server` sends requests only to the approved
+proxy services. Policy firewall rules are installed only on the two servers,
+not on `test-client`. Unspecified pairs remain unresolved until explicitly
+decided.
+
 ## Cross-cutting implementation requirements
 
 - Make `test_env_host` idempotent: detect existing resources, avoid accidental
   duplicates, and report every create/update action.
 - Keep production deployment and firewall policy provider-independent. Agents
-  configure and enforce required firewall rules inside each VM's Ubuntu guest
-  OS; cloud-provider firewall rules are optional defense in depth, not a
-  replacement for the guest firewall.
+  configure and enforce required firewall rules inside the Ubuntu guest OS
+  of each server; cloud-provider firewall rules are optional defense in
+  depth, not a replacement for the guest firewall. Do not install these
+  policy rules on `test-client`.
 - Run the appropriate VPN user/access-key provisioning script from
   `eu-server-agent` and `ru-server-agent` after their Outline Server is
   running and before client connectivity tests. Protect generated credentials
