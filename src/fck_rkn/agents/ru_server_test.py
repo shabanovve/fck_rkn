@@ -172,7 +172,7 @@ def build_firewall_egress_check_command() -> str:
 
 
 def check_firewall_egress(runner: RemoteRunner, config_json: str) -> int:
-    """Check allowed Outline transport and representative blocked RU egress."""
+    """Verify log-only RU egress rules and the approved Outline transport."""
     try:
         config = json.loads(config_json)
         if not isinstance(config, dict):
@@ -236,7 +236,7 @@ def build_crawler_source_check_command() -> str:
 def check_firewall_crawler_source(
     runner: RemoteRunner, ru_server_address: str, crawler_source_address: str
 ) -> int:
-    """Send an isolated packet from a crawler-range source through RU input."""
+    """Verify crawler-range traffic is logged and allowed during observation."""
     try:
         ru_address = ipaddress.ip_address(ru_server_address)
         crawler_address = ipaddress.ip_address(crawler_source_address)

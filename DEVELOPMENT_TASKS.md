@@ -674,7 +674,9 @@ behavior that requires them.
   validates the candidate and restores the previous saved and active policy
   if activation fails. Targeted unit tests cover rule inputs, tunnel targets,
   and rollback after an activation failure. Live VM traffic verification is
-  covered by tasks 78–79.
+  covered by tasks 78–79. Current rollout is log-only on `ru-server`:
+  matching flows are rate-limited in the kernel log and allowed to continue;
+  enforcement will be enabled incrementally after log review.
 
 ### 78. [x] Test RU server firewall rules
 
@@ -682,48 +684,48 @@ behavior that requires them.
   `test-client` web-proxy/MTProto requests and VPN-carried
   `ru-server`-to-`eu-server` proxy/MTProto requests succeed. Extend
   `test-client-agent` checks to verify both local tunnels target the RU
-  localhost forwards. Verify
-  non-service client requests to RU, other RU-to-EU requests,
-  RU-to-`test-client`, RU-to-other-host, and configured crawler-IP requests
-  to RU are denied. Do not assert a result for other
+  localhost forwards. During the log-only rollout, verify the expected log
+  rules and that crawler-range traffic reaches the probe listener; do not
+  assert that logged traffic is blocked. Do not assert a result for other
   `any-host`-to-`ru-server` sources. Verify a failed update reports an error
   while the previous saved configuration and live firewall rules remain
   active, and that an initial invalid configuration is not partially applied.
 - **Implementation started:** Added `ru-server-test-agent firewall-policy`
   for live checks of the EU Outline transport, both approved RU forwards,
-  direct EU service denial, and representative RU-to-client/other-host egress
-  denial. Added `firewall-rollback` to exercise the real installer with an
+  and the active log-only rules. Added `firewall-rollback` to exercise the real installer with an
   invalid nftables replacement, compare saved/active policy before and after,
-  and verify an invalid first install leaves no policy files. Added
-  `test-client-agent check-firewall-paths` for denied direct
-  client-to-RU/EU service access. Runtime host addresses are
+  and verify an invalid first install leaves no policy files. The
+  `test-client-agent check-firewall-paths` action remains an enforcement-phase
+  check and is not run during observation. Runtime host addresses are
   validated and supplied through the existing private-address settings or
   stdin; the RU check also requires populated active IPv4/IPv6 crawler sets.
   No new firewall is installed on `test-client`. Live VM execution and a
   source-address test from an isolated crawler-range network are performed
   by orchestration task 79.
-- **Done:** Added test-agent checks for the defined RU allow/deny paths,
+- **Done:** Added test-agent checks for the defined RU service paths,
   rollback behavior, and test-client direct-service denials. Targeted unit
-  tests verify these checks and their failure conditions. Running them on
-  provisioned VMs, including the isolated crawler-source case, belongs to
-  task 79 and is not a prerequisite for completing this test-agent task.
+  tests verify these checks and their failure conditions. Live checks now
+  verify log-only operation; enforcement assertions are deferred until log
+  review. Running them on provisioned VMs, including the isolated
+  crawler-source case, belongs to task 79 and is not a prerequisite for
+  completing this test-agent task.
 
 ### 79. [x] Deploy and test RU server firewall rules
 
 - **Orchestration:** Make `test_env_host` install RU server firewall rules
   and run the matching test-agent checks after the RU Outline endpoint and
-  both test-client local tunnels to RU have been deployed. Include an
-  isolated source in the configured crawler ranges to verify its requests
-  are blocked, except SSH TCP/22 which is intentionally not source-filtered.
-  Fail if any defined allow/deny check has the wrong result.
+  both test-client local tunnels to RU have been deployed. In the current
+  observation stage, verify log-only rules and that an isolated crawler-range
+  source reaches the probe listener. Do not block logged traffic until its
+  kernel logs have been reviewed.
 - **Scope:** Verify direct test-client denial to RU services here. EU firewall
   rules are not installed until task 82, so defer direct test-client-to-EU
   denial to that orchestration rather than asserting a result before EU
   enforcement exists.
 - **Done:** `test_env_host` fetches and validates the
   crawler blacklist, builds firewall input from runtime VM addresses, applies
-  RU rules, and runs policy, rollback, isolated crawler-source, and direct
-  client-to-RU checks before the final proxy request. Unit coverage exercises
+  log-only RU rules, and runs policy-log, rollback, and isolated
+  crawler-source observation checks before the final proxy request. Unit coverage exercises
   configuration validation, successful workflow ordering, and failure
   handling. Running the orchestration on VMs is not a prerequisite for
   completing this task.

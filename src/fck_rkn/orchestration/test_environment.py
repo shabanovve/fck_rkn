@@ -46,7 +46,6 @@ from fck_rkn.agents.ru_server import (
 )
 from fck_rkn.agents.test_client import (
     check_mtproxy_tunnel,
-    check_restricted_service_paths,
     check_outline_connection,
     check_squid_tunnel,
     connect_to_outline,
@@ -795,20 +794,13 @@ def _run(image_directory: Path) -> int:
         ),
         ("RU firewall rollback", lambda: check_firewall_rollback(ru_runner), 49),
         (
-            "isolated crawler-source rejection",
+            "isolated crawler-source logging",
             lambda: check_firewall_crawler_source(
                 ru_runner,
                 ru_private_address,
                 _crawler_probe_address(rkn_ipv4),
             ),
             50,
-        ),
-        (
-            "test-client direct-service denial",
-            lambda: check_restricted_service_paths(
-                client_runner, ru_private_address, None
-            ),
-            51,
         ),
     )
     for description, step, failure_code in firewall_checks:
@@ -823,7 +815,7 @@ def _run(image_directory: Path) -> int:
                 file=sys.stderr,
             )
             return failure_code
-    logger.info("RU firewall allow, deny, rollback, and crawler-source checks passed")
+    logger.info("RU firewall log-only, rollback, and crawler-source checks passed")
 
     logger.info("Running test-client youtube.com request through the proxy path")
     client_request_exit_code = request_youtube(client_runner)

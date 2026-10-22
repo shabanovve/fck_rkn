@@ -12,6 +12,7 @@ RU_OUTLINE_ACCESS_PORT = 10001
 RU_OUTLINE_API_PORT = 10000
 RU_OUTLINE_LOCAL_PORTS = (RU_OUTLINE_API_PORT, RU_OUTLINE_ACCESS_PORT)
 EU_SERVICE_PORTS = (3128, 8443)
+LOG_LIMIT = "limit rate 10/second burst 20 packets"
 
 
 def _address(value: object, name: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
@@ -89,21 +90,34 @@ def build_ru_firewall_rules(config_json: str) -> str:
         f"    {_address_match('saddr', client)} tcp dport "
         f"{RU_OUTLINE_ACCESS_PORT} accept"
     )
-    client_deny = f"    {_address_match('saddr', client)} drop"
+    client_log = (
+        f'    {_address_match("saddr", client)} counter {LOG_LIMIT} '
+        'log prefix "fck-rkn ru input test-client: " level info accept'
+    )
     ssh_reply = "    tcp sport 22 ct state established,related accept"
     outline_reply = (
         f"    {_address_match('saddr', outline_server)} tcp sport "
         f"{outline_port} ct state established,related accept"
     )
     crawler_rules = [
-        "    ip saddr @rkn_ipv4 drop",
-        "    ip6 saddr @rkn_ipv6 drop",
+        f'    ip saddr @rkn_ipv4 counter {LOG_LIMIT} '
+        'log prefix "fck-rkn ru input crawler-v4: " level info accept',
+        f'    ip6 saddr @rkn_ipv6 counter {LOG_LIMIT} '
+        'log prefix "fck-rkn ru input crawler-v6: " level info accept',
     ]
-    direct_service_deny = (
-        f"    {_address_match('daddr', eu_server)} tcp dport "
-        f"{{ {', '.join(map(str, EU_SERVICE_PORTS))} }} drop"
+    direct_service_log = (
+        f'    {_address_match("daddr", eu_server)} tcp dport '
+        f'{{ {", ".join(map(str, EU_SERVICE_PORTS))} }} counter {LOG_LIMIT} '
+        'log prefix "fck-rkn ru output direct-eu-service: " level info accept'
     )
-    client_egress_deny = f"    {_address_match('daddr', client)} drop"
+    client_egress_log = (
+        f'    {_address_match("daddr", client)} counter {LOG_LIMIT} '
+        'log prefix "fck-rkn ru output test-client: " level info accept'
+    )
+    output_default_log = (
+        f'    counter {LOG_LIMIT} log prefix '
+        '"fck-rkn ru output default-policy: " level info'
+    )
     outline_allow = (
         f"    {_address_match('daddr', outline_server)} tcp dport "
         f"{outline_port} accept"
@@ -131,19 +145,20 @@ table inet {TABLE_NAME} {{
     tcp dport 22 accept
 {chr(10).join(crawler_rules)}
 {client_allow}
-{client_deny}
+{client_log}
 {outline_reply}
   }}
   chain output {{
-    type filter hook output priority -5; policy drop;
+    type filter hook output priority -5; policy accept;
     ip daddr 169.254.169.254 tcp dport 80 accept
     oifname "lo" tcp dport {{ {', '.join(map(str, (*EU_SERVICE_PORTS, *RU_OUTLINE_LOCAL_PORTS)))} }} accept
     oifname "lo" ct state established,related ct original proto-dst {{ {', '.join(map(str, (*EU_SERVICE_PORTS, *RU_OUTLINE_LOCAL_PORTS)))} }} accept
-{direct_service_deny}
+{direct_service_log}
 {outline_allow}
 {ssh_reply}
 {client_reply}
-{client_egress_deny}
+{client_egress_log}
+{output_default_log}
   }}
 }}
 """

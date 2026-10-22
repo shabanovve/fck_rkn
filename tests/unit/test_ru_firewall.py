@@ -24,10 +24,22 @@ class RuFirewallRuleTests(unittest.TestCase):
         rules = build_ru_firewall_rules(valid_config())
 
         self.assertIn("destroy table inet fck_rkn_ru", rules)
-        self.assertIn("ip saddr @rkn_ipv4 drop", rules)
-        self.assertIn("ip6 saddr @rkn_ipv6 drop", rules)
+        self.assertIn(
+            'ip saddr @rkn_ipv4 counter limit rate 10/second burst 20 packets '
+            'log prefix "fck-rkn ru input crawler-v4: " level info accept',
+            rules,
+        )
+        self.assertIn(
+            'ip6 saddr @rkn_ipv6 counter limit rate 10/second burst 20 packets '
+            'log prefix "fck-rkn ru input crawler-v6: " level info accept',
+            rules,
+        )
         self.assertIn("ip saddr 10.0.0.3 tcp dport 10001 accept", rules)
-        self.assertIn("ip saddr 10.0.0.3 drop", rules)
+        self.assertIn(
+            'ip saddr 10.0.0.3 counter limit rate 10/second burst 20 packets '
+            'log prefix "fck-rkn ru input test-client: " level info accept',
+            rules,
+        )
         self.assertIn(
             'oifname "lo" tcp dport { 3128, 8443, 10000, 10001 } accept',
             rules,
@@ -44,13 +56,27 @@ class RuFirewallRuleTests(unittest.TestCase):
         self.assertIn("tcp sport 22 ct state established,related accept", rules)
         self.assertNotIn("tcp dport 22 drop", rules)
         self.assertIn("ip daddr 10.0.0.2 tcp dport 10001 accept", rules)
-        self.assertIn("ip daddr 10.0.0.2 tcp dport { 3128, 8443 } drop", rules)
-        self.assertIn("ip daddr 10.0.0.3 drop", rules)
+        self.assertIn(
+            'ip daddr 10.0.0.2 tcp dport { 3128, 8443 } counter limit '
+            'rate 10/second burst 20 packets log prefix '
+            '"fck-rkn ru output direct-eu-service: " level info accept',
+            rules,
+        )
+        self.assertIn(
+            'ip daddr 10.0.0.3 counter limit rate 10/second burst 20 packets '
+            'log prefix "fck-rkn ru output test-client: " level info accept',
+            rules,
+        )
+        self.assertIn(
+            'counter limit rate 10/second burst 20 packets log prefix '
+            '"fck-rkn ru output default-policy: " level info',
+            rules,
+        )
         self.assertIn("policy accept;", rules)
-        self.assertIn("policy drop;", rules)
+        self.assertNotIn(" drop", rules)
         self.assertNotIn("    ct state established,related accept\n", rules)
 
-    def test_ssh_is_allowed_from_all_sources_before_crawler_drops(self) -> None:
+    def test_ssh_is_allowed_from_all_sources_before_crawler_logging(self) -> None:
         rules = build_ru_firewall_rules(
             valid_config(
                 rkn_ipv4=["35.235.240.0/20"],
@@ -58,10 +84,10 @@ class RuFirewallRuleTests(unittest.TestCase):
             )
         )
         ssh_allow = "tcp dport 22 accept"
-        crawler_drop = "ip saddr @rkn_ipv4 drop"
+        crawler_log = 'ip saddr @rkn_ipv4 counter limit rate 10/second'
 
-        self.assertLess(rules.index(ssh_allow), rules.index(crawler_drop))
-        self.assertNotIn("tcp dport 22 drop", rules)
+        self.assertLess(rules.index(ssh_allow), rules.index(crawler_log))
+        self.assertNotIn(" drop", rules)
 
     def test_keeps_ipv6_inputs_and_normalizes_networks(self) -> None:
         rules = build_ru_firewall_rules(

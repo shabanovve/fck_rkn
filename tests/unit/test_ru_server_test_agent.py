@@ -104,21 +104,21 @@ class RuFirewallCheckTests(unittest.TestCase):
             }
         )
 
-    def test_egress_check_probes_allowed_outline_and_forbidden_destinations(self) -> None:
+    def test_egress_check_requires_log_only_policy_and_allowed_outline(self) -> None:
         script = build_firewall_egress_check_command()
 
         self.assertIn("nft list table inet fck_rkn_ru", script)
-        self.assertIn("policy drop", script)
+        self.assertIn("policy accept", script)
         self.assertIn("rkn_ipv4", script)
         self.assertIn("rkn_ipv6", script)
         self.assertIn("expect_reachable", script)
         self.assertIn("EU Outline transport", script)
-        self.assertIn("direct RU-to-EU service TCP/$port", script)
-        self.assertIn("RU-to-test-client TCP/$port", script)
-        self.assertIn("RU-to-other-host TCP/$port", script)
+        self.assertIn("fck-rkn ru output direct-eu-service:", script)
+        self.assertIn("fck-rkn ru input crawler-v4:", script)
+        self.assertIn("fck-rkn ru output default-policy:", script)
 
     def run_egress_script(
-        self, open_forbidden: str = ""
+        self, missing_log_prefix: str = ""
     ) -> subprocess.CompletedProcess[str]:
         config = self.config()
         with tempfile.TemporaryDirectory() as directory:
@@ -126,12 +126,27 @@ class RuFirewallCheckTests(unittest.TestCase):
             tools = {
                 "sudo": '#!/bin/sh\nif [ "$1" = nft ]; then\n'
                 '  if [ "$2" = list ] && [ "$3" = chain ]; then '
-                'echo "type filter hook output priority -5; policy drop;"; fi\n'
+                'echo "type filter hook output priority -5; policy accept;"; fi\n'
+                '  if [ "$2" = list ] && [ "$3" = table ]; then\n'
+                '    if [ -n "$MISSING_LOG_PREFIX" ]; then '
+                'printf "%s\\n" "fck-rkn ru input crawler-v4:" '
+                '"fck-rkn ru input crawler-v6:" '
+                '"fck-rkn ru input test-client:" '
+                '"fck-rkn ru output direct-eu-service:" '
+                '"fck-rkn ru output test-client:" '
+                '"fck-rkn ru output default-policy:" | '
+                'grep -Fv "$MISSING_LOG_PREFIX"; else '
+                'printf "%s\\n" "fck-rkn ru input crawler-v4:" '
+                '"fck-rkn ru input crawler-v6:" '
+                '"fck-rkn ru input test-client:" '
+                '"fck-rkn ru output direct-eu-service:" '
+                '"fck-rkn ru output test-client:" '
+                '"fck-rkn ru output default-policy:"; fi\n'
+                '  fi\n'
                 '  if [ "$2" = list ] && [ "$3" = set ]; then '
                 'echo "elements = { 192.0.2.0/24 }"; fi\n'
                 "  exit 0\nfi\nexec \"$@\"\n",
                 "timeout": '#!/bin/sh\n'
-                'if [ "$OPEN_FORBIDDEN" = "$5:$6" ]; then exit 0; fi\n'
                 '[ "$5" = "10.0.0.2" ] && [ "$6" = "10001" ]\n',
             }
             for name, body in tools.items():
@@ -141,7 +156,7 @@ class RuFirewallCheckTests(unittest.TestCase):
             environment = {
                 **os.environ,
                 "PATH": f"{root}:{os.environ['PATH']}",
-                "OPEN_FORBIDDEN": open_forbidden,
+                "MISSING_LOG_PREFIX": missing_log_prefix,
             }
             return subprocess.run(
                 ["bash", "-c", build_firewall_egress_check_command()],
@@ -151,17 +166,17 @@ class RuFirewallCheckTests(unittest.TestCase):
                 text=True,
             )
 
-    def test_egress_script_passes_for_allowed_transport_and_closed_denied_paths(self) -> None:
+    def test_egress_script_passes_with_log_only_rules(self) -> None:
         result = self.run_egress_script()
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("allows the EU Outline transport", result.stdout)
+        self.assertIn("log-only mode", result.stdout)
 
-    def test_egress_script_fails_if_a_denied_service_path_is_reachable(self) -> None:
-        result = self.run_egress_script("10.0.0.2:3128")
+    def test_egress_script_fails_if_a_log_rule_is_missing(self) -> None:
+        result = self.run_egress_script("fck-rkn ru input crawler-v6:")
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Forbidden RU firewall path is reachable", result.stderr)
+        self.assertIn("missing a log-only rule", result.stderr)
 
     def test_egress_check_passes_runtime_addresses_only_over_stdin(self) -> None:
         runner = FakeRunner(stdout="blocked\n")

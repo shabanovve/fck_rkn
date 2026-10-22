@@ -208,6 +208,16 @@ Internet access outside the approved path is denied.
 | `eu-server` | Not defined | Not defined | Local traffic only | Not defined |
 | Any other host | Not defined | Deny requests only from IP addresses of the RKN crawler system; policy for other sources is not defined | Deny, except explicitly approved management access | Not defined |
 
+**Current rollout stage: log-only observation.** On `ru-server`, traffic that
+the planned guest firewall would reject is logged with an `fck-rkn ru`
+prefix and then allowed to continue. The output chain has an `accept` policy
+instead of a default drop; otherwise-unmatched outbound traffic is written
+with the `fck-rkn ru output default-policy:` prefix. Log rules are rate-limited
+to protect the kernel log. Review kernel logs before changing any individual
+log rule into an enforcing drop; do not treat the matrix below as currently
+enforced on this VM. GCP VPC firewall behavior is separate and is not changed
+by the guest nftables logging rules.
+
 `Not defined` means this plan does not specify a firewall rule for that
 source/destination pair; it is not an instruction to allow or deny traffic.
 Resolve these pairs before implementing a policy that depends on them.
@@ -247,9 +257,10 @@ Resolve these pairs before implementing a policy that depends on them.
   a partially applied policy. If there is no previous valid configuration,
   fail without activating a partial one.
 
-**Acceptance:** only the flows listed above succeed, direct client access to
-EU services is blocked, and `ru-server` sends requests only to the approved
-proxy services. SSH TCP/22 remains reachable on every VM from any source.
+**Final enforcement acceptance:** after the log-only observation period and
+review, only the flows listed above should succeed; direct client access to
+EU services must be blocked, and `ru-server` must send requests only to the
+approved proxy services. SSH TCP/22 remains reachable on every VM from any source.
 Policy firewall rules are installed only on the two servers, not on
 `test-client`. Failed updates preserve the previous saved and active rules and
 report an error. Unspecified pairs remain unresolved until explicitly

@@ -74,6 +74,11 @@ sys.exit(1)
   echo "Crawler probe source is not present in the active IPv4 set" >&2
   exit 1
 fi
+if ! sudo nft list chain inet fck_rkn_ru input |
+  grep -Fq 'fck-rkn ru input crawler-v4:'; then
+  echo "RU firewall crawler log rule is missing" >&2
+  exit 1
+fi
 
 sudo ip netns add "$namespace"
 sudo ip link add "$host_link" type veth peer name "$peer_link"
@@ -139,9 +144,9 @@ if ! kill -0 "$listener_pid" 2>/dev/null; then
   echo "RU crawler-probe listener exited before the test" >&2
   exit 1
 fi
-if sudo ip netns exec "$namespace" timeout 3 bash -c \
+if ! sudo ip netns exec "$namespace" timeout 3 bash -c \
   'echo > /dev/tcp/"$0"/"$1"' "$ru_address" "$test_port" 2>/dev/null; then
-  echo "A request from the crawler source reached the RU test listener" >&2
+  echo "A request from the crawler source did not reach the RU test listener" >&2
   exit 1
 fi
 
@@ -153,4 +158,4 @@ if [ -z "$packets" ] || [ "$packets" -lt 1 ]; then
   echo "Crawler probe packet did not reach the RU firewall input chain" >&2
   exit 1
 fi
-echo "RU firewall dropped a request from an active crawler-range source"
+echo "RU firewall logged and allowed a request from an active crawler-range source"

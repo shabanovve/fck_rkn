@@ -127,16 +127,10 @@ class OrchestratorPingTests(unittest.TestCase):
             "fck_rkn.orchestration.test_environment.check_mtproxy_tunnel",
             return_value=0,
         )
-        self.client_restricted_paths = patch(
-            "fck_rkn.orchestration.test_environment.check_restricted_service_paths",
-            return_value=0,
-        )
         self.client_mtproxy_deploy_mock = self.client_mtproxy_deploy.start()
         self.client_mtproxy_check_mock = self.client_mtproxy_check.start()
-        self.client_restricted_paths_mock = self.client_restricted_paths.start()
         self.addCleanup(self.client_mtproxy_deploy.stop)
         self.addCleanup(self.client_mtproxy_check.stop)
-        self.addCleanup(self.client_restricted_paths.stop)
         self.ru_outline_deploy = patch(
             "fck_rkn.orchestration.test_environment.deploy_outline_server",
             return_value=0,
@@ -354,9 +348,6 @@ class OrchestratorPingTests(unittest.TestCase):
             client_runner, EU_OUTLINE_KEY
         )
         self.client_mtproxy_check_mock.assert_called_once_with(client_runner)
-        self.client_restricted_paths_mock.assert_called_once_with(
-            client_runner, "10.0.0.1", None
-        )
 
     def test_parses_non_empty_ipv4_and_ipv6_blacklist_sets(self) -> None:
         artifact = """table inet filter {
@@ -790,8 +781,7 @@ class OrchestratorPingTests(unittest.TestCase):
             ("apply_ru_firewall", 47, "check_firewall_policy"),
             ("check_firewall_policy", 48, "check_firewall_rollback"),
             ("check_firewall_rollback", 49, "check_firewall_crawler_source"),
-            ("check_firewall_crawler_source", 50, "check_restricted_service_paths"),
-            ("check_restricted_service_paths", 51, "client_request"),
+            ("check_firewall_crawler_source", 50, "client_request"),
         )
         for failing_step, expected_code, later_step in failure_cases:
             with self.subTest(step=failing_step):
@@ -801,22 +791,15 @@ class OrchestratorPingTests(unittest.TestCase):
                         mock.return_value = (["192.0.2.0/24"], ["2001:db8::/32"])
                     else:
                         mock.return_value = 0
-                self.client_restricted_paths_mock.reset_mock(return_value=False)
-                self.client_restricted_paths_mock.return_value = 0
                 self.client_request_mock.reset_mock(return_value=False)
                 self.client_request_mock.return_value = 0
-                if failing_step == "check_restricted_service_paths":
-                    self.client_restricted_paths_mock.return_value = 1
-                else:
-                    self.firewall_mocks[failing_step].return_value = 1
+                self.firewall_mocks[failing_step].return_value = 1
 
                 result, stderr = self.run_main_with_healthy_eu()
 
                 self.assertEqual(result, expected_code)
                 if later_step == "client_request":
                     self.client_request_mock.assert_not_called()
-                elif later_step == "check_restricted_service_paths":
-                    self.client_restricted_paths_mock.assert_not_called()
                 else:
                     self.firewall_mocks[later_step].assert_not_called()
                 self.assertIn("failed", stderr.getvalue().lower())
