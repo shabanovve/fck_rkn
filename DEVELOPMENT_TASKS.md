@@ -673,7 +673,7 @@ behavior that requires them.
   `tests/unit/test_config_templates.py` checks the comments and that each
   template lists exactly the settings the code reads.
 
-### 79. Add a script that fills `config/test.env` from GCP
+### 79. [x] Add a script that fills `config/test.env` from GCP
 
 - **Change:** Provide a test-environment script (for example,
   `test-env-host configure`) that creates `config/test.env` from the template
@@ -683,6 +683,14 @@ behavior that requires them.
 - **Test:** Verify with a mocked GCP client that missing values are filled,
   existing values are kept, the file is created from the template, and
   failures leave the existing file unchanged.
+- **Done:** `test-env-host configure` (`orchestration/configure.py`, GCP call
+  `GcpInspector` in `gcp/compute.py`) creates the file from the template,
+  keeps operator values, adds missing variables, fills `GCP_SUBNET_CIDR`,
+  selects the only subnetwork when the configured one is missing, checks that
+  the network, image family and machine type exist and warns on a CIDR mismatch;
+  it refuses a non-test project, writes atomically and changes nothing on a
+  GCP failure. Covered by `tests/unit/test_configure.py`; documented in
+  `DEVELOPMENT.md`. Not yet run against real GCP.
 
 ### 80. Rework RU server firewall rules for the new requirements
 

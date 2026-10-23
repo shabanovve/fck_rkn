@@ -76,6 +76,56 @@ def validate_project_access(settings: TestEnvironmentSettings) -> None:
     logger.info("ADC can access the configured test project")
 
 
+class GcpInspector:
+    """Read-only lookups used to validate and fill the test configuration."""
+
+    def __init__(self) -> None:
+        credentials, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        self._credentials = credentials
+
+    def network_exists(self, project: str, network: str) -> bool:
+        try:
+            compute_v1.NetworksClient(credentials=self._credentials).get(
+                project=project, network=network
+            )
+        except NotFound:
+            return False
+        return True
+
+    def list_subnets(
+        self, project: str, zone: str, network: str
+    ) -> dict[str, str]:
+        """Map subnetwork names of ``network`` in the zone's region to CIDRs."""
+        client = compute_v1.SubnetworksClient(credentials=self._credentials)
+        return {
+            subnet.name: subnet.ip_cidr_range
+            for subnet in client.list(
+                project=project, region=zone.rsplit("-", maxsplit=1)[0]
+            )
+            if (subnet.network or "").endswith(f"/networks/{network}")
+        }
+
+    def image_family_exists(self, project: str, family: str) -> bool:
+        try:
+            compute_v1.ImagesClient(credentials=self._credentials).get_from_family(
+                project=project, family=family
+            )
+        except NotFound:
+            return False
+        return True
+
+    def machine_type_exists(self, project: str, zone: str, machine_type: str) -> bool:
+        try:
+            compute_v1.MachineTypesClient(credentials=self._credentials).get(
+                project=project, zone=zone, machine_type=machine_type
+            )
+        except NotFound:
+            return False
+        return True
+
+
 def stop_test_project_vms(settings: TestEnvironmentSettings) -> list[str]:
     """Stop every RUNNING VM in all zones of the test project; return stopped names."""
     credentials, _ = google.auth.default(

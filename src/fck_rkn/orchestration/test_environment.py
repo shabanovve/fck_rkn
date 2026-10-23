@@ -64,6 +64,7 @@ from fck_rkn.agents.ru_server_test import (
     check_squid_forward,
     check_tunnel_blocked,
 )
+from fck_rkn.orchestration.configure import configure_main
 from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
 from fck_rkn.gcp.compute import (
     INSTANCE_NAME,
@@ -261,6 +262,8 @@ def _provision_server(
 
 
 def main() -> int:
+    if sys.argv[1:2] == ["configure"]:
+        return configure_main()
     with tempfile.TemporaryDirectory() as directory:
         return _run(Path(directory))
 

@@ -377,8 +377,16 @@ repository.
    custom roles or appropriately scoped predefined roles rather than granting
    project-wide Owner access.
 
-5. Create the ignored `config/test.env` from the example and confirm that it
-   targets `fck-rkn-test`. If it contains the obsolete `GCP_SSH_SOURCE_CIDR`
+5. Create and fill the ignored `config/test.env` automatically with
+   `.venv/bin/test-env-host configure`. It copies `config/test.env.example`
+   when the file is missing, keeps values you already set, adds missing
+   variables, and reads `GCP_SUBNET_CIDR` from the configured subnetwork
+   through your GCP access. If the configured subnetwork does not exist and
+   the network has exactly one subnetwork in the region, it selects that one.
+   It also checks that the network, image family and machine type exist, and
+   warns when a manually set `GCP_SUBNET_CIDR` differs from the subnetwork.
+   It changes nothing if a check or GCP access fails. Confirm
+   that the file targets `fck-rkn-test`. If it contains the obsolete `GCP_SSH_SOURCE_CIDR`
    or `GCP_IAP_SOURCE_RANGE` setting from an earlier setup, those entries are
    no longer required. Then run the orchestrator from the repository root:
 
