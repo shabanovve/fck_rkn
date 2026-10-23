@@ -297,6 +297,13 @@ class RuServerFirewallTests(unittest.TestCase):
                 "eu_outline_port": 10001,
                 "rkn_ipv4": ["192.0.2.0/24"],
                 "rkn_ipv6": ["2001:db8::/32"],
+                "vm_services": {
+                    "metadata_address": "169.254.169.254",
+                    "dns_addresses": ["169.254.169.254"],
+                    "dhcp_server_address": "169.254.169.254",
+                    "ntp_addresses": ["169.254.169.254"],
+                    "local_networks": ["10.0.0.0/24"],
+                },
             }
         )
 

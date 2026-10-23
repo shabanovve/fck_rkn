@@ -6,6 +6,14 @@ import ipaddress
 import json
 from collections.abc import Sequence
 
+from fck_rkn.agents.firewall_common import (
+    address_match,
+    minimal_input_rules,
+    minimal_output_rules,
+    parse_address,
+    parse_minimal_vm_services,
+)
+
 
 TABLE_NAME = "fck_rkn_ru"
 RU_OUTLINE_ACCESS_PORT = 10001
@@ -13,15 +21,6 @@ RU_OUTLINE_API_PORT = 10000
 RU_OUTLINE_LOCAL_PORTS = (RU_OUTLINE_API_PORT, RU_OUTLINE_ACCESS_PORT)
 EU_SERVICE_PORTS = (3128, 8443)
 LOG_LIMIT = "limit rate 10/second burst 20 packets"
-
-
-def _address(value: object, name: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
-    if not isinstance(value, str):
-        raise ValueError(f"{name} must be an IP address")
-    try:
-        return ipaddress.ip_address(value)
-    except ValueError as error:
-        raise ValueError(f"{name} must be an IP address") from error
 
 
 def _network_list(
@@ -53,13 +52,6 @@ def _nft_networks(
     return ", ".join(network.with_prefixlen for network in networks)
 
 
-def _address_match(
-    prefix: str, address: ipaddress.IPv4Address | ipaddress.IPv6Address
-) -> str:
-    family = "ip" if address.version == 4 else "ip6"
-    return f"{family} {prefix} {address.compressed}"
-
-
 def build_ru_firewall_rules(config_json: str) -> str:
     """Validate runtime firewall inputs and return a complete nftables table."""
     try:
@@ -69,9 +61,9 @@ def build_ru_firewall_rules(config_json: str) -> str:
     if not isinstance(config, dict):
         raise ValueError("firewall configuration must be a JSON object")
 
-    client = _address(config.get("test_client_address"), "test_client_address")
-    eu_server = _address(config.get("eu_server_address"), "eu_server_address")
-    outline_server = _address(
+    client = parse_address(config.get("test_client_address"), "test_client_address")
+    eu_server = parse_address(config.get("eu_server_address"), "eu_server_address")
+    outline_server = parse_address(
         config.get("eu_outline_address"), "eu_outline_address"
     )
     outline_port = config.get("eu_outline_port")
@@ -85,18 +77,23 @@ def build_ru_firewall_rules(config_json: str) -> str:
         raise ValueError("eu_outline_port conflicts with a direct EU service port")
     ipv4 = _network_list(config.get("rkn_ipv4"), "rkn_ipv4", 4)
     ipv6 = _network_list(config.get("rkn_ipv6"), "rkn_ipv6", 6)
+    vm_services = parse_minimal_vm_services(config.get("vm_services"))
+    minimal_input = "\n".join(f"    {rule}" for rule in minimal_input_rules(vm_services))
+    minimal_output = "\n".join(
+        f"    {rule}" for rule in minimal_output_rules(vm_services)
+    )
 
     client_allow = (
-        f"    {_address_match('saddr', client)} tcp dport "
+        f"    {address_match('saddr', client)} tcp dport "
         f"{RU_OUTLINE_ACCESS_PORT} accept"
     )
     client_log = (
-        f'    {_address_match("saddr", client)} counter {LOG_LIMIT} '
+        f'    {address_match("saddr", client)} counter {LOG_LIMIT} '
         'log prefix "fck-rkn ru input test-client: " level info accept'
     )
     ssh_reply = "    tcp sport 22 ct state established,related accept"
     outline_reply = (
-        f"    {_address_match('saddr', outline_server)} tcp sport "
+        f"    {address_match('saddr', outline_server)} tcp sport "
         f"{outline_port} ct state established,related accept"
     )
     crawler_rules = [
@@ -106,12 +103,12 @@ def build_ru_firewall_rules(config_json: str) -> str:
         'log prefix "fck-rkn ru input crawler-v6: " level info accept',
     ]
     direct_service_log = (
-        f'    {_address_match("daddr", eu_server)} tcp dport '
+        f'    {address_match("daddr", eu_server)} tcp dport '
         f'{{ {", ".join(map(str, EU_SERVICE_PORTS))} }} counter {LOG_LIMIT} '
         'log prefix "fck-rkn ru output direct-eu-service: " level info accept'
     )
     client_egress_log = (
-        f'    {_address_match("daddr", client)} counter {LOG_LIMIT} '
+        f'    {address_match("daddr", client)} counter {LOG_LIMIT} '
         'log prefix "fck-rkn ru output test-client: " level info accept'
     )
     output_default_log = (
@@ -119,11 +116,11 @@ def build_ru_firewall_rules(config_json: str) -> str:
         '"fck-rkn ru output default-policy: " level info'
     )
     outline_allow = (
-        f"    {_address_match('daddr', outline_server)} tcp dport "
+        f"    {address_match('daddr', outline_server)} tcp dport "
         f"{outline_port} accept"
     )
     client_reply = (
-        f"    {_address_match('daddr', client)} tcp sport "
+        f"    {address_match('daddr', client)} tcp sport "
         f"{RU_OUTLINE_ACCESS_PORT} ct state established,related accept"
     )
 
@@ -141,7 +138,7 @@ table inet {TABLE_NAME} {{
   }}
   chain input {{
     type filter hook input priority -5; policy accept;
-    iifname "lo" accept
+{minimal_input}
     tcp dport 22 accept
 {chr(10).join(crawler_rules)}
 {client_allow}
@@ -150,7 +147,7 @@ table inet {TABLE_NAME} {{
   }}
   chain output {{
     type filter hook output priority -5; policy accept;
-    ip daddr 169.254.169.254 tcp dport 80 accept
+{minimal_output}
     oifname "lo" tcp dport {{ {', '.join(map(str, (*EU_SERVICE_PORTS, *RU_OUTLINE_LOCAL_PORTS)))} }} accept
     oifname "lo" ct state established,related ct original proto-dst {{ {', '.join(map(str, (*EU_SERVICE_PORTS, *RU_OUTLINE_LOCAL_PORTS)))} }} accept
 {direct_service_log}

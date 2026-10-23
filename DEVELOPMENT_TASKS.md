@@ -643,7 +643,7 @@ behavior that requires them.
   services; and validation plus rollback behavior for failed firewall/list
   updates.
 
-### 77. Add minimal VM service rules to the firewall generator
+### 77. [x] Add minimal VM service rules to the firewall generator
 
 - **Change:** Extend the nftables rule generation so both servers keep
   loopback, established/related replies, DNS, DHCP, metadata, NTP and ICMP
@@ -652,6 +652,13 @@ behavior that requires them.
 - **Test:** Unit-test the generated ruleset for each minimal service and for
   rule order: loopback and established first, minimal services, project
   services, RKN denial, then log-and-deny.
+- **Done:** Shared module `agents/firewall_common.py` builds the minimal
+  input/output rules from a validated `vm_services` input (metadata, DNS,
+  DHCP, NTP addresses and local networks); the RU generator uses it, and the
+  EU generator (task 81) must call the same module. `GCP_SUBNET_CIDR` is a new
+  required test setting from which `test_env_host` supplies the local network.
+  Unit tests cover the rules, their order, supplied addresses and invalid
+  input; the generated ruleset passes `nft -c`.
 
 ### 78. Rework RU server firewall rules for the new requirements
 

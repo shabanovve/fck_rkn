@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
 from pathlib import Path
@@ -44,6 +45,7 @@ class TestEnvironmentSettings(BaseSettings):
     GCP_IMAGE_FAMILY: str = "ubuntu-2404-lts-amd64"
     GCP_NETWORK: str = "default"
     GCP_SUBNETWORK: str = "default"
+    GCP_SUBNET_CIDR: str
     GCP_SSH_NETWORK_TAG: str = "fck-rkn-test-eu-server-ssh"
     GCP_SSH_FIREWALL_RULE: str = "fck-rkn-test-eu-server-ssh"
 
@@ -61,6 +63,14 @@ class TestEnvironmentSettings(BaseSettings):
                 f"must target the isolated test project {TEST_PROJECT_ID!r}"
             )
         return value
+
+    @field_validator("GCP_SUBNET_CIDR")
+    @classmethod
+    def validate_gcp_subnet_cidr(cls, value: str) -> str:
+        try:
+            return str(ipaddress.ip_network(value, strict=True))
+        except ValueError as error:
+            raise ValueError("must be a subnet in CIDR notation") from error
 
     @field_validator("GCP_ZONE")
     @classmethod

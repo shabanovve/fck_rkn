@@ -516,11 +516,23 @@ class ComputeProvisioningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "test.env"
             config_path.write_text(
-                "GCP_PROJECT_ID=fck-rkn-test\n",
+                "GCP_PROJECT_ID=fck-rkn-test\nGCP_SUBNET_CIDR=10.0.0.0/24\n",
                 encoding="utf-8",
             )
 
-            self.assertEqual(load_config(config_path).GCP_PROJECT_ID, "fck-rkn-test")
+            settings = load_config(config_path)
+            self.assertEqual(settings.GCP_PROJECT_ID, "fck-rkn-test")
+            self.assertEqual(settings.GCP_SUBNET_CIDR, "10.0.0.0/24")
+
+    def test_subnet_cidr_is_required_and_validated(self) -> None:
+        for lines in ("", "GCP_SUBNET_CIDR=not-a-subnet\n", "GCP_SUBNET_CIDR=10.0.0.1/24\n"):
+            with self.subTest(lines=lines), tempfile.TemporaryDirectory() as directory:
+                config_path = Path(directory) / "test.env"
+                config_path.write_text(
+                    "GCP_PROJECT_ID=fck-rkn-test\n" + lines, encoding="utf-8"
+                )
+                with self.assertRaises(ValidationError):
+                    load_config(config_path)
 
     def test_cli_reports_bad_env_line_without_exposing_its_contents(self) -> None:
         output = StringIO()

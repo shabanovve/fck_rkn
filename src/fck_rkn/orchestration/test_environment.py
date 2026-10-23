@@ -164,6 +164,10 @@ def _crawler_probe_address(networks: list[str]) -> str:
     return str(network.network_address)
 
 
+# On GCP the metadata server also provides DNS, DHCP and time service.
+GCP_VM_SERVICES_ADDRESS = "169.254.169.254"
+
+
 def build_ru_firewall_configuration(
     *,
     test_client_address: str,
@@ -172,6 +176,7 @@ def build_ru_firewall_configuration(
     other_host_address: str,
     rkn_ipv4: list[str],
     rkn_ipv6: list[str],
+    subnet_cidr: str,
 ) -> str:
     """Build the non-secret runtime input accepted by the RU firewall agent."""
     try:
@@ -191,6 +196,13 @@ def build_ru_firewall_configuration(
             ).compressed,
             "rkn_ipv4": rkn_ipv4,
             "rkn_ipv6": rkn_ipv6,
+            "vm_services": {
+                "metadata_address": GCP_VM_SERVICES_ADDRESS,
+                "dns_addresses": [GCP_VM_SERVICES_ADDRESS],
+                "dhcp_server_address": GCP_VM_SERVICES_ADDRESS,
+                "ntp_addresses": [GCP_VM_SERVICES_ADDRESS],
+                "local_networks": [subnet_cidr],
+            },
         }
     )
 
@@ -766,6 +778,7 @@ def _run(image_directory: Path) -> int:
             other_host_address=OTHER_HOST_TEST_ADDRESS,
             rkn_ipv4=rkn_ipv4,
             rkn_ipv6=rkn_ipv6,
+            subnet_cidr=settings.GCP_SUBNET_CIDR,
         )
     except (OSError, RuntimeError, ValueError) as error:
         logger.error("Preparing RU firewall inputs failed: %s", error)

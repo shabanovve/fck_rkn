@@ -14,6 +14,13 @@ def valid_config(**overrides: object) -> str:
         "eu_outline_port": 10001,
         "rkn_ipv4": ["192.0.2.0/24"],
         "rkn_ipv6": ["2001:db8::/32"],
+        "vm_services": {
+            "metadata_address": "169.254.169.254",
+            "dns_addresses": ["169.254.169.254"],
+            "dhcp_server_address": "169.254.169.254",
+            "ntp_addresses": ["169.254.169.254"],
+            "local_networks": ["10.0.0.0/24"],
+        },
     }
     config.update(overrides)
     return json.dumps(config)
@@ -50,7 +57,7 @@ class RuFirewallRuleTests(unittest.TestCase):
             rules,
         )
         self.assertIn(
-            "ip daddr 169.254.169.254 tcp dport 80 accept", rules
+            "ip daddr 169.254.169.254 tcp dport { 80, 443 } accept", rules
         )
         self.assertIn("    tcp dport 22 accept", rules)
         self.assertIn("tcp sport 22 ct state established,related accept", rules)
@@ -74,7 +81,7 @@ class RuFirewallRuleTests(unittest.TestCase):
         )
         self.assertIn("policy accept;", rules)
         self.assertNotIn(" drop", rules)
-        self.assertNotIn("    ct state established,related accept\n", rules)
+        self.assertIn("    ct state established,related accept\n", rules)
 
     def test_ssh_is_allowed_from_all_sources_before_crawler_logging(self) -> None:
         rules = build_ru_firewall_rules(
@@ -133,3 +140,78 @@ class RuFirewallRuleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RuMinimalVmServiceTests(unittest.TestCase):
+    def chain(self, rules: str, name: str) -> str:
+        start = rules.index(f"chain {name}")
+        return rules[start : rules.index("\n  }", start)]
+
+    def test_minimal_vm_services_come_first_in_both_chains(self) -> None:
+        rules = build_ru_firewall_rules(valid_config())
+        input_chain = self.chain(rules, "input")
+        output_chain = self.chain(rules, "output")
+
+        for text in (
+            'iifname "lo" accept',
+            "ct state established,related accept",
+            "ip saddr 169.254.169.254 udp sport 67 udp dport 68 accept",
+            "icmp type { echo-request",
+        ):
+            self.assertIn(text, input_chain)
+        for text in (
+            'oifname "lo" accept',
+            "ct state established,related accept",
+            "th dport 53 accept",
+            "tcp dport { 80, 443 } accept",
+            "udp sport 68 udp dport 67 accept",
+            "udp dport 123 accept",
+            "ip daddr 10.0.0.0/24 icmp type",
+        ):
+            self.assertIn(text, output_chain)
+        self.assertLess(
+            input_chain.index("udp dport 68"), input_chain.index("tcp dport 22")
+        )
+        self.assertLess(
+            input_chain.index("icmp type"), input_chain.index("@rkn_ipv4")
+        )
+        self.assertLess(
+            output_chain.index("udp dport 123"),
+            output_chain.index("direct-eu-service"),
+        )
+
+    def test_services_use_the_supplied_provider_addresses(self) -> None:
+        rules = build_ru_firewall_rules(
+            valid_config(
+                vm_services={
+                    "metadata_address": "192.0.2.10",
+                    "dns_addresses": ["192.0.2.11", "2001:db8::53"],
+                    "dhcp_server_address": "192.0.2.12",
+                    "ntp_addresses": ["192.0.2.13"],
+                    "local_networks": ["198.51.100.0/24", "2001:db8:1::/64"],
+                }
+            )
+        )
+
+        self.assertIn("ip daddr { 192.0.2.11 } meta l4proto", rules)
+        self.assertIn("ip6 daddr { 2001:db8::53 } meta l4proto", rules)
+        self.assertIn("ip daddr 192.0.2.10 tcp dport { 80, 443 } accept", rules)
+        self.assertIn("ip daddr { 192.0.2.12, 255.255.255.255 }", rules)
+        self.assertIn("ip daddr { 192.0.2.13 } udp dport 123 accept", rules)
+        self.assertIn("ip6 daddr 2001:db8:1::/64 icmpv6 type", rules)
+        self.assertNotIn("169.254.169.254", rules)
+
+    def test_rejects_missing_or_invalid_vm_services(self) -> None:
+        good = json.loads(valid_config())["vm_services"]
+        changes = (
+            None,
+            {**good, "metadata_address": "metadata"},
+            {**good, "dns_addresses": []},
+            {**good, "ntp_addresses": ["ntp"]},
+            {**good, "dhcp_server_address": "2001:db8::1"},
+            {**good, "local_networks": []},
+            {**good, "local_networks": ["10.0.0.1/24"]},
+        )
+        for vm_services in changes:
+            with self.subTest(vm_services=vm_services), self.assertRaises(ValueError):
+                build_ru_firewall_rules(valid_config(vm_services=vm_services))

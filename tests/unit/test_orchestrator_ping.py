@@ -29,6 +29,7 @@ class OrchestratorPingTests(unittest.TestCase):
         self.settings = TestEnvironmentSettings.model_construct(
             GCP_PROJECT_ID="fck-rkn-test",
             GCP_ZONE="europe-north1-a",
+            GCP_SUBNET_CIDR="10.0.0.0/24",
         )
         self.instance = compute_v1.Instance(
             name="eu-server",
@@ -333,6 +334,13 @@ class OrchestratorPingTests(unittest.TestCase):
                 "other_host_address": "1.1.1.1",
                 "rkn_ipv4": ["192.0.2.0/24"],
                 "rkn_ipv6": ["2001:db8::/32"],
+                "vm_services": {
+                    "metadata_address": "169.254.169.254",
+                    "dns_addresses": ["169.254.169.254"],
+                    "dhcp_server_address": "169.254.169.254",
+                    "ntp_addresses": ["169.254.169.254"],
+                    "local_networks": ["10.0.0.0/24"],
+                },
             },
         )
         self.firewall_mocks["check_firewall_policy"].assert_called_once_with(
@@ -397,9 +405,11 @@ class OrchestratorPingTests(unittest.TestCase):
                 other_host_address="1.1.1.1",
                 rkn_ipv4=["192.0.2.0/24"],
                 rkn_ipv6=["2001:db8::/32"],
+                subnet_cidr="10.0.0.0/24",
             )
         )
 
+        self.assertEqual(config["vm_services"]["local_networks"], ["10.0.0.0/24"])
         self.assertEqual(config["eu_outline_address"], "10.0.0.2")
         self.assertEqual(config["eu_outline_port"], 10001)
         self.assertEqual(config["test_client_address"], "10.0.0.3")
