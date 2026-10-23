@@ -9,20 +9,33 @@ The project aims to provide:
 - **MTProxy for Telegram** to proxy Telegram traffic.
 - **A separate proxy for web browsers** to access websites through a proxy.
 - **Container orchestration with Docker**.
+- **Two servers: RU-server and EU-server.**
+- **RU-server** runs an Outline VPN server and connects to EU-server via VPN.
+- **EU-server** runs an Outline VPN server, a web proxy and MTProxy for
+  Telegram.
+- **Firewall on RU-server:** incoming SSH and VPN are allowed; connections
+  from RKN crawlers and all other incoming connections are logged and denied.
+  Outgoing connections are limited to those needed for normal VM operation
+  (DNS, DHCP and similar) and by the project (such as the VPN to EU-server);
+  everything else is logged and denied.
+- **VPN clients** can use only the web proxy and MTProxy. They cannot send
+  packets beyond RU-server; for example, they cannot ping external services.
+- **Firewall on EU-server:** incoming SSH is allowed from any address, VPN
+  only from RU-server; connections from RKN crawlers and all other incoming
+  connections are logged and denied. Outgoing connections are not restricted.
+- **Both servers are hidden from RKN crawlers.** The
+  https://github.com/C24Be/AS_Network_List.git project provides the list of
+  crawler addresses; the list is refreshed daily on both servers.
+- **Blocking of ru-domains** is done at the Squid (web proxy) level.
 - **Automated firewall rule updates** to help protect the services from web
   crawlers.
-- **Contains two part: RU-server and EU-server**
-- **RU-server ups Outline VPN server and connects to EU-server via VPN**
-- **EU-server ups Outline VPN server, web proxy and MTProxy for Telegram**
-- **RU-server allows only connection to web proxy and MTProxy for Telegram only in EU-server** other outgoing connections are blocked by firewall rules.
-- **EU-server allows for VPN clients connection to web proxy and MTProxy for Telegram only** other outgoing connections are blocked by firewall rules.
-- **EU-server disables any connection to ru-domain and ru-ip**
-- **Monitoring of all services is provided by Prometheus and Grafana dashboards**
-- Use project https://github.com/C24Be/AS_Network_List.git to block ingress connection from black list ip addresses in RU-server and EU-server
-- Update black list ip addresses in RU-server and EU-server daily from project
-- Create stand in virtual machine for autotest functionality of RU-server and EU-server
-- All parameters are provided as ENV variables for docker 
+- **Monitoring of all services** is provided by Prometheus and Grafana
+  dashboards.
+- **A test stand** in virtual machines for autotests of RU-server and
+  EU-server.
+- **All parameters** are provided as ENV variables for Docker.
 
+The detailed firewall requirements are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 Because the proxy services operate at the application layer, this architecture
 is intended to prevent the Max messenger from detecting the circumvention

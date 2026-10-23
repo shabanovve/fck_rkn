@@ -86,10 +86,97 @@
 - Agents receive provider-specific values (such as a VM's private address) as
   parameters; the orchestrator resolves them in the test environment and
   `agents.env` supplies them in production.
+## Firewall Requirements
+
+### Principles
+
 - Implement required firewall rules inside each VM's Ubuntu operating system.
   Do not rely on a cloud-provider firewall as the only enforcement layer.
-- Cloud-provider firewall rules may be used as an additional defense, but the
+  Cloud-provider firewall rules may be used as an additional defense, but the
   guest operating system must retain and enforce the required network policy.
+- Restrictions are enforced only on `ru-server` and `eu-server`. No firewall
+  rules are configured on VPN clients, and no client (including `test-client`)
+  has special rules: `test-client` is an ordinary VPN client.
+- Where a default-deny policy applies, every allowed flow is listed
+  explicitly. Traffic that matches no allow rule is logged and denied.
+- IPv6 follows the same rules as IPv4.
+- Rule order in every chain: loopback and established/related replies; minimal
+  VM services; project services; RKN crawler denial; log and deny the rest.
+- Every denial is logged with the prefix `fck-rkn <host>` (for example,
+  `fck-rkn ru`), rate-limited so logs cannot be flooded.
+- Rules are applied transactionally with a backup and automatic rollback on
+  failure, so a bad ruleset cannot lock out the VM.
+- Rules must coexist with chains managed by Docker and must not remove them.
+- Provider-specific values (metadata, DNS and DHCP addresses, peer addresses)
+  are passed to agents as parameters; agents never hard-code a provider.
+
+### Minimal VM Services (all servers)
+
+Restrictive rules must never break the VM itself. Every default-deny policy
+keeps these services working, with the narrowest possible scope.
+
+| Service | Direction | Protocol/port | Peer |
+|---------|-----------|---------------|------|
+| Loopback | in/out | any | `lo` |
+| Established/related replies | in/out | any | connection tracking |
+| DNS | out | UDP/TCP 53 | provider DNS resolver |
+| DHCP | out/in | UDP 67/68 | provider DHCP server |
+| Metadata server | out | TCP 80 (and 443) | provider metadata address |
+| NTP | out | UDP 123 | provider/approved time source |
+| ICMP (PMTU, neighbor discovery) | in/out | ICMP/ICMPv6 | local subnet |
+
+SSH is allowed per server as described below. Package repositories, container
+registries, and monitoring endpoints (TCP 443) stay closed on `ru-server` by
+default and are opened only for maintenance or from an approved address list.
+
+### ru-server
+
+Incoming (default deny):
+
+- SSH is allowed.
+- VPN connections are allowed.
+- Connections from RKN crawler address ranges are logged and denied.
+- All other incoming connections are logged and denied.
+
+Outgoing (default deny):
+
+- Minimal VM services are allowed.
+- Connections required by the project are allowed, for example the VPN
+  connection to `eu-server`.
+- All other outgoing requests are logged and denied. In particular, direct
+  connections to `eu-server` on the web proxy and MTProto ports are denied;
+  only the VPN is allowed between the servers.
+
+VPN clients (all of them, not only `test-client`):
+
+- Traffic inside the VPN addressed to `ru-server` itself is not restricted,
+  including ICMP to the client's default route.
+- A VPN client cannot send packets beyond `ru-server`; for example, it cannot
+  ping external services.
+- VPN clients can use only the web proxy and the MTProto proxy; all other
+  traffic from them that must leave `ru-server` is logged and denied.
+
+### eu-server
+
+Incoming (default deny):
+
+- SSH is allowed from all IP addresses.
+- VPN connections are allowed only from `ru-server`.
+- Connections from RKN crawler address ranges are logged and denied.
+- All other incoming connections are logged and denied.
+
+Outgoing:
+
+- There are no restrictions.
+
+### Verification
+
+- Tests confirm that the minimal VM services still work after the policy is
+  applied (name resolution, time sync, SSH, DHCP lease renewal) and that the
+  intended denied traffic is dropped and logged.
+- Test cases cover each rule above: SSH, VPN, RKN crawler denial, proxies for
+  VPN clients, denied direct traffic between servers, and denied traffic
+  beyond `ru-server` for VPN clients.
 
 ## Outline Server Image
 
