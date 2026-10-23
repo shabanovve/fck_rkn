@@ -714,7 +714,7 @@ behavior that requires them.
   `firewall_common`). Unit tests plus an `nft -c` check; not yet deployed
   (task 81).
 
-### 81. Test and deploy EU server firewall rules
+### 81. [x] Test and deploy EU server firewall rules
 
 - **Test:** Extend `eu-server-test-agent` to verify: SSH accepted from any
   source; VPN accepted only from `ru-server`; RKN crawler sources and all
@@ -724,6 +724,20 @@ behavior that requires them.
   invalid replacement.
 - **Orchestration:** Make `test_env_host` install the EU rules and run these
   checks after the RU-to-EU paths are deployed. Fail on any mismatch.
+- **Done:** `eu-server-test-agent firewall` runs `eu_firewall_check.sh` on
+  `eu-server`: it probes from an isolated network namespace using an arbitrary
+  source, the `ru-server` address and an RKN crawler address, and checks SSH,
+  VPN (only from `ru-server`), direct Squid/MTProto ports, an unlisted port,
+  rule counters, kernel-log entries with `fck-rkn eu`, unrestricted outgoing
+  traffic and the minimal VM services. `firewall-rollback` reuses the shared
+  rollback check (`firewall_rollback_check.sh`, now parametrised by host).
+  `test_env_host` installs the EU rules before the RU rules and runs both
+  checks (exit codes 51-53; input preparation still fails with 46). The probe
+  was run locally in a user/network namespace with a simulated Docker DNAT;
+  everything except the kernel-log and outbound checks (not possible there)
+  passed. Not yet run on the real VMs. The probe briefly routes the
+  `ru-server` address into the namespace, so a live RU-to-EU connection may
+  stall for a few seconds during the check.
 
 ### 82. Rework RU server firewall rules for the new requirements
 

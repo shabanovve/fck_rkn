@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
+import json
 import logging
 import sys
 
@@ -17,6 +19,11 @@ from fck_rkn.agents.eu_server import (
     SQUID_CONTAINER_NAME,
     SQUID_PORT,
 )
+from fck_rkn.agents.firewall_common import (
+    firewall_rollback_check_command,
+    load_config,
+    parse_minimal_vm_services,
+)
 from fck_rkn.agents.outline import OUTLINE_HEALTH_CHECK_COMMAND
 from fck_rkn.agent_config import eu_server_runner, load_agent_settings
 from fck_rkn.remote import render
@@ -25,6 +32,9 @@ from fck_rkn.remote.runner import RemoteRunner, execute
 
 logger = logging.getLogger(__name__)
 SSH_COMMAND_TIMEOUT_SECONDS = 90
+FIREWALL_CHECK_TIMEOUT_SECONDS = 180
+FIREWALL_ROLLBACK_TIMEOUT_SECONDS = 120
+OUTBOUND_TEST_ADDRESS = "1.1.1.1"
 SQUID_STARTUP_CHECK_COMMAND = render(
     "squid_startup_check.sh",
     container_name=SQUID_CONTAINER_NAME,
@@ -86,6 +96,71 @@ def check_outline_health(runner: RemoteRunner) -> int:
     return result
 
 
+def build_firewall_check_command() -> str:
+    return render(
+        "eu_firewall_check.sh",
+        vpn_port=OUTLINE_ACCESS_KEY_PORT,
+        proxy_ports=f"{SQUID_PORT} {MTPROXY_PORT}",
+    )
+
+
+def build_firewall_check_input(config_json: str) -> str:
+    """Derive the non-secret input of the firewall check from the firewall config."""
+    config = load_config(config_json)
+    services = parse_minimal_vm_services(config.get("vm_services"))
+    ranges = config.get("rkn_ipv4")
+    if not isinstance(ranges, list) or not ranges:
+        raise ValueError("rkn_ipv4 must contain at least one network")
+    crawler = ipaddress.ip_network(ranges[0], strict=True)
+    ru_server = ipaddress.ip_address(config.get("ru_server_address"))
+    ssh_port = config.get("ssh_port", 22)
+    dns = next((a for a in services.dns_addresses if a.version == 4), None)
+    if dns is None or services.metadata_address.version != 4:
+        raise ValueError("the firewall check requires IPv4 service addresses")
+    return json.dumps(
+        {
+            "ru_server_address": ru_server.compressed,
+            "crawler_source_address": str(crawler.network_address),
+            "ssh_port": ssh_port,
+            "dns_address": dns.compressed,
+            "vm_service_address": services.metadata_address.compressed,
+            "outbound_address": OUTBOUND_TEST_ADDRESS,
+        }
+    )
+
+
+def check_eu_firewall(runner: RemoteRunner, config_json: str) -> int:
+    """Check the EU firewall policy from isolated probe sources on eu-server."""
+    try:
+        check_input = build_firewall_check_input(config_json)
+    except (TypeError, ValueError) as error:
+        logger.error("Invalid EU firewall test configuration: %s", error)
+        return 1
+    logger.info("Checking the EU firewall policy on eu-server")
+    return execute(
+        runner,
+        build_firewall_check_command(),
+        "EU firewall policy check",
+        FIREWALL_CHECK_TIMEOUT_SECONDS,
+        stdin=check_input,
+        print_output=True,
+        print_stderr=True,
+    )
+
+
+def check_eu_firewall_rollback(runner: RemoteRunner) -> int:
+    """Verify a rejected update preserves saved and active EU firewall rules."""
+    logger.info("Checking EU firewall update rollback on eu-server")
+    return execute(
+        runner,
+        firewall_rollback_check_command("eu"),
+        "EU firewall update rollback check",
+        FIREWALL_ROLLBACK_TIMEOUT_SECONDS,
+        print_output=True,
+        print_stderr=True,
+    )
+
+
 def _run_check(runner: RemoteRunner, command: str, description: str) -> int:
     return execute(
         runner,
@@ -109,7 +184,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "action",
         nargs="?",
-        choices=("startup", "http", "outline", "mtproxy"),
+        choices=(
+            "startup",
+            "http",
+            "outline",
+            "mtproxy",
+            "firewall",
+            "firewall-rollback",
+        ),
         default="startup",
         help="Check to run (default: startup)",
     )
@@ -124,6 +206,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    if args.action == "firewall":
+        return check_eu_firewall(runner, sys.stdin.read())
+    if args.action == "firewall-rollback":
+        return check_eu_firewall_rollback(runner)
     if args.action == "http":
         return check_squid_http(runner)
     if args.action == "mtproxy":

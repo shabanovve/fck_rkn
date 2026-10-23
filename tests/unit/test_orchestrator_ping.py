@@ -205,6 +205,9 @@ class OrchestratorPingTests(unittest.TestCase):
         self.addCleanup(self.ru_key.stop)
         self.firewall_mocks = {}
         for name in (
+            "apply_eu_firewall",
+            "check_eu_firewall",
+            "check_eu_firewall_rollback",
             "apply_ru_firewall",
             "check_firewall_policy",
             "check_firewall_rollback",
@@ -320,6 +323,21 @@ class OrchestratorPingTests(unittest.TestCase):
         )
         self.outline_check_mock.assert_called_once_with(EU_RUNNER)
         self.firewall_mocks["fetch_rkn_blacklist"].assert_called_once_with()
+        self.firewall_mocks["apply_eu_firewall"].assert_called_once()
+        eu_payload = json.loads(
+            self.firewall_mocks["apply_eu_firewall"].call_args.args[1]
+        )
+        self.assertEqual(self.firewall_mocks["apply_eu_firewall"].call_args.args[0], EU_RUNNER)
+        self.assertEqual(eu_payload["ru_server_address"], "10.0.0.1")
+        self.assertEqual(eu_payload["rkn_ipv4"], ["192.0.2.0/24"])
+        self.assertIn("vm_services", eu_payload)
+        self.firewall_mocks["check_eu_firewall"].assert_called_once_with(
+            EU_RUNNER,
+            self.firewall_mocks["apply_eu_firewall"].call_args.args[1],
+        )
+        self.firewall_mocks["check_eu_firewall_rollback"].assert_called_once_with(
+            EU_RUNNER
+        )
         self.firewall_mocks["apply_ru_firewall"].assert_called_once()
         firewall_payload = self.firewall_mocks[
             "apply_ru_firewall"
@@ -788,6 +806,9 @@ class OrchestratorPingTests(unittest.TestCase):
 
     def test_firewall_orchestration_failures_stop_at_the_failing_check(self) -> None:
         failure_cases = (
+            ("apply_eu_firewall", 51, "check_eu_firewall"),
+            ("check_eu_firewall", 52, "check_eu_firewall_rollback"),
+            ("check_eu_firewall_rollback", 53, "apply_ru_firewall"),
             ("apply_ru_firewall", 47, "check_firewall_policy"),
             ("check_firewall_policy", 48, "check_firewall_rollback"),
             ("check_firewall_rollback", 49, "check_firewall_crawler_source"),
@@ -823,6 +844,7 @@ class OrchestratorPingTests(unittest.TestCase):
 
         self.assertEqual(result, 46)
         self.firewall_mocks["apply_ru_firewall"].assert_not_called()
+        self.firewall_mocks["apply_eu_firewall"].assert_not_called()
         self.assertIn("Preparing RU firewall inputs failed", stderr.getvalue())
 
     def test_firewall_install_failure_stops_before_firewall_tests(self) -> None:

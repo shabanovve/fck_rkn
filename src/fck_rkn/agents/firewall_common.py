@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import base64
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -209,4 +210,18 @@ def firewall_apply_command(host: str) -> str:
         rules_file=f"/etc/fck-rkn/{host}-firewall.nft",
         unit_file=f"/etc/systemd/system/fck-rkn-{host}-firewall.service",
         lock_file=f"/run/lock/fck-rkn-{host}-firewall.lock",
+    )
+
+
+def firewall_rollback_check_command(host: str) -> str:
+    """Return a test that exercises the same transactional firewall installer."""
+    installer = base64.b64encode(
+        firewall_apply_command(host).encode("utf-8")
+    ).decode("ascii")
+    return render(
+        "firewall_rollback_check.sh",
+        host=host,
+        installer_base64=installer,
+        rules_file=f"/etc/fck-rkn/{host}-firewall.nft",
+        service_name=f"fck-rkn-{host}-firewall.service",
     )

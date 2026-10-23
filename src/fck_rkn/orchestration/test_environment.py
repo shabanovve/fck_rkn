@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import (
+    apply_eu_firewall,
     create_outline_user,
     deploy_mtproxy,
     deploy_outline,
@@ -26,6 +27,8 @@ from fck_rkn.agents.eu_server import (
     run_youtube_ping,
 )
 from fck_rkn.agents.eu_server_test import (
+    check_eu_firewall,
+    check_eu_firewall_rollback,
     check_mtproxy,
     check_outline_health,
     check_squid_http,
@@ -169,6 +172,34 @@ def _crawler_probe_address(networks: list[str]) -> str:
 GCP_VM_SERVICES_ADDRESS = "169.254.169.254"
 
 
+def _gcp_vm_services(subnet_cidr: str) -> dict[str, object]:
+    return {
+        "metadata_address": GCP_VM_SERVICES_ADDRESS,
+        "dns_addresses": [GCP_VM_SERVICES_ADDRESS],
+        "dhcp_server_address": GCP_VM_SERVICES_ADDRESS,
+        "ntp_addresses": [GCP_VM_SERVICES_ADDRESS],
+        "local_networks": [subnet_cidr],
+    }
+
+
+def build_eu_firewall_configuration(
+    *,
+    ru_server_address: str,
+    rkn_ipv4: list[str],
+    rkn_ipv6: list[str],
+    subnet_cidr: str,
+) -> str:
+    """Build the non-secret runtime input accepted by the EU firewall agent."""
+    return json.dumps(
+        {
+            "ru_server_address": ipaddress.ip_address(ru_server_address).compressed,
+            "rkn_ipv4": rkn_ipv4,
+            "rkn_ipv6": rkn_ipv6,
+            "vm_services": _gcp_vm_services(subnet_cidr),
+        }
+    )
+
+
 def build_ru_firewall_configuration(
     *,
     test_client_address: str,
@@ -197,13 +228,7 @@ def build_ru_firewall_configuration(
             ).compressed,
             "rkn_ipv4": rkn_ipv4,
             "rkn_ipv6": rkn_ipv6,
-            "vm_services": {
-                "metadata_address": GCP_VM_SERVICES_ADDRESS,
-                "dns_addresses": [GCP_VM_SERVICES_ADDRESS],
-                "dhcp_server_address": GCP_VM_SERVICES_ADDRESS,
-                "ntp_addresses": [GCP_VM_SERVICES_ADDRESS],
-                "local_networks": [subnet_cidr],
-            },
+            "vm_services": _gcp_vm_services(subnet_cidr),
         }
     )
 
@@ -783,10 +808,51 @@ def _run(image_directory: Path) -> int:
             rkn_ipv6=rkn_ipv6,
             subnet_cidr=settings.GCP_SUBNET_CIDR,
         )
+        eu_firewall_config = build_eu_firewall_configuration(
+            ru_server_address=ru_private_address,
+            rkn_ipv4=rkn_ipv4,
+            rkn_ipv6=rkn_ipv6,
+            subnet_cidr=settings.GCP_SUBNET_CIDR,
+        )
     except (OSError, RuntimeError, ValueError) as error:
         logger.error("Preparing RU firewall inputs failed: %s", error)
         print(f"Preparing RU firewall inputs failed: {error}", file=sys.stderr)
         return 46
+
+    logger.info("Installing the plan-item-10 firewall on eu-server")
+    eu_firewall_exit_code = apply_eu_firewall(eu_runner, eu_firewall_config)
+    if eu_firewall_exit_code != 0:
+        logger.error(
+            "eu-server-agent firewall installation failed with exit status %d",
+            eu_firewall_exit_code,
+        )
+        print(
+            "eu-server-agent firewall installation failed with exit status "
+            f"{eu_firewall_exit_code}.",
+            file=sys.stderr,
+        )
+        return 51
+    eu_firewall_checks = (
+        (
+            "EU firewall policy",
+            lambda: check_eu_firewall(eu_runner, eu_firewall_config),
+            52,
+        ),
+        ("EU firewall rollback", lambda: check_eu_firewall_rollback(eu_runner), 53),
+    )
+    for description, step, failure_code in eu_firewall_checks:
+        logger.info("Running %s check", description)
+        step_exit_code = step()
+        if step_exit_code != 0:
+            logger.error(
+                "%s check failed with exit status %d", description, step_exit_code
+            )
+            print(
+                f"{description} check failed with exit status {step_exit_code}.",
+                file=sys.stderr,
+            )
+            return failure_code
+    logger.info("EU firewall policy and rollback checks passed")
 
     logger.info("Installing the plan-item-10 firewall on ru-server")
     firewall_apply_exit_code = apply_ru_firewall(ru_runner, firewall_config)

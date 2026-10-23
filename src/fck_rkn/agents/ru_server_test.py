@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import ipaddress
 import json
 import logging
@@ -13,6 +12,7 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import SQUID_PORT
+from fck_rkn.agents.firewall_common import firewall_rollback_check_command
 from fck_rkn.agents.outline import (
     OUTLINE_ACCESS_KEY_PORT,
     OUTLINE_HEALTH_CHECK_COMMAND,
@@ -28,7 +28,6 @@ from fck_rkn.agents.ru_server import (
     MTPROXY_FORWARD_LOCAL_PORT,
     MTPROXY_FORWARD_STATE_DIRECTORY,
     PROBE_TARGET_URL,
-    build_firewall_apply_command,
     build_client_config,
     parse_access_url,
     run_remote_with_input,
@@ -206,16 +205,7 @@ def check_firewall_egress(runner: RemoteRunner, config_json: str) -> int:
 
 
 def build_firewall_rollback_check_command() -> str:
-    """Return a test that exercises the same transactional firewall installer."""
-    installer = base64.b64encode(
-        build_firewall_apply_command().encode("utf-8")
-    ).decode("ascii")
-    return render(
-        "ru_firewall_rollback_check.sh",
-        installer_base64=installer,
-        rules_file="/etc/fck-rkn/ru-firewall.nft",
-        service_name="fck-rkn-ru-firewall.service",
-    )
+    return firewall_rollback_check_command("ru")
 
 
 def check_firewall_rollback(runner: RemoteRunner) -> int:
