@@ -59,6 +59,7 @@ from fck_rkn.agents.test_client import (
 from fck_rkn.agents.ru_server_test import (
     check_firewall_crawler_source,
     check_firewall_policy,
+    check_firewall_vpn_client,
     check_firewall_rollback,
     check_outline_client,
     check_outline_health as check_ru_outline_health,
@@ -212,7 +213,6 @@ def build_eu_firewall_configuration(
 
 def build_ru_firewall_configuration(
     *,
-    test_client_address: str,
     eu_server_address: str,
     eu_access_url: str,
     other_host_address: str,
@@ -227,9 +227,6 @@ def build_ru_firewall_configuration(
         raise ValueError("EU Outline access URL is invalid") from error
     return json.dumps(
         {
-            "test_client_address": ipaddress.ip_address(
-                test_client_address
-            ).compressed,
             "eu_server_address": ipaddress.ip_address(eu_server_address).compressed,
             "eu_outline_address": ipaddress.ip_address(outline_address).compressed,
             "eu_outline_port": outline_port,
@@ -844,10 +841,8 @@ def _run(image_directory: Path) -> int:
             return failure_code
 
     try:
-        test_client_private_address = private_address_of(test_client)
         rkn_ipv4, rkn_ipv6 = fetch_rkn_blacklist()
         firewall_config = build_ru_firewall_configuration(
-            test_client_address=test_client_private_address,
             eu_server_address=eu_private_address,
             eu_access_url=access_url,
             other_host_address=OTHER_HOST_TEST_ADDRESS,
@@ -923,13 +918,20 @@ def _run(image_directory: Path) -> int:
         ),
         ("RU firewall rollback", lambda: check_firewall_rollback(ru_runner), 49),
         (
-            "isolated crawler-source logging",
+            "isolated crawler-source denial",
             lambda: check_firewall_crawler_source(
                 ru_runner,
                 ru_private_address,
                 _crawler_probe_address(rkn_ipv4),
             ),
             50,
+        ),
+        (
+            "VPN client paths through the RU firewall",
+            lambda: check_firewall_vpn_client(
+                ru_runner, client_access_url, firewall_config
+            ),
+            54,
         ),
     )
     for description, step, failure_code in firewall_checks:
@@ -944,7 +946,7 @@ def _run(image_directory: Path) -> int:
                 file=sys.stderr,
             )
             return failure_code
-    logger.info("RU firewall log-only, rollback, and crawler-source checks passed")
+    logger.info("RU firewall policy, rollback, crawler-source, and VPN client checks passed")
 
     logger.info("Running test-client youtube.com request through the proxy path")
     client_request_exit_code = request_youtube(client_runner)

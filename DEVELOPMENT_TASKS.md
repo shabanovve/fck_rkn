@@ -819,13 +819,19 @@ behavior that requires them.
   CLI; the scripts have not run on a VM yet. Orchestrator wiring, including
   the VPN client check, belongs to task 84.
 
-### 84. Deploy and test RU server firewall rules
+### 84. [x] Deploy and test RU server firewall rules
 
 - **Orchestration:** Make `test_env_host` fetch and validate the crawler
   blacklist, build firewall input from runtime VM addresses, install the RU
   rules, and run the task 83 checks, including an isolated crawler-source
   case, after the RU Outline endpoint and the VPN client paths are deployed.
   Fail on any mismatch.
+- **Done:** `test_env_host` builds the RU firewall input without
+  `test_client_address`, installs the rules, then runs the policy check
+  (48), rollback (49), isolated crawler-source denial (50) and the new VPN
+  client check (54, using the test-client's RU Outline key) before the final
+  youtube.com request. Unit tests cover the payload, order and exit codes.
+  Not yet run against real VMs.
 
 ### 85. Verify plan item 10 end to end
 

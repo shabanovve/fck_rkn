@@ -219,6 +219,7 @@ class OrchestratorPingTests(unittest.TestCase):
             "check_firewall_policy",
             "check_firewall_rollback",
             "check_firewall_crawler_source",
+            "check_firewall_vpn_client",
             "fetch_rkn_blacklist",
         ):
             value = (["192.0.2.0/24"], ["2001:db8::/32"]) if name == "fetch_rkn_blacklist" else 0
@@ -352,7 +353,6 @@ class OrchestratorPingTests(unittest.TestCase):
         self.assertEqual(
             json.loads(firewall_payload),
             {
-                "test_client_address": "10.0.0.3",
                 "eu_server_address": "10.0.0.2",
                 "eu_outline_address": "10.0.0.2",
                 "eu_outline_port": 10001,
@@ -376,6 +376,9 @@ class OrchestratorPingTests(unittest.TestCase):
         )
         self.firewall_mocks["check_firewall_crawler_source"].assert_called_once_with(
             ru_runner, "10.0.0.1", "192.0.2.0"
+        )
+        self.firewall_mocks["check_firewall_vpn_client"].assert_called_once_with(
+            ru_runner, EU_OUTLINE_KEY, firewall_payload
         )
         self.client_mtproxy_deploy_mock.assert_called_once_with(
             client_runner, EU_OUTLINE_KEY
@@ -424,7 +427,6 @@ class OrchestratorPingTests(unittest.TestCase):
     def test_builds_ru_firewall_inputs_from_runtime_addresses_and_outline_key(self) -> None:
         config = json.loads(
             build_ru_firewall_configuration(
-                test_client_address="10.0.0.3",
                 eu_server_address="10.0.0.2",
                 eu_access_url=EU_OUTLINE_KEY,
                 other_host_address="1.1.1.1",
@@ -437,7 +439,7 @@ class OrchestratorPingTests(unittest.TestCase):
         self.assertEqual(config["vm_services"]["local_networks"], ["10.0.0.0/24"])
         self.assertEqual(config["eu_outline_address"], "10.0.0.2")
         self.assertEqual(config["eu_outline_port"], 10001)
-        self.assertEqual(config["test_client_address"], "10.0.0.3")
+        self.assertNotIn("test_client_address", config)
 
     def test_fails_workflow_when_ping_agent_returns_nonzero(self) -> None:
         stderr = StringIO()
@@ -819,7 +821,8 @@ class OrchestratorPingTests(unittest.TestCase):
             ("apply_ru_firewall", 47, "check_firewall_policy"),
             ("check_firewall_policy", 48, "check_firewall_rollback"),
             ("check_firewall_rollback", 49, "check_firewall_crawler_source"),
-            ("check_firewall_crawler_source", 50, "client_request"),
+            ("check_firewall_crawler_source", 50, "check_firewall_vpn_client"),
+            ("check_firewall_vpn_client", 54, "client_request"),
         )
         for failing_step, expected_code, later_step in failure_cases:
             with self.subTest(step=failing_step):
