@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import json
+import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -26,6 +27,12 @@ from fck_rkn.orchestration.test_environment import (
 
 class OrchestratorPingTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.auto_configure = patch(
+            "fck_rkn.orchestration.test_environment._configure_missing_test_env",
+            return_value=0,
+        )
+        self.auto_configure.start()
+        self.addCleanup(self.auto_configure.stop)
         self.settings = TestEnvironmentSettings.model_construct(
             GCP_PROJECT_ID="fck-rkn-test",
             GCP_ZONE="europe-north1-a",
@@ -1085,6 +1092,126 @@ class OrchestratorPingTests(unittest.TestCase):
         deploy.assert_not_called()
         squid_check.assert_not_called()
         http_check.assert_not_called()
+
+
+class AutomaticTestEnvConfigurationTests(unittest.TestCase):
+    class FakeGcp:
+        def network_exists(self, project: str, network: str) -> bool:
+            return True
+
+        def list_subnets(
+            self, project: str, zone: str, network: str
+        ) -> dict[str, str]:
+            return {"default": "10.1.0.0/20"}
+
+        def image_family_exists(self, project: str, family: str) -> bool:
+            return True
+
+        def machine_type_exists(
+            self, project: str, zone: str, machine_type: str
+        ) -> bool:
+            return True
+
+    def _settings(self) -> TestEnvironmentSettings:
+        return TestEnvironmentSettings.model_construct(
+            GCP_PROJECT_ID="fck-rkn-test",
+            GCP_ZONE="europe-north1-a",
+            GCP_SUBNET_CIDR="10.1.0.0/20",
+        )
+
+    def test_missing_file_is_created_and_orchestration_continues(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config" / "test.env"
+            output = StringIO()
+            with (
+                patch(
+                    "fck_rkn.orchestration.test_environment.CONFIG_FILE",
+                    config_path,
+                ),
+                patch(
+                    "fck_rkn.orchestration.test_environment.GcpInspector",
+                    return_value=self.FakeGcp(),
+                ) as inspector,
+                patch(
+                    "fck_rkn.orchestration.test_environment.load_config",
+                    return_value=self._settings(),
+                ) as load_config_mock,
+                patch(
+                    "fck_rkn.orchestration.test_environment.validate_project_access",
+                    side_effect=ValueError("stop after config load"),
+                ),
+                redirect_stdout(output),
+                redirect_stderr(StringIO()),
+            ):
+                result = main()
+
+            self.assertEqual(result, 4)
+            self.assertTrue(config_path.exists())
+            self.assertIn("GCP_SUBNET_CIDR=10.1.0.0/20", config_path.read_text())
+            self.assertIn("Created test.env from test.env.example", output.getvalue())
+            inspector.assert_called_once_with()
+            load_config_mock.assert_called_once_with()
+
+    def test_existing_file_is_not_modified_or_configured(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "test.env"
+            original = "operator-owned config\n"
+            config_path.write_text(original, encoding="utf-8")
+            with (
+                patch(
+                    "fck_rkn.orchestration.test_environment.CONFIG_FILE",
+                    config_path,
+                ),
+                patch(
+                    "fck_rkn.orchestration.test_environment.GcpInspector"
+                ) as inspector,
+                patch(
+                    "fck_rkn.orchestration.test_environment.load_config",
+                    return_value=self._settings(),
+                ),
+                patch(
+                    "fck_rkn.orchestration.test_environment.validate_project_access",
+                    side_effect=ValueError("stop after config load"),
+                ),
+                redirect_stdout(StringIO()),
+                redirect_stderr(StringIO()),
+            ):
+                result = main()
+
+            self.assertEqual(result, 4)
+            self.assertEqual(config_path.read_text(encoding="utf-8"), original)
+            inspector.assert_not_called()
+
+    def test_creation_failure_stops_without_leaving_a_file(self) -> None:
+        class MissingNetwork(self.FakeGcp):
+            def network_exists(self, project: str, network: str) -> bool:
+                return False
+
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "test.env"
+            output = StringIO()
+            with (
+                patch(
+                    "fck_rkn.orchestration.test_environment.CONFIG_FILE",
+                    config_path,
+                ),
+                patch(
+                    "fck_rkn.orchestration.test_environment.GcpInspector",
+                    return_value=MissingNetwork(),
+                ) as inspector,
+                patch(
+                    "fck_rkn.orchestration.test_environment.load_config"
+                ) as load_config_mock,
+                redirect_stdout(StringIO()),
+                redirect_stderr(output),
+            ):
+                result = main()
+
+            self.assertEqual(result, 2)
+            self.assertFalse(config_path.exists())
+            self.assertIn("test-env-host configure", output.getvalue())
+            inspector.assert_called_once_with()
+            load_config_mock.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -538,6 +538,10 @@ class ComputeProvisioningTests(unittest.TestCase):
         output = StringIO()
         with (
             patch(
+                "fck_rkn.orchestration.test_environment._configure_missing_test_env",
+                return_value=0,
+            ),
+            patch(
                 "fck_rkn.orchestration.test_environment.load_config",
                 side_effect=DotenvSyntaxError(
                     Path("config/test.env"),
@@ -556,6 +560,10 @@ class ComputeProvisioningTests(unittest.TestCase):
     def test_cli_reports_missing_project_setting(self) -> None:
         output = StringIO()
         with (
+            patch(
+                "fck_rkn.orchestration.test_environment._configure_missing_test_env",
+                return_value=0,
+            ),
             patch(
                 "fck_rkn.orchestration.test_environment.load_config",
                 side_effect=ValidationError.from_exception_data(

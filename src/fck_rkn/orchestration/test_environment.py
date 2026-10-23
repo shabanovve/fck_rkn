@@ -67,11 +67,21 @@ from fck_rkn.agents.ru_server_test import (
     check_squid_forward,
     check_tunnel_blocked,
 )
-from fck_rkn.orchestration.configure import configure_main
-from fck_rkn.config import DotenvSyntaxError, TestEnvironmentSettings, load_config
+from fck_rkn.orchestration.configure import (
+    TEMPLATE_FILE,
+    configure_main,
+    configure_test_env,
+)
+from fck_rkn.config import (
+    CONFIG_FILE,
+    DotenvSyntaxError,
+    TestEnvironmentSettings,
+    load_config,
+)
 from fck_rkn.gcp.compute import (
     INSTANCE_NAME,
     RU_INSTANCE_NAME,
+    GcpInspector,
     ensure_eu_server,
     ensure_ru_server,
     ensure_test_client,
@@ -293,6 +303,40 @@ def main() -> int:
         return _run(Path(directory))
 
 
+def _configure_missing_test_env() -> int:
+    if CONFIG_FILE.exists():
+        return 0
+    try:
+        report = configure_test_env(CONFIG_FILE, TEMPLATE_FILE, GcpInspector())
+    except GoogleAuthError:
+        print(
+            "Could not automatically create config/test.env because GCP "
+            "authentication failed. Configure Application Default Credentials "
+            "or run `.venv/bin/test-env-host configure`.",
+            file=sys.stderr,
+        )
+        return 3
+    except GoogleAPICallError as error:
+        print(
+            "Could not automatically create config/test.env because a GCP "
+            "request failed. Run `.venv/bin/test-env-host configure` to retry.",
+            file=sys.stderr,
+        )
+        print(f"  Error type: {type(error).__name__}", file=sys.stderr)
+        return 14
+    except (OSError, RuntimeError, ValueError) as error:
+        print(
+            "Could not automatically create config/test.env. "
+            "Run `.venv/bin/test-env-host configure` to diagnose and retry.",
+            file=sys.stderr,
+        )
+        print(f"  {error}", file=sys.stderr)
+        return 2
+    for line in report:
+        print(line)
+    return 0
+
+
 def _run(image_directory: Path) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -300,6 +344,9 @@ def _run(image_directory: Path) -> int:
         stream=sys.stdout,
     )
     logger.info("Starting test environment orchestrator")
+    config_status = _configure_missing_test_env()
+    if config_status:
+        return config_status
     try:
         settings: TestEnvironmentSettings = load_config()
     except DotenvSyntaxError as error:
