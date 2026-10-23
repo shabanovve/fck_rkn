@@ -281,6 +281,14 @@ active rules and report an error.
   `eu-server-agent` and `ru-server-agent` after their Outline Server is
   running and before client connectivity tests. Protect generated credentials
   and keep them out of source control and unredacted logs.
+- Configuration files: the operator copies each `*.env.example` template to
+  its ignored `*.env` file and sets a value for every variable. Every variable
+  in a template must have a detailed comment above it that explains its
+  purpose, allowed values and where its value comes from.
+- Provide a script for the test environment that fills `config/test.env`
+  automatically using GCP access (for example, the subnet CIDR from the
+  configured subnetwork). It must create the file from the template, keep
+  values the operator already set, and never print or store secrets.
 - Keep project IDs, zones, instance sizing, network settings, SSH settings,
   and service parameters in validated operator configuration. Keep secret
   values in a protected secret source, never in repository files or command

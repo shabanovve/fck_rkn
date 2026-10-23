@@ -655,14 +655,38 @@ behavior that requires them.
 - **Done:** Shared module `agents/firewall_common.py` builds the minimal
   input/output rules from a validated `vm_services` input (metadata, DNS,
   DHCP, NTP addresses and local networks); the RU generator uses it, and the
-  EU generator (task 81) must call the same module. `GCP_SUBNET_CIDR` is a new
+  EU generator (task 83) must call the same module. `GCP_SUBNET_CIDR` is a new
   required test setting from which `test_env_host` supplies the local network.
   Unit tests cover the rules, their order, supplied addresses and invalid
   input; the generated ruleset passes `nft -c`.
 
-### 78. Rework RU server firewall rules for the new requirements
+### 78. [x] Document variables in the configuration templates
 
-- **Status:** Tasks 77–79 of the earlier log-only design are superseded;
+- **Change:** Add a detailed comment above every variable in
+  `config/test.env.example` and `config/agents.env.example` describing its
+  purpose, allowed values and source of the value.
+- **Test:** Verify every variable in each template has a preceding comment
+  and that every setting the code reads appears in its template.
+- **Done:** Every variable in `config/test.env.example` and
+  `config/agents.env.example` has a detailed comment (purpose, allowed values,
+  source; `GCP_SUBNET_CIDR` is marked as filled by the task 79 script).
+  `tests/unit/test_config_templates.py` checks the comments and that each
+  template lists exactly the settings the code reads.
+
+### 79. Add a script that fills `config/test.env` from GCP
+
+- **Change:** Provide a test-environment script (for example,
+  `test-env-host configure`) that creates `config/test.env` from the template
+  and fills values it can read through GCP access, such as `GCP_SUBNET_CIDR`
+  from the configured subnetwork. Keep values the operator already set, report
+  each value it sets, and never print or store secrets.
+- **Test:** Verify with a mocked GCP client that missing values are filled,
+  existing values are kept, the file is created from the template, and
+  failures leave the existing file unchanged.
+
+### 80. Rework RU server firewall rules for the new requirements
+
+- **Status:** The earlier log-only design tasks are superseded;
   enforcement replaces log-only observation.
 - **Change:** Rework `ru-server-agent apply-firewall` to apply a default-deny
   policy for incoming and outgoing traffic. Incoming: allow SSH and VPN; log
@@ -679,7 +703,7 @@ behavior that requires them.
   and active rules on failure; coexist with Docker-managed chains; rate-limit
   log rules.
 
-### 79. Test RU server firewall rules
+### 81. Test RU server firewall rules
 
 - **Test:** Extend `ru-server-test-agent` to verify: SSH and VPN accepted;
   RKN crawler sources denied and logged; other incoming traffic denied and
@@ -692,15 +716,15 @@ behavior that requires them.
 - **Clean-up:** Remove `test-client` special-case checks and the log-only
   assertions.
 
-### 80. Deploy and test RU server firewall rules
+### 82. Deploy and test RU server firewall rules
 
 - **Orchestration:** Make `test_env_host` fetch and validate the crawler
   blacklist, build firewall input from runtime VM addresses, install the RU
-  rules, and run the task 79 checks, including an isolated crawler-source
+  rules, and run the task 81 checks, including an isolated crawler-source
   case, after the RU Outline endpoint and the VPN client paths are deployed.
   Fail on any mismatch.
 
-### 81. Add EU server firewall rules
+### 83. Add EU server firewall rules
 
 - **Change:** Extend `eu-server-agent` to install and update the Ubuntu
   guest firewall on `eu-server`. Incoming (default deny): allow SSH from all
@@ -711,7 +735,7 @@ behavior that requires them.
 - **Safety:** Stage and validate before activation; keep the previous saved
   and active rules on failure; coexist with Docker-managed chains.
 
-### 82. Test and deploy EU server firewall rules
+### 84. Test and deploy EU server firewall rules
 
 - **Test:** Extend `eu-server-test-agent` to verify: SSH accepted from any
   source; VPN accepted only from `ru-server`; RKN crawler sources and all
@@ -722,7 +746,7 @@ behavior that requires them.
 - **Orchestration:** Make `test_env_host` install the EU rules and run these
   checks after the RU-to-EU paths are deployed. Fail on any mismatch.
 
-### 83. Verify plan item 10 end to end
+### 85. Verify plan item 10 end to end
 
 - **Test/orchestration:** Add isolated network checks for every allowed and
   denied path in the plan item 10 matrix, including stateful responses and
@@ -733,7 +757,7 @@ behavior that requires them.
   continue to serve traffic. Verify SSH TCP/22 remains reachable from any
   source on every VM.
 
-### 84. Block ru-domains in Squid
+### 86. Block ru-domains in Squid
 
 - **Change:** Block Russian destination domains at the Squid level on
   `eu-server` so that traffic to Russian services never goes through the
@@ -741,7 +765,7 @@ behavior that requires them.
 - **Test:** Verify requests to listed ru-domains are denied by Squid and
   other requests still succeed.
 
-### 85. Hide both servers from RKN crawlers with daily blacklist updates
+### 87. Hide both servers from RKN crawlers with daily blacklist updates
 
 - **Change:** Fetch, validate and atomically activate the
   `C24Be/AS_Network_List` blacklist daily on both servers; keep the previous
@@ -833,7 +857,7 @@ behavior that requires them.
   forwarding design.
 - The actual proxy listener/address meant by "router IP".
 - Protected secret store and test VPN-key handoff.
-- Freshness policy for the daily `C24Be/AS_Network_List` update (task 85).
+- Freshness policy for the daily `C24Be/AS_Network_List` update (task 87).
 - Russian destination domain source and shared-address policy (ru-domain
   blocking is done in Squid; there is no ru-IP blocking).
 - MTProxy image/version and secret delivery.
