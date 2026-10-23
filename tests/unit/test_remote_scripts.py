@@ -15,6 +15,8 @@ class ScriptPlatformTests(unittest.TestCase):
     def test_scripts_do_not_reference_a_cloud_provider(self) -> None:
         forbidden = ("google", "gcloud", "metadata", "gcp", "iap", "aws", "azure")
         for path in (files("fck_rkn.remote") / "scripts").iterdir():
+            if path.is_dir() or path.name.endswith(".pyc"):
+                continue
             text = path.read_text().lower()
             for word in forbidden:
                 self.assertNotIn(word, text, f"{path.name} mentions {word}")
