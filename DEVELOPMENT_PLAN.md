@@ -196,57 +196,48 @@ Internet access outside the approved path is denied.
 
 ### 10. Define and enforce traffic restrictions
 
-- Apply the following directional policy to service traffic. For pairs with
-  a defined policy, treat traffic not explicitly allowed as denied; allow
-  stateful response packets only for an explicitly approved connection.
-  Pairs marked `Not defined` have no specified rule.
+The authoritative requirements are in the "Firewall Requirements" section of
+`DEVELOPMENT.md`. This step implements and verifies them.
 
-| Request source \ Request handler | `test-client` | `ru-server` | `eu-server` | Any other host |
-| --- | --- | --- | --- | --- |
-| `test-client` | Local traffic only | Allow only the web-proxy and MTProto service paths through the approved RU Outline connection, including the required connection to the RU Outline endpoint | Deny direct service traffic; reach EU services only through the approved path via `ru-server` | Not defined |
-| `ru-server` | Deny requests under the general rule; responses for permitted client-initiated flows only | Local traffic only | Allow only the approved web-proxy and MTProto requests through the VPN tunnel; no other outbound requests | Deny |
-| `eu-server` | Not defined | Not defined | Local traffic only | Not defined |
-| Any other host | Not defined | Deny requests only from IP addresses of the RKN crawler system; policy for other sources is not defined | Deny, except explicitly approved management access | Not defined |
+- Enforce firewall rules only on `ru-server` and `eu-server`, with nftables
+  inside the Ubuntu guest. `test-client` is an ordinary VPN client: install
+  no firewall rules for this policy on it and add no special rules for it.
+  IPv6 follows the same rules as IPv4.
+- Resolve server addresses, provider metadata/DNS/DHCP addresses, the VPN
+  listener and interfaces from provisioning/runtime configuration; do not
+  hard-code VM addresses or interface names.
+- Order rules in every chain: loopback and established/related replies;
+  minimal VM services; project services; RKN crawler denial; log and deny
+  the rest. Log every denial with an `fck-rkn <host>` prefix
+  (for example, `fck-rkn ru`), rate-limited to protect the kernel log.
+- Coexist with Docker-managed chains; do not remove them.
 
-**Current rollout stage: log-only observation.** On `ru-server`, traffic that
-the planned guest firewall would reject is logged with an `fck-rkn ru`
-prefix and then allowed to continue. The output chain has an `accept` policy
-instead of a default drop; otherwise-unmatched outbound traffic is written
-with the `fck-rkn ru output default-policy:` prefix. Log rules are rate-limited
-to protect the kernel log. Review kernel logs before changing any individual
-log rule into an enforcing drop; do not treat the matrix below as currently
-enforced on this VM. GCP VPC firewall behavior is separate and is not changed
-by the guest nftables logging rules.
+| Source \ Target | `ru-server` | `eu-server` | Any other host / Internet |
+| --- | --- | --- | --- |
+| VPN client (any, including `test-client`) | VPN allowed; traffic inside the VPN addressed to `ru-server` unrestricted (including ICMP to the default route) | Denied | Only through the web proxy and MTProto proxy; all other traffic denied and logged |
+| `ru-server` | Local traffic only | VPN only; direct web-proxy/MTProto denied | Minimal VM services only; all else denied and logged |
+| `eu-server` | VPN only | Local traffic only | No restrictions |
+| Any other host | SSH allowed; RKN crawlers and all other incoming denied and logged | SSH allowed from any address; VPN only from `ru-server`; RKN crawlers and all other incoming denied and logged | Not applicable |
 
-`Not defined` means this plan does not specify a firewall rule for that
-source/destination pair; it is not an instruction to allow or deny traffic.
-Resolve these pairs before implementing a policy that depends on them.
+Minimal VM services (loopback, established/related, DNS, DHCP, metadata, NTP,
+ICMP) stay allowed on both servers, as described in `DEVELOPMENT.md`.
+Package repositories, registries and monitoring endpoints stay closed on
+`ru-server` except for maintenance or an approved address list.
 
-- Keep management access separate from client/service traffic. The SSH
-  management port (TCP/22) must be reachable on every VM from any source.
-  Firewall rules must not block SSH based on source address. IAP remains an
-  approved connection method, but it is not the only permitted SSH source.
-  Do not treat SSH permission as permission for other traffic between servers
-  and other hosts.
-- Install and enforce these firewall rules only on `ru-server` and
-  `eu-server`; do not install firewall rules for this policy on
-  `test-client`. Add network tests that verify each allowed path and
-  representative denied paths, including direct `test-client`-to-`eu-server`
-  access and that requests from `ru-server` are restricted to the approved
-  proxy services. Do not infer rules for pairs marked `Not defined`.
-- Use nftables for guest firewall enforcement. The web proxy and MTProxy
-  services on `eu-server` use TCP ports 3128 and 8443, respectively; access
-  from `ru-server` must use the approved Outline forwarding path. Obtain the
-  Outline listener address and port from the protected access-key/runtime
-  configuration. Resolve server addresses and network interfaces from
-  provisioning/runtime configuration; do not hard-code VM addresses or
-  interface names.
-- Block requests to `ru-server` from the RKN crawler IP ranges using the
-  general mixed IPv4/IPv6 blacklist in
-  `C24Be/AS_Network_List/blacklists_nftables/blacklist.nft`, fetched from
-  that repository's `main` branch, except SSH TCP/22 which is allowed from
-  any source. This is the confirmed source for the RKN crawler IP list. The
-  upstream project regenerates blacklist artifacts daily.
+**Default policy:** `ru-server` uses default deny for incoming and outgoing
+traffic; `eu-server` uses default deny for incoming traffic and has no
+outgoing restrictions.
+
+**SSH:** TCP/22 is reachable on both servers; it must not be blocked based on
+source address. IAP remains an approved but not the only SSH source.
+
+**Blocking RKN crawlers on both servers:** use the general mixed IPv4/IPv6
+blacklist in `C24Be/AS_Network_List/blacklists_nftables/blacklist.nft`, fetched
+from that repository's `main` branch. The list is refreshed daily. Crawlers
+are denied before the general allow rules for non-SSH traffic.
+
+**Ru-domain blocking:** performed in Squid, not in the firewall.
+
 - Update firewall configuration transactionally: stage and validate the
   complete replacement rules and blacklist before activation. Require
   non-empty blacklist data with both IPv4 and IPv6 sets and at least one
@@ -257,14 +248,21 @@ Resolve these pairs before implementing a policy that depends on them.
   a partially applied policy. If there is no previous valid configuration,
   fail without activating a partial one.
 
-**Final enforcement acceptance:** after the log-only observation period and
-review, only the flows listed above should succeed; direct client access to
-EU services must be blocked, and `ru-server` must send requests only to the
-approved proxy services. SSH TCP/22 remains reachable on every VM from any source.
-Policy firewall rules are installed only on the two servers, not on
-`test-client`. Failed updates preserve the previous saved and active rules and
-report an error. Unspecified pairs remain unresolved until explicitly
-decided.
+**Rollout:** while the log-only observation stage lasts, review the kernel
+logs (`fck-rkn` prefixes) and add any missing minimal or project rules before
+switching each rule to enforcement. GCP VPC firewall behavior is separate and
+is not changed by guest nftables rules.
+
+**Tests:** add network tests for each allowed path (SSH, VPN, proxies for VPN
+clients, minimal VM services such as name resolution, time sync and DHCP
+renewal) and each denied path (RKN crawler sources, direct traffic between
+servers on proxy ports, VPN client traffic beyond `ru-server` such as ping to
+external hosts, other incoming traffic). Verify that denials are logged.
+
+**Acceptance:** only the flows above succeed; VPN clients reach only the
+proxies beyond `ru-server`; both servers drop RKN crawler traffic; `eu-server`
+has no outgoing restrictions; failed updates preserve the previous saved and
+active rules and report an error.
 
 ## Cross-cutting implementation requirements
 

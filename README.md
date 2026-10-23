@@ -26,7 +26,13 @@ The project aims to provide:
 - **Both servers are hidden from RKN crawlers.** The
   https://github.com/C24Be/AS_Network_List.git project provides the list of
   crawler addresses; the list is refreshed daily on both servers.
-- **Blocking of ru-domains** is done at the Squid (web proxy) level.
+- **Blocking of ru-domains** is done at the Squid (web proxy) level. The goal
+  of the architecture is that RKN never learns the address of EU-server or
+  anything else about it. Russian services (such as the Max messenger, Gosuslugi,
+  RuStore, Mir Pay, Sber, VTB, Tinkoff, Yandex services, VK Messenger,
+  Odnoklassniki, Wildberries, Ozon, Avito, X5, Megamarket, Samokat, MTS and
+  2GIS) can detect circumvention tools and report to RKN, so traffic to them
+  must not go through the circumvention path and reveal the EU-server address.
 - **Automated firewall rule updates** to help protect the services from web
   crawlers.
 - **Monitoring of all services** is provided by Prometheus and Grafana
