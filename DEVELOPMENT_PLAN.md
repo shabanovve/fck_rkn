@@ -266,6 +266,10 @@ active rules and report an error.
 
 ## Cross-cutting implementation requirements
 
+- When functionality is added to both servers, avoid code duplication. Put
+  the common code in shared modules that both `ru-server-agent` and
+  `eu-server-agent` call; only server-specific behavior and parameters stay
+  in each agent. Share the corresponding test helpers the same way.
 - Make `test_env_host` idempotent: detect existing resources, avoid accidental
   duplicates, and report every create/update action.
 - Keep production deployment and firewall policy provider-independent. Agents

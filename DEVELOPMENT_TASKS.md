@@ -26,12 +26,13 @@ behavior that requires them.
   method but is not the only allowed source.
 - Install firewall rules for plan item 10 only on `ru-server` and
   `eu-server`, inside their Ubuntu guests. Do not install these rules on
-  `test-client`; GCP firewall rules may supplement but not replace guest
-  enforcement.
+  `test-client` or give it special rules: it is an ordinary VPN client. GCP
+  firewall rules may supplement but not replace guest enforcement.
 - A deployment is not verified until `test_env_host` has run the matching
   test-agent check and it passed.
-- Implement and test plan item 10 through the tasks below. Do not infer
-  allow/deny behavior for pairs marked `Not defined`.
+- Implement and test plan item 10 and the "Firewall Requirements" section of
+  `DEVELOPMENT.md` through the tasks below. IPv6 follows the same rules as
+  IPv4. Log every denial with an `fck-rkn <host>` prefix.
 - Stop at unresolved decisions listed at the end. Do not silently choose
   provider, security, network, cost, or service behavior.
 
@@ -636,144 +637,115 @@ behavior that requires them.
 
 ### 76. [x] Specify inputs for the defined server firewall rules
 
-- **Recorded in plan item 10:** Server-only nftables enforcement; service
-  ports and Outline path; runtime address/interface resolution; confirmed
-  RKN crawler blacklist source and artifact; source-unrestricted SSH access;
-  and
-  validation plus rollback behavior for failed firewall/list updates.
-- **Constraint:** Implement only the defined matrix pairs. Do not add policy
-  for `Not defined` pairs. Include the separately required daily blacklist
-  updates on both servers in dependent tasks.
+- **Recorded in plan item 10 and `DEVELOPMENT.md`:** Server-only nftables
+  enforcement; runtime address/interface resolution; confirmed RKN crawler
+  blacklist source and artifact; source-unrestricted SSH access; minimal VM
+  services; and validation plus rollback behavior for failed firewall/list
+  updates.
 
-### 77. [x] Add RU server firewall rules
+### 77. Add minimal VM service rules to the firewall generator
 
-- **Change:** Extend `ru-server-agent` to install and update only the
-  plan-item-10 rules in the Ubuntu guest firewall on `ru-server`. Allow
-  `test-client` requests only to the RU Outline endpoint; its web-proxy and
-  MTProto tunnels must target the corresponding localhost forwards on
-  `ru-server`, not EU private service addresses. Allow `ru-server` requests to
-  `eu-server` only for the approved web-proxy and MTProto services through the
-  EU Outline endpoint; deny requests
-  from `ru-server` to `test-client` and any other host. Block requests to
-  `ru-server` from the configured RKN crawler IPs, except SSH TCP/22 which is
-  accepted from any source. Leave other `any-host`-to-`ru-server` sources
-  unspecified. Stage and validate changes before activating them; on failure
-  leave the previous saved and active rules untouched, report the error, and
-  continue with the previous rules. If no previous valid rules exist, fail
-  without applying partial rules. Do not install plan item 10 rules on
-  `test-client`.
-- **Implementation started:** `ru-server-agent apply-firewall` accepts
-  JSON on stdin containing `test_client_address`, `eu_server_address`,
-  `eu_outline_address`, `eu_outline_port`, `rkn_ipv4`, and
-  `rkn_ipv6`. It validates runtime addresses and non-empty IPv4/IPv6 crawler
-  ranges, generates the RU-only nftables policy, and stages the replacement
-  before activation. The test-client Squid and MTProxy tunnel actions target
-  RU localhost TCP/3128 and TCP/8443, respectively, so both requests traverse
-  the existing RU-to-EU Outline forwards.
-- **Done:** Added RU nftables rule generation and a staged installer that
-  validates the candidate and restores the previous saved and active policy
-  if activation fails. Targeted unit tests cover rule inputs, tunnel targets,
-  and rollback after an activation failure. Live VM traffic verification is
-  covered by tasks 78–79. Current rollout is log-only on `ru-server`:
-  matching flows are rate-limited in the kernel log and allowed to continue;
-  enforcement will be enabled incrementally after log review.
+- **Change:** Extend the nftables rule generation so both servers keep
+  loopback, established/related replies, DNS, DHCP, metadata, NTP and ICMP
+  working. Provider-specific addresses (metadata, DNS, DHCP) are passed as
+  parameters; agents must not hard-code a provider. IPv6 follows IPv4.
+- **Test:** Unit-test the generated ruleset for each minimal service and for
+  rule order: loopback and established first, minimal services, project
+  services, RKN denial, then log-and-deny.
 
-### 78. [x] Test RU server firewall rules
+### 78. Rework RU server firewall rules for the new requirements
 
-- **Test:** Extend `ru-server-test-agent` to verify allowed
-  `test-client` web-proxy/MTProto requests and VPN-carried
-  `ru-server`-to-`eu-server` proxy/MTProto requests succeed. Extend
-  `test-client-agent` checks to verify both local tunnels target the RU
-  localhost forwards. During the log-only rollout, verify the expected log
-  rules and that crawler-range traffic reaches the probe listener; do not
-  assert that logged traffic is blocked. Do not assert a result for other
-  `any-host`-to-`ru-server` sources. Verify a failed update reports an error
-  while the previous saved configuration and live firewall rules remain
-  active, and that an initial invalid configuration is not partially applied.
-- **Implementation started:** Added `ru-server-test-agent firewall-policy`
-  for live checks of the EU Outline transport, both approved RU forwards,
-  and the active log-only rules. Added `firewall-rollback` to exercise the real installer with an
-  invalid nftables replacement, compare saved/active policy before and after,
-  and verify an invalid first install leaves no policy files. The
-  `test-client-agent check-firewall-paths` action remains an enforcement-phase
-  check and is not run during observation. Runtime host addresses are
-  validated and supplied through the existing private-address settings or
-  stdin; the RU check also requires populated active IPv4/IPv6 crawler sets.
-  No new firewall is installed on `test-client`. Live VM execution and a
-  source-address test from an isolated crawler-range network are performed
-  by orchestration task 79.
-- **Done:** Added test-agent checks for the defined RU service paths,
-  rollback behavior, and test-client direct-service denials. Targeted unit
-  tests verify these checks and their failure conditions. Live checks now
-  verify log-only operation; enforcement assertions are deferred until log
-  review. Running them on provisioned VMs, including the isolated
-  crawler-source case, belongs to task 79 and is not a prerequisite for
-  completing this test-agent task.
+- **Status:** Tasks 77–79 of the earlier log-only design are superseded;
+  enforcement replaces log-only observation.
+- **Change:** Rework `ru-server-agent apply-firewall` to apply a default-deny
+  policy for incoming and outgoing traffic. Incoming: allow SSH and VPN; log
+  and deny RKN crawler ranges; log and deny all other incoming traffic.
+  Outgoing: allow minimal VM services and the project's own connections (for
+  example, the VPN to `eu-server`); log and deny everything else, including
+  direct connections to `eu-server` proxy ports. Remove the special
+  `test-client` rules and the log-only mode (accept policy, log-then-allow).
+- **VPN clients:** Traffic inside the VPN addressed to `ru-server` is not
+  restricted, including ICMP to the default route. Forwarded traffic from any
+  VPN client may use only the web proxy and MTProto proxy; all other traffic
+  beyond `ru-server` is logged and denied.
+- **Safety:** Stage and validate before activation; keep the previous saved
+  and active rules on failure; coexist with Docker-managed chains; rate-limit
+  log rules.
 
-### 79. [x] Deploy and test RU server firewall rules
+### 79. Test RU server firewall rules
 
-- **Orchestration:** Make `test_env_host` install RU server firewall rules
-  and run the matching test-agent checks after the RU Outline endpoint and
-  both test-client local tunnels to RU have been deployed. In the current
-  observation stage, verify log-only rules and that an isolated crawler-range
-  source reaches the probe listener. Do not block logged traffic until its
-  kernel logs have been reviewed.
-- **Scope:** Verify direct test-client denial to RU services here. EU firewall
-  rules are not installed until task 82, so defer direct test-client-to-EU
-  denial to that orchestration rather than asserting a result before EU
-  enforcement exists.
-- **Done:** `test_env_host` fetches and validates the
-  crawler blacklist, builds firewall input from runtime VM addresses, applies
-  log-only RU rules, and runs policy-log, rollback, and isolated
-  crawler-source observation checks before the final proxy request. Unit coverage exercises
-  configuration validation, successful workflow ordering, and failure
-  handling. Running the orchestration on VMs is not a prerequisite for
-  completing this task.
+- **Test:** Extend `ru-server-test-agent` to verify: SSH and VPN accepted;
+  RKN crawler sources denied and logged; other incoming traffic denied and
+  logged; DNS, DHCP renewal, metadata and NTP still work; VPN-to-`eu-server`
+  works while direct proxy-port access is denied; VPN clients reach only the
+  web proxy and MTProto proxy and cannot ping or reach external hosts, but
+  can reach `ru-server` itself; denials are written to the kernel log with
+  the `fck-rkn ru` prefix. Verify rollback after an invalid replacement and
+  that an invalid first install leaves no policy files.
+- **Clean-up:** Remove `test-client` special-case checks and the log-only
+  assertions.
 
-### 80. Add EU server firewall rules
+### 80. Deploy and test RU server firewall rules
 
-- **Change:** Extend `eu-server-agent` to install and update only the
-  plan-item-10 rules in the Ubuntu guest firewall on `eu-server`. Allow
-  approved web-proxy and MTProto requests from `ru-server` through the VPN.
-  Deny direct service requests from `test-client` and service requests from
-  any other host; permit SSH TCP/22 regardless of source.
-  Do not define or enforce rules for EU-originated traffic to
-  `test-client`, `ru-server`, or other hosts, since those pairs are
-  `Not defined`. Do not install plan item 10 rules on `test-client`.
-  Stage and validate changes before activation; on failure leave the
-  previous saved and active rules untouched, report the error, and continue
-  with the previous rules. If no previous valid rules exist, fail without
-  applying partial rules.
+- **Orchestration:** Make `test_env_host` fetch and validate the crawler
+  blacklist, build firewall input from runtime VM addresses, install the RU
+  rules, and run the task 79 checks, including an isolated crawler-source
+  case, after the RU Outline endpoint and the VPN client paths are deployed.
+  Fail on any mismatch.
 
-### 81. Test EU server firewall rules
+### 81. Add EU server firewall rules
 
-- **Test:** Extend `eu-server-test-agent` to verify approved
-  VPN-carried proxy/MTProto requests from RU succeed, direct client service
-  requests and non-IAP service requests from other hosts are denied, and SSH
-  TCP/22 remains accessible regardless of source. Do not assert any result for
-  EU-originated traffic to pairs marked `Not defined`. Verify a failed
-  update reports an error while the previous saved configuration and live
-  firewall rules remain active, and that an initial invalid configuration is
-  not partially applied.
+- **Change:** Extend `eu-server-agent` to install and update the Ubuntu
+  guest firewall on `eu-server`. Incoming (default deny): allow SSH from all
+  addresses; allow VPN only from `ru-server`; log and deny RKN crawler
+  ranges and all other incoming traffic. Outgoing: no restrictions. Keep
+  minimal VM services working. Do not restrict direct `test-client` access
+  specially: it is denied like any other host not allowed above.
+- **Safety:** Stage and validate before activation; keep the previous saved
+  and active rules on failure; coexist with Docker-managed chains.
 
-### 82. Deploy and test EU server firewall rules
+### 82. Test and deploy EU server firewall rules
 
-- **Orchestration:** Make `test_env_host` install EU server firewall rules
-  and run the matching test-agent checks after the RU-to-EU paths are
-  deployed. Verify SSH TCP/22 remains reachable from any source on each VM
-  after policy changes. Fail if any defined allow/deny check has the wrong
-  result.
+- **Test:** Extend `eu-server-test-agent` to verify: SSH accepted from any
+  source; VPN accepted only from `ru-server`; RKN crawler sources and all
+  other incoming traffic (including direct `test-client` access and direct
+  proxy ports from other hosts) denied and logged with `fck-rkn eu`;
+  outgoing traffic unrestricted; minimal VM services work; rollback after an
+  invalid replacement.
+- **Orchestration:** Make `test_env_host` install the EU rules and run these
+  checks after the RU-to-EU paths are deployed. Fail on any mismatch.
 
 ### 83. Verify plan item 10 end to end
 
-- **Test/orchestration:** Add isolated network checks for all defined
-  allowed and denied paths in the matrix, including stateful responses for
-  permitted connections. Run them from `test_env_host` after both server
-  firewalls are active. Report each case and fail on any mismatch. Do not
-  install firewall rules on `test-client` or assert outcomes for
-  `Not defined` pairs. Exercise failed-update rollback and verify the
-  previously active rules continue to serve traffic. Verify SSH TCP/22
-  remains reachable from any source on every VM.
+- **Test/orchestration:** Add isolated network checks for every allowed and
+  denied path in the plan item 10 matrix, including stateful responses and
+  traffic from a VPN client beyond `ru-server`. Run them from
+  `test_env_host` after both server firewalls are active. Report each case
+  and fail on any mismatch. Do not install firewall rules on `test-client`.
+  Exercise failed-update rollback and verify the previously active rules
+  continue to serve traffic. Verify SSH TCP/22 remains reachable from any
+  source on every VM.
+
+### 84. Block ru-domains in Squid
+
+- **Change:** Block Russian destination domains at the Squid level on
+  `eu-server` so that traffic to Russian services never goes through the
+  circumvention path and the EU-server address is not exposed to them.
+- **Test:** Verify requests to listed ru-domains are denied by Squid and
+  other requests still succeed.
+
+### 85. Hide both servers from RKN crawlers with daily blacklist updates
+
+- **Change:** Fetch, validate and atomically activate the
+  `C24Be/AS_Network_List` blacklist daily on both servers; keep the previous
+  list on failure and report the error.
+- **No duplication:** Implement this requirement once in shared code (one
+  fetch/validate/activate/rollback implementation, one rule template and one
+  test helper) used by both servers. Do not copy the logic between
+  `ru-server-agent` and `eu-server-agent`; only server-specific parameters
+  such as the log prefix may differ.
+- **Test:** Verify a successful update, and that an unavailable, empty or
+  invalid list leaves the previous rules active.
 
 ### 89. Add service and tunnel metrics
 
@@ -854,20 +826,13 @@ behavior that requires them.
   forwarding design.
 - The actual proxy listener/address meant by "router IP".
 - Protected secret store and test VPN-key handoff.
-- README-required daily `C24Be/AS_Network_List` update policy on both servers,
-  including source freshness and the artifact used for that separate
-  requirement.
-- Russian destination source, DNS behavior, and shared-address policy.
+- Freshness policy for the daily `C24Be/AS_Network_List` update (task 85).
+- Russian destination domain source and shared-address policy (ru-domain
+  blocking is done in Squid; there is no ru-IP blocking).
 - MTProxy image/version and secret delivery.
 - Monitoring access, retention, alert recipients, and VM cleanup policy.
 
 ## Deferred firewall work
 
-The following are separate from plan item 10 and require their own
-change/test/orchestration tasks:
-
-- The daily `C24Be/AS_Network_List` retrieval, validation, atomic activation,
-  rollback, and reporting workflow.
-- Russian destination-list selection, parsing, and enforcement.
 - Firewall restrictions for monitoring access and other traffic not covered
   by plan item 10.
