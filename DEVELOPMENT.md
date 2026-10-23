@@ -101,7 +101,12 @@
   explicitly. Traffic that matches no allow rule is logged and denied.
 - IPv6 follows the same rules as IPv4.
 - Rule order in every chain: loopback and established/related replies; minimal
-  VM services; project services; RKN crawler denial; log and deny the rest.
+  VM services; RKN crawler denial; project services (including SSH and VPN);
+  log and deny the rest. On both servers crawlers are denied before SSH and
+  VPN are evaluated, so they cannot reach any service.
+- A log rule and its verdict are separate rules. A rate-limited log rule must
+  never carry the verdict, otherwise packets over the log rate would skip the
+  verdict and reach later allow rules.
 - Every denial is logged with the prefix `fck-rkn <host>` (for example,
   `fck-rkn ru`), rate-limited so logs cannot be flooded.
 - Rules are applied transactionally with a backup and automatic rollback on
@@ -133,19 +138,27 @@ default and are opened only for maintenance or from an approved address list.
 
 Incoming (default deny):
 
-- SSH is allowed.
+- Connections from RKN crawler address ranges are logged and denied before
+  the SSH and VPN rules are evaluated, so crawlers cannot reach SSH either.
+- SSH is allowed from all IP addresses.
 - VPN connections are allowed.
-- Connections from RKN crawler address ranges are logged and denied.
 - All other incoming connections are logged and denied.
 
 Outgoing (default deny):
 
 - Minimal VM services are allowed.
-- Connections required by the project are allowed, for example the VPN
-  connection to `eu-server`.
+- All loopback traffic is allowed. It carries the local web-proxy and MTProto
+  forwards, which reach `eu-server` only through the VPN, and traffic that is
+  addressed to `ru-server` itself.
+- The VPN transport to `eu-server` (its Outline address and port) is allowed.
 - All other outgoing requests are logged and denied. In particular, direct
   connections to `eu-server` on the web proxy and MTProto ports are denied;
   only the VPN is allowed between the servers.
+
+Forwarded traffic (default deny):
+
+- Only established/related replies are allowed; everything else routed through
+  `ru-server` is logged and denied.
 
 VPN clients (all of them, not only `test-client`):
 
@@ -155,6 +168,14 @@ VPN clients (all of them, not only `test-client`):
   ping external services.
 - VPN clients can use only the web proxy and the MTProto proxy; all other
   traffic from them that must leave `ru-server` is logged and denied.
+- Outline is a Shadowsocks (application-layer) proxy without layer-3
+  forwarding, and its containers use the host network. Requests of VPN
+  clients therefore leave `ru-server` through the output hook, not the
+  forward hook. The output default-deny policy above is what restricts VPN
+  clients to the web proxy and the MTProto proxy: nothing but loopback
+  forwards, the VPN transport to `eu-server` and minimal VM services may
+  leave the server. Do not distinguish client traffic from host traffic with
+  per-process (cgroup or UID) rules, and do not add rules for `test-client`.
 
 ### eu-server
 

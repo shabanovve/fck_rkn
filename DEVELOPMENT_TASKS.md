@@ -755,7 +755,7 @@ behavior that requires them.
   `ru-server` address into the namespace, so a live RU-to-EU connection may
   stall for a few seconds during the check.
 
-### 82. Rework RU server firewall rules for the new requirements
+### 82. [x] Rework RU server firewall rules for the new requirements
 
 - **Status:** The earlier log-only design tasks are superseded;
   enforcement replaces log-only observation.
@@ -773,6 +773,21 @@ behavior that requires them.
 - **Safety:** Stage and validate before activation; keep the previous saved
   and active rules on failure; coexist with Docker-managed chains; rate-limit
   log rules.
+- **Done:** `agents/ru_firewall.py` now builds `fck_rkn_ru` with policy drop
+  on input, output and forward. Input: shared minimal VM rules, RKN crawler
+  log-and-drop (before SSH and VPN, as on EU), SSH on `ssh_port` (default 22)
+  and VPN (port 10001, TCP/UDP) from any source, then log-and-deny. Output:
+  shared minimal VM rules (including all loopback, which carries the local
+  Squid/MTProto forwards and traffic addressed to `ru-server`), a log-and-drop
+  rule for direct EU TCP/3128 and 8443, the Outline transport to
+  `eu_outline_address`, then log-and-deny. Forward: established replies, then
+  log-and-deny. VPN clients use Shadowsocks, so their requests leave through
+  the output hook and anything not listed is denied. `test_client_address`
+  and `other_host_address` are no longer used. Each log rule is separate from
+  its verdict so packets over the log rate limit are still dropped. Unit
+  tests cover the rules, order and `nft -c`. The old log-only checks
+  (`ru_firewall_egress_check.sh`) and the orchestrator input are not updated
+  yet (tasks 83 and 84); not deployed.
 
 ### 83. Test RU server firewall rules
 
