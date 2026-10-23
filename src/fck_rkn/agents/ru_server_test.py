@@ -12,7 +12,11 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import SQUID_PORT
-from fck_rkn.agents.firewall_common import firewall_rollback_check_command
+from fck_rkn.agents.firewall_common import (
+    firewall_rollback_check_command,
+    load_config,
+    parse_minimal_vm_services,
+)
 from fck_rkn.agents.outline import (
     OUTLINE_ACCESS_KEY_PORT,
     OUTLINE_HEALTH_CHECK_COMMAND,
@@ -165,42 +169,117 @@ def check_outline_health(runner: RemoteRunner) -> int:
     )
 
 
-def build_firewall_egress_check_command() -> str:
-    """Create a remote check for RU's active egress firewall policy."""
-    return render("ru_firewall_egress_check.sh")
+VPN_CHECK_LOCAL_PORT = 14080
+FIREWALL_CHECK_TIMEOUT_SECONDS = 240
+VPN_CLIENT_CHECK_TIMEOUT_SECONDS = 240
 
 
-def check_firewall_egress(runner: RemoteRunner, config_json: str) -> int:
-    """Verify log-only RU egress rules and the approved Outline transport."""
+def build_firewall_check_command() -> str:
+    """Create a remote check for RU's active default-deny firewall policy."""
+    return render(
+        "ru_firewall_check.sh",
+        vpn_port=OUTLINE_ACCESS_KEY_PORT,
+        proxy_ports=f"{FORWARD_LOCAL_PORT} {MTPROXY_FORWARD_LOCAL_PORT}",
+    )
+
+
+def _first_ipv4(addresses: list[str], name: str) -> str:
+    for address in addresses:
+        if ipaddress.ip_address(address).version == 4:
+            return address
+    raise ValueError(f"{name} must contain an IPv4 address")
+
+
+def _load_firewall_test_config(config_json: str) -> dict:
+    config = load_config(config_json)
+    for key in ("eu_server_address", "eu_outline_address", "other_host_address"):
+        config[key] = _validated_address(config.get(key), key)
+    if config["other_host_address"] in {
+        config["eu_server_address"],
+        config["eu_outline_address"],
+    }:
+        raise ValueError("other_host_address must be a distinct host")
+    return config
+
+
+def build_firewall_check_input(config_json: str) -> str:
+    """Derive the non-secret input of the firewall check from the firewall config."""
+    config = _load_firewall_test_config(config_json)
+    port = config.get("eu_outline_port")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError("eu_outline_port must be between 1 and 65535")
+    services = parse_minimal_vm_services(config.get("vm_services"))
+    return json.dumps(
+        {
+            "eu_server_address": config["eu_server_address"],
+            "eu_outline_address": config["eu_outline_address"],
+            "eu_outline_port": port,
+            "other_host_address": config["other_host_address"],
+            "ssh_port": config.get("ssh_port", 22),
+            "dhcp_address": services.dhcp_server_address.compressed,
+            "vm_service_address": _first_ipv4(
+                [services.metadata_address.compressed], "vm_service_address"
+            ),
+            "ntp_address": _first_ipv4(
+                [address.compressed for address in services.ntp_addresses],
+                "ntp_addresses",
+            ),
+        }
+    )
+
+
+def check_firewall_policy_rules(runner: RemoteRunner, config_json: str) -> int:
+    """Verify default deny, logging and the allowed paths of the RU firewall."""
     try:
-        config = json.loads(config_json)
-        if not isinstance(config, dict):
-            raise ValueError("firewall test configuration must be an object")
-        for key in (
-            "eu_server_address",
-            "eu_outline_address",
-            "test_client_address",
-            "other_host_address",
-        ):
-            config[key] = _validated_address(config.get(key), key)
-        if config["other_host_address"] in {
-            config["eu_server_address"],
-            config["eu_outline_address"],
-            config["test_client_address"],
-        }:
-            raise ValueError("other_host_address must be a distinct host")
-        port = config.get("eu_outline_port")
-        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
-            raise ValueError("eu_outline_port must be between 1 and 65535")
-        remote_config = json.dumps(config)
+        remote_input = build_firewall_check_input(config_json)
     except (TypeError, ValueError, KeyError) as error:
         logger.error("Invalid RU firewall test configuration: %s", error)
         return 1
     return run_remote_with_input(
         runner,
-        build_firewall_egress_check_command(),
-        remote_config,
-        "Checking the RU firewall's allowed and denied egress paths",
+        build_firewall_check_command(),
+        remote_input,
+        "Checking the RU firewall's default-deny policy and allowed paths",
+        timeout=FIREWALL_CHECK_TIMEOUT_SECONDS,
+        print_stderr=True,
+    )
+
+
+def build_vpn_client_check_command() -> str:
+    return render(
+        "ru_vpn_client_check.sh",
+        image=CLIENT_IMAGE,
+        local_port=VPN_CHECK_LOCAL_PORT,
+        squid_port=FORWARD_LOCAL_PORT,
+        mtproxy_port=MTPROXY_FORWARD_LOCAL_PORT,
+    )
+
+
+def check_firewall_vpn_client(
+    runner: RemoteRunner, access_url: str, config_json: str
+) -> int:
+    """Verify what a real VPN client may reach, using a temporary Outline client."""
+    try:
+        method, password, host, port = parse_access_url(access_url)
+        config = _load_firewall_test_config(config_json)
+        ssh_port = config.get("ssh_port", 22)
+    except (TypeError, ValueError, KeyError) as error:
+        logger.error("Invalid RU VPN client test configuration: %s", error)
+        return 1
+    return run_remote_with_input(
+        runner,
+        build_vpn_client_check_command(),
+        json.dumps(
+            {
+                "client": json.loads(build_client_config(method, password, host, port)),
+                "other_host_address": config["other_host_address"],
+                "eu_server_address": config["eu_server_address"],
+                "ssh_port": ssh_port,
+            }
+        ),
+        "Checking what a VPN client can reach through the RU firewall",
+        timeout=VPN_CLIENT_CHECK_TIMEOUT_SECONDS,
+        print_stderr=True,
     )
 
 
@@ -226,7 +305,7 @@ def build_crawler_source_check_command() -> str:
 def check_firewall_crawler_source(
     runner: RemoteRunner, ru_server_address: str, crawler_source_address: str
 ) -> int:
-    """Verify crawler-range traffic is logged and allowed during observation."""
+    """Verify crawler-range traffic is denied and logged."""
     try:
         ru_address = ipaddress.ip_address(ru_server_address)
         crawler_address = ipaddress.ip_address(crawler_source_address)
@@ -266,7 +345,7 @@ def check_firewall_crawler_source_from_config(
 
 
 def check_firewall_policy(runner: RemoteRunner, config_json: str) -> int:
-    """Check both permitted Outline forwards and the RU firewall egress policy."""
+    """Check both permitted Outline forwards and the RU firewall policy."""
     for description, check in (
         ("Squid forward", check_squid_forward),
         ("MTProxy forward", check_mtproxy_forward),
@@ -274,7 +353,7 @@ def check_firewall_policy(runner: RemoteRunner, config_json: str) -> int:
         if check(runner) != 0:
             logger.error("RU firewall allowed %s path check failed", description)
             return 1
-    return check_firewall_egress(runner, config_json)
+    return check_firewall_policy_rules(runner, config_json)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -291,6 +370,7 @@ def main(argv: list[str] | None = None) -> int:
             "firewall-policy",
             "firewall-rollback",
             "firewall-crawler-source",
+            "firewall-vpn-client",
         ),
         help="Check to run",
     )
@@ -329,6 +409,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # The key is read from stdin so it never appears in argv or shell history.
     access_url = sys.stdin.readline()
+    if args.action == "firewall-vpn-client":
+        return check_firewall_vpn_client(runner, access_url, sys.stdin.read())
     return check_outline_client(runner, access_url)
 
 

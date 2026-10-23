@@ -71,8 +71,12 @@ def run_remote_with_input(
     stdin_text: str,
     description: str,
     timeout: int = PROBE_TIMEOUT_SECONDS,
+    print_stderr: bool = False,
 ) -> int :
-    """Run remote_command on ru-server, passing secrets only through stdin."""
+    """Run remote_command on ru-server, passing secrets only through stdin.
+
+    Set print_stderr only for scripts whose failure messages are known to be safe.
+    """
     logger.info("%s on ru-server", description)
     return execute(
         runner,
@@ -81,6 +85,7 @@ def run_remote_with_input(
         timeout,
         stdin=stdin_text,
         print_output=True,
+        print_stderr=print_stderr,
     )
 
 

@@ -74,8 +74,18 @@ sys.exit(1)
   echo "Crawler probe source is not present in the active IPv4 set" >&2
   exit 1
 fi
-if ! sudo nft list chain inet fck_rkn_ru input |
-  grep -Fq 'fck-rkn ru input crawler-v4:'; then
+crawler_counter() {
+  sudo nft list chain inet fck_rkn_ru input | python3 -c '
+import re, sys
+for line in sys.stdin:
+    if "fck-rkn ru input crawler-v4:" in line:
+        match = re.search(r"counter packets (\d+)", line)
+        print(match.group(1) if match else "")
+        break
+'
+}
+crawler_before=$(crawler_counter)
+if [ -z "$crawler_before" ]; then
   echo "RU firewall crawler log rule is missing" >&2
   exit 1
 fi
@@ -144,9 +154,9 @@ if ! kill -0 "$listener_pid" 2>/dev/null; then
   echo "RU crawler-probe listener exited before the test" >&2
   exit 1
 fi
-if ! sudo ip netns exec "$namespace" timeout 3 bash -c \
+if sudo ip netns exec "$namespace" timeout 3 bash -c \
   'echo > /dev/tcp/"$0"/"$1"' "$ru_address" "$test_port" 2>/dev/null; then
-  echo "A request from the crawler source did not reach the RU test listener" >&2
+  echo "A request from the crawler source reached the RU test listener" >&2
   exit 1
 fi
 
@@ -158,4 +168,9 @@ if [ -z "$packets" ] || [ "$packets" -lt 1 ]; then
   echo "Crawler probe packet did not reach the RU firewall input chain" >&2
   exit 1
 fi
-echo "RU firewall logged and allowed a request from an active crawler-range source"
+crawler_after=$(crawler_counter)
+if [ "${crawler_after:-0}" -le "$crawler_before" ]; then
+  echo "The crawler log rule did not count the crawler-range request" >&2
+  exit 1
+fi
+echo "RU firewall denied and logged a request from an active crawler-range source"

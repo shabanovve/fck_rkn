@@ -789,7 +789,7 @@ behavior that requires them.
   (`ru_firewall_egress_check.sh`) and the orchestrator input are not updated
   yet (tasks 83 and 84); not deployed.
 
-### 83. Test RU server firewall rules
+### 83. [x] Test RU server firewall rules
 
 - **Test:** Extend `ru-server-test-agent` to verify: SSH and VPN accepted;
   RKN crawler sources denied and logged; other incoming traffic denied and
@@ -801,6 +801,23 @@ behavior that requires them.
   that an invalid first install leaves no policy files.
 - **Clean-up:** Remove `test-client` special-case checks and the log-only
   assertions.
+- **Done:** `ru_firewall_check.sh` (replaces `ru_firewall_egress_check.sh`,
+  action `firewall-policy`) verifies policy drop on all chains, no log-only
+  or `test-client` leftovers, separate log and verdict rules, a non-empty RKN
+  set, SSH and VPN accepted from an isolated source, other ports and the
+  proxy ports denied with counters, DHCP replies not reaching the denial
+  rule, routed traffic denied (when IP forwarding is on), outbound EU
+  transport allowed, direct EU proxy ports and external hosts denied
+  (including ping), DNS, NTP and the VM service address working, and
+  `fck-rkn ru` entries in the kernel log. `ru_vpn_client_check.sh` (new
+  action `firewall-vpn-client`, key over stdin) runs a temporary Outline
+  client from the already pulled image and checks that a VPN client reaches
+  `ru-server` itself, the web proxy and the MTProto proxy port but not
+  external hosts or EU proxy ports. The crawler-source check now requires
+  denial plus a log counter increase. Firewall check failures print their
+  own stderr so the cause is visible. Unit tests cover scripts, input and
+  CLI; the scripts have not run on a VM yet. Orchestrator wiring, including
+  the VPN client check, belongs to task 84.
 
 ### 84. Deploy and test RU server firewall rules
 
