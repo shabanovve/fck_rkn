@@ -97,6 +97,10 @@ for line in sys.stdin:
 ' "$2"
 }
 
+report() {
+  echo "PASS: $1"
+}
+
 expect_reachable() {
   local source=$1 port=$2 label=$3 outcome
   outcome=$(probe "$source" "$host_address" "$port")
@@ -104,6 +108,7 @@ expect_reachable() {
     open|refused) ;;
     *) fail "Expected $label to be accepted but the result was: $outcome" ;;
   esac
+  report "$label is accepted"
 }
 
 expect_denied() {
@@ -111,6 +116,7 @@ expect_denied() {
   outcome=$(probe "$source" "$host_address" "$port")
   [ "$outcome" = timeout ] ||
     fail "Expected $label to be denied but the result was: $outcome"
+  report "$label is denied"
 }
 
 sudo ip netns add "$namespace"
@@ -143,8 +149,10 @@ marker_time=$(date '+%Y-%m-%d %H:%M:%S')
 
 [ "$(probe "$stranger_address" "$host_address" "$ssh_port")" = open ] ||
   fail "SSH from an arbitrary address was not accepted"
+report "SSH from an arbitrary address is accepted"
 [ "$(probe "$ru_address" "$host_address" "$ssh_port")" = open ] ||
   fail "SSH from ru-server was not accepted"
+report "SSH from ru-server is accepted"
 expect_reachable "$ru_address" "$vpn_port" "VPN port from ru-server"
 expect_denied "$stranger_address" "$vpn_port" "VPN port from another host"
 for port in "${proxy_ports[@]}"; do
@@ -163,6 +171,7 @@ forward_after=$(counter forward "fck-rkn eu forward direct-service:")
   fail "The default denial rule did not count the probe"
 [ "${forward_after:-0}" -gt "${forward_before:-0}" ] ||
   fail "The direct proxy port denial rule did not count the probe"
+report "Denied crawler, direct proxy-port and other incoming traffic is counted"
 
 logged=false
 for _ in $(seq 1 10); do
@@ -177,16 +186,20 @@ for _ in $(seq 1 10); do
   sleep 1
 done
 [ "$logged" = true ] || fail "Denied traffic was not written to the kernel log"
+report "Denied traffic is written to the kernel log"
 
 # Outgoing traffic is unrestricted and the minimal VM services keep working.
 python3 - "$outbound_address" 443 <<'PY' || fail "Outgoing connection was blocked"
 import socket, sys
 socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=8).close()
 PY
+report "Outgoing connections are allowed and their replies return"
 python3 - "$vm_service_address" 80 <<'PY' || fail "The VM service address is unreachable"
 import socket, sys
 socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=8).close()
 PY
+report "The VM service address is reachable"
 getent hosts example.com >/dev/null || fail "Name resolution failed"
+report "Name resolution works"
 
 echo "EU firewall accepts SSH and VPN as required, denies and logs other incoming traffic, and leaves outgoing traffic open"

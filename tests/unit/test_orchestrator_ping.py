@@ -339,10 +339,11 @@ class OrchestratorPingTests(unittest.TestCase):
         self.assertEqual(eu_payload["ru_server_address"], "10.0.0.1")
         self.assertEqual(eu_payload["rkn_ipv4"], ["192.0.2.0/24"])
         self.assertIn("vm_services", eu_payload)
-        self.firewall_mocks["check_eu_firewall"].assert_called_once_with(
-            EU_RUNNER,
-            self.firewall_mocks["apply_eu_firewall"].call_args.args[1],
+        eu_payload_arg = self.firewall_mocks["apply_eu_firewall"].call_args.args[1]
+        self.firewall_mocks["check_eu_firewall"].assert_has_calls(
+            [call(EU_RUNNER, eu_payload_arg)] * 2
         )
+        self.assertEqual(self.firewall_mocks["check_eu_firewall"].call_count, 2)
         self.firewall_mocks["check_eu_firewall_rollback"].assert_called_once_with(
             EU_RUNNER
         )
@@ -368,8 +369,9 @@ class OrchestratorPingTests(unittest.TestCase):
                 },
             },
         )
-        self.firewall_mocks["check_firewall_policy"].assert_called_once_with(
-            ru_runner, firewall_payload
+        self.assertEqual(
+            self.firewall_mocks["check_firewall_policy"].call_args_list,
+            [call(ru_runner, firewall_payload)] * 2,
         )
         self.firewall_mocks["check_firewall_rollback"].assert_called_once_with(
             ru_runner
@@ -377,8 +379,9 @@ class OrchestratorPingTests(unittest.TestCase):
         self.firewall_mocks["check_firewall_crawler_source"].assert_called_once_with(
             ru_runner, "10.0.0.1", "192.0.2.0"
         )
-        self.firewall_mocks["check_firewall_vpn_client"].assert_called_once_with(
-            ru_runner, EU_OUTLINE_KEY, firewall_payload
+        self.assertEqual(
+            self.firewall_mocks["check_firewall_vpn_client"].call_args_list,
+            [call(ru_runner, EU_OUTLINE_KEY, firewall_payload)] * 2,
         )
         self.client_mtproxy_deploy_mock.assert_called_once_with(
             client_runner, EU_OUTLINE_KEY
@@ -844,6 +847,23 @@ class OrchestratorPingTests(unittest.TestCase):
                 else:
                     self.firewall_mocks[later_step].assert_not_called()
                 self.assertIn("failed", stderr.getvalue().lower())
+
+    def test_final_matrix_runs_again_after_rollback_checks(self) -> None:
+        cases = (
+            ("check_eu_firewall", 55),
+            ("check_firewall_policy", 56),
+            ("check_firewall_vpn_client", 57),
+        )
+        for name, expected_code in cases:
+            with self.subTest(step=name):
+                self.firewall_mocks[name].side_effect = [0, 1]
+                result, stderr = self.run_main_with_healthy_eu()
+                self.assertEqual(result, expected_code)
+                self.assertIn("final", stderr.getvalue())
+                self.firewall_mocks[name].side_effect = None
+                self.firewall_mocks[name].return_value = 0
+                for mock in self.firewall_mocks.values():
+                    mock.reset_mock()
 
     def test_firewall_blacklist_fetch_failure_stops_before_installation(self) -> None:
         self.firewall_mocks["fetch_rkn_blacklist"].side_effect = RuntimeError(

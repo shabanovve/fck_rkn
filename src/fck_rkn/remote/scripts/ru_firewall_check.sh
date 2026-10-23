@@ -129,6 +129,10 @@ insert_before_input_denial() {
     "$@" counter comment "\"$probe_comment-$comment\""
 }
 
+report() {
+  echo "PASS: $1"
+}
+
 expect_accepted() {
   local source=$1 port=$2 label=$3 outcome
   outcome=$(ns_probe "$source" "$host_address" "$port")
@@ -136,6 +140,7 @@ expect_accepted() {
     open|refused) ;;
     *) fail "Expected $label to be accepted but the result was: $outcome" ;;
   esac
+  report "$label is accepted"
 }
 
 expect_denied() {
@@ -143,6 +148,7 @@ expect_denied() {
   outcome=$(ns_probe "$source" "$host_address" "$port")
   [ "$outcome" = timeout ] ||
     fail "Expected $label to be denied but the result was: $outcome"
+  report "$label is denied"
 }
 
 increased() {
@@ -185,6 +191,8 @@ printf '%s\n' "$rules" | grep -q 'udp sport 68 udp dport 67 accept' ||
 printf '%s\n' "$rules" | grep -q 'icmp type' ||
   fail "RU firewall does not allow ICMP on the local network"
 
+report "The active policy is default deny with separate log rules"
+
 # 2. Build the isolated source used for the incoming probes.
 sudo ip netns add "$namespace"
 sudo ip link add "$host_link" type veth peer name "$peer_link"
@@ -223,6 +231,7 @@ expect_denied "$stranger_address" 9 "an unlisted port from another host"
 input_denied_after=$(counter input "fck-rkn ru input denied:")
 increased "$input_denied_before" "$input_denied_after" ||
   fail "The incoming denial rule did not count the probes"
+report "Denied incoming traffic is counted"
 
 # DHCP replies must pass: no DHCP packet may reach the final denial rule, while a
 # control packet from the same source proves the probe packets arrive there.
@@ -237,6 +246,7 @@ control_denied=$(counter input "$probe_comment-control")
   fail "A DHCP server reply was denied by the RU firewall"
 increased 0 "${control_denied:-0}" ||
   fail "The DHCP control packets did not reach the RU firewall"
+report "DHCP server replies are not denied"
 
 # 4. Traffic routed through ru-server is denied.
 forward_checked=false
@@ -248,11 +258,13 @@ if [ "$(cat /proc/sys/net/ipv4/ip_forward)" = 1 ]; then
   increased "$forward_denied_before" "$forward_denied_after" ||
     fail "The forwarding denial rule did not count the probe"
   forward_checked=true
+  report "Routed traffic beyond ru-server is denied"
 fi
 
 # 5. Outgoing traffic: only the EU VPN transport and minimal VM services work.
 [ "$(host_probe "$outline_server" "$outline_port")" = open ] ||
   fail "The VPN transport to eu-server is unreachable"
+report "The VPN transport to eu-server is allowed"
 for port in "${proxy_ports[@]}"; do
   [ "$(host_probe "$eu_server" "$port")" = timeout ] ||
     fail "Direct connection to eu-server TCP/$port was not denied"
@@ -260,6 +272,7 @@ done
 direct_eu_after=$(counter output "fck-rkn ru output direct-eu-service:")
 increased "$direct_eu_before" "$direct_eu_after" ||
   fail "The direct eu-server proxy-port rule did not count the probes"
+report "Direct eu-server proxy ports are denied and counted"
 [ "$(host_probe "$outside" 80)" = timeout ] ||
   fail "A connection to an external host was not denied"
 if ping -c 1 -W 3 "$outside" >/dev/null 2>&1; then
@@ -268,10 +281,13 @@ fi
 output_denied_after=$(counter output "fck-rkn ru output denied:")
 increased "$output_denied_before" "$output_denied_after" ||
   fail "The outgoing denial rule did not count the probes"
+report "External hosts, including ICMP echo, are denied and counted"
 
 [ "$(host_probe "$vm_service_address" 80)" = open ] ||
   fail "The VM service address is unreachable"
+report "The VM service address is reachable"
 getent hosts example.com >/dev/null || fail "Name resolution failed"
+report "Name resolution works"
 python3 - "$ntp_address" <<'PY' || fail "The time source did not answer an NTP request"
 import socket, sys
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -280,6 +296,7 @@ sock.sendto(b"\x1b" + 47 * b"\0", (sys.argv[1], 123))
 if len(sock.recv(512)) < 48:
     raise SystemExit(1)
 PY
+report "The time source answers NTP requests"
 
 # 6. Denials are written to the kernel log with the host prefix.
 expected_prefixes=("fck-rkn ru input denied" "fck-rkn ru output denied"
@@ -302,6 +319,7 @@ for _ in $(seq 1 10); do
   sleep 1
 done
 [ "$logged" = true ] || fail "Denied traffic was not written to the kernel log"
+report "Denied traffic is written to the kernel log"
 
 if [ "$forward_checked" = true ]; then
   forward_note="denies routed traffic"

@@ -45,6 +45,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+report() {
+  echo "PASS: $1"
+}
+
 fail() {
   echo "$1" >&2
   exit 1
@@ -127,18 +131,21 @@ hex_of() {
 banner=$(vpn_request 127.0.0.1 "$ssh_port" "" 8)
 [ "$(printf '%s' "$banner" | cut -c1-8)" = 5353482d ] ||
   fail "A VPN client could not reach ru-server itself over SSH"
+report "A VPN client reaches ru-server itself"
 
 # It reaches the web proxy, which relays through eu-server.
 squid_reply=$(vpn_request 127.0.0.1 "$squid_port" \
   "$(hex_of $'GET http://youtube.com/ HTTP/1.1\r\nHost: youtube.com\r\nConnection: close\r\n\r\n')" 30)
 [ "$(printf '%s' "$squid_reply" | cut -c1-10)" = 485454502f ] ||
   fail "A VPN client could not use the web proxy"
+report "A VPN client uses the web proxy"
 
 # It reaches the MTProto proxy port; the counter shows the packets arrived there.
 vpn_request 127.0.0.1 "$mtproxy_port" "$(python3 -c 'print("00" * 64)')" 3 >/dev/null
 mtproxy_packets=$(counter "$probe_comment")
 [ "${mtproxy_packets:-0}" -ge 1 ] ||
   fail "A VPN client could not reach the MTProto proxy port"
+report "A VPN client reaches the MTProto proxy port"
 
 # It cannot reach an external host or the EU proxy ports directly.
 output_before=$(counter "fck-rkn ru output denied:")
@@ -149,10 +156,12 @@ http_request=$(hex_of $'GET / HTTP/1.0\r\n\r\n')
 output_after=$(counter "fck-rkn ru output denied:")
 [ "${output_after:-0}" -gt "${output_before:-0}" ] ||
   fail "The outgoing denial rule did not count the VPN client request"
+report "A VPN client cannot reach external hosts"
 [ "$(vpn_request "$eu_server" "$squid_port" "$http_request" 6)" = none ] ||
   fail "A VPN client reached the EU proxy port directly"
 direct_eu_after=$(counter "fck-rkn ru output direct-eu-service:")
 [ "${direct_eu_after:-0}" -gt "${direct_eu_before:-0}" ] ||
   fail "The direct EU proxy-port rule did not count the VPN client request"
+report "A VPN client cannot reach the EU proxy ports directly"
 
 echo "VPN clients reach ru-server and its web and MTProto proxies, but not external hosts or the EU proxy ports directly"

@@ -948,6 +948,41 @@ def _run(image_directory: Path) -> int:
             return failure_code
     logger.info("RU firewall policy, rollback, crawler-source, and VPN client checks passed")
 
+    # Rejected updates must leave the previous rules serving traffic, so repeat
+    # the whole matrix now that both firewalls are active and rollbacks are done.
+    final_checks = (
+        (
+            "final EU firewall policy",
+            lambda: check_eu_firewall(eu_runner, eu_firewall_config),
+            55,
+        ),
+        (
+            "final RU firewall policy",
+            lambda: check_firewall_policy(ru_runner, firewall_config),
+            56,
+        ),
+        (
+            "final VPN client paths",
+            lambda: check_firewall_vpn_client(
+                ru_runner, client_access_url, firewall_config
+            ),
+            57,
+        ),
+    )
+    for description, step, failure_code in final_checks:
+        logger.info("Running %s check after the update rollback checks", description)
+        step_exit_code = step()
+        if step_exit_code != 0:
+            logger.error(
+                "%s check failed with exit status %d", description, step_exit_code
+            )
+            print(
+                f"{description} check failed with exit status {step_exit_code}.",
+                file=sys.stderr,
+            )
+            return failure_code
+    logger.info("Plan item 10 firewall matrix passed on both servers")
+
     logger.info("Running test-client youtube.com request through the proxy path")
     client_request_exit_code = request_youtube(client_runner)
     if client_request_exit_code != 0:

@@ -833,7 +833,7 @@ behavior that requires them.
   youtube.com request. Unit tests cover the payload, order and exit codes.
   Not yet run against real VMs.
 
-### 85. Verify plan item 10 end to end
+### 85. [x] Verify plan item 10 end to end
 
 - **Test/orchestration:** Add isolated network checks for every allowed and
   denied path in the plan item 10 matrix, including stateful responses and
@@ -843,6 +843,15 @@ behavior that requires them.
   Exercise failed-update rollback and verify the previously active rules
   continue to serve traffic. Verify SSH TCP/22 remains reachable from any
   source on every VM.
+- **Done:** The EU and RU firewall checks and the VPN-client check now print
+  a `PASS:` line for every case (SSH from any source, VPN, proxy ports,
+  crawler sources, other incoming traffic, routed traffic, DHCP, DNS, NTP,
+  VM services, VPN-client paths, kernel-log entries). After both firewalls
+  are active and both rollback checks have run, `test_env_host` repeats the
+  EU policy (55), RU policy (56) and VPN-client (57) checks, which proves the
+  previously active rules still serve traffic. No rules are installed on
+  `test-client`. Unit tests cover the order and exit codes; not yet run on
+  real VMs.
 
 ### 86. Block ru-domains in Squid
 
