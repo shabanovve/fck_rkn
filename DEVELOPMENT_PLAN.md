@@ -289,6 +289,10 @@ active rules and report an error.
   automatically using GCP access (for example, the subnet CIDR from the
   configured subnetwork). It must create the file from the template, keep
   values the operator already set, and never print or store secrets.
+- When `config/test.env` is missing, `test_env_host` must create and fill it
+  automatically at startup, using the same logic as the script above, and
+  then continue with the configuration it produced. If creation fails, it
+  must stop with an actionable message and leave no partial file.
 - Keep project IDs, zones, instance sizing, network settings, SSH settings,
   and service parameters in validated operator configuration. Keep secret
   values in a protected secret source, never in repository files or command

@@ -692,6 +692,17 @@ behavior that requires them.
   GCP failure. Covered by `tests/unit/test_configure.py`; documented in
   `DEVELOPMENT.md`. Not yet run against real GCP.
 
+### 79a. Create `config/test.env` automatically when `test_env_host` starts
+
+- **Change:** When `config/test.env` does not exist, `test_env_host` runs the
+  `configure` logic (task 79) before loading settings, reports what it set,
+  and continues with the created file. If creation fails, stop with an
+  actionable message (for example, naming `test-env-host configure`) and leave
+  no partial file. An existing file is never modified by a normal run.
+- **Test:** With a mocked GCP client, verify the file is created and the run
+  continues when the file is missing; an existing file is left untouched;
+  and a creation failure stops the run without leaving a file.
+
 ### 80. [x] Add EU server firewall rules
 
 - **Change:** Extend `eu-server-agent` to install and update the Ubuntu

@@ -380,7 +380,12 @@ repository.
    custom roles or appropriately scoped predefined roles rather than granting
    project-wide Owner access.
 
-5. Create and fill the ignored `config/test.env` automatically with
+5. Create and fill the ignored `config/test.env` automatically. Running
+   `.venv/bin/test-env-host` without an existing `config/test.env` creates it
+   (the same way as `configure`) before the environment checks, so the file
+   never has to be copied by hand; if creation fails, it stops with an
+   actionable message and leaves no partial file. An existing file is never
+   modified by a normal run. To refresh values later, run
    `.venv/bin/test-env-host configure`. It copies `config/test.env.example`
    when the file is missing, keeps values you already set, adds missing
    variables, and reads `GCP_SUBNET_CIDR` from the configured subnetwork
