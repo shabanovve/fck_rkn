@@ -692,7 +692,7 @@ behavior that requires them.
   GCP failure. Covered by `tests/unit/test_configure.py`; documented in
   `DEVELOPMENT.md`. Not yet run against real GCP.
 
-### 80. Add EU server firewall rules
+### 80. [x] Add EU server firewall rules
 
 - **Change:** Extend `eu-server-agent` to install and update the Ubuntu
   guest firewall on `eu-server`. Incoming (default deny): allow SSH from all
@@ -702,6 +702,17 @@ behavior that requires them.
   specially: it is denied like any other host not allowed above.
 - **Safety:** Stage and validate before activation; keep the previous saved
   and active rules on failure; coexist with Docker-managed chains.
+- **Done:** `agents/eu_firewall.py` builds the `fck_rkn_eu` table: input
+  policy drop with the shared minimal VM rules, then RKN crawler log-and-deny
+  (before SSH), SSH on `ssh_port` (default 22) from any address, VPN
+  (port 10001, TCP/UDP) only from `ru_server_address`, then log-and-deny with
+  `fck-rkn eu`. Output is not filtered. Docker-published Squid/MTProto ports
+  bypass the input hook, so a forward chain logs and drops externally DNAT-ed
+  connections. `eu-server-agent apply-firewall` reads the JSON from stdin and
+  installs it with the shared transactional script `apply_firewall.sh`
+  (now also used by RU; RKN set validation and `RKN` parsing moved to
+  `firewall_common`). Unit tests plus an `nft -c` check; not yet deployed
+  (task 81).
 
 ### 81. Test and deploy EU server firewall rules
 

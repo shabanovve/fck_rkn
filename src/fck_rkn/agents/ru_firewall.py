@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import ipaddress
-import json
-from collections.abc import Sequence
-
 from fck_rkn.agents.firewall_common import (
+    LOG_LIMIT,
     address_match,
+    load_config,
+    rkn_sets_block,
     minimal_input_rules,
     minimal_output_rules,
     parse_address,
@@ -20,46 +19,11 @@ RU_OUTLINE_ACCESS_PORT = 10001
 RU_OUTLINE_API_PORT = 10000
 RU_OUTLINE_LOCAL_PORTS = (RU_OUTLINE_API_PORT, RU_OUTLINE_ACCESS_PORT)
 EU_SERVICE_PORTS = (3128, 8443)
-LOG_LIMIT = "limit rate 10/second burst 20 packets"
-
-
-def _network_list(
-    value: object, name: str, version: int
-) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
-    if not isinstance(value, list) or not value:
-        raise ValueError(f"{name} must contain at least one network")
-    networks: set[ipaddress.IPv4Network | ipaddress.IPv6Network] = set()
-    for item in value:
-        if not isinstance(item, str):
-            raise ValueError(f"{name} contains a non-string network")
-        try:
-            network = ipaddress.ip_network(item, strict=True)
-        except ValueError as error:
-            raise ValueError(f"{name} contains an invalid network") from error
-        if network.version != version:
-            raise ValueError(f"{name} contains a network of the wrong IP version")
-        networks.add(network)
-    collapsed = ipaddress.collapse_addresses(networks)
-    return sorted(
-        collapsed,
-        key=lambda network: (int(network.network_address), network.prefixlen),
-    )
-
-
-def _nft_networks(
-    networks: Sequence[ipaddress.IPv4Network | ipaddress.IPv6Network],
-) -> str:
-    return ", ".join(network.with_prefixlen for network in networks)
 
 
 def build_ru_firewall_rules(config_json: str) -> str:
     """Validate runtime firewall inputs and return a complete nftables table."""
-    try:
-        config = json.loads(config_json)
-    except json.JSONDecodeError as error:
-        raise ValueError("firewall configuration is not valid JSON") from error
-    if not isinstance(config, dict):
-        raise ValueError("firewall configuration must be a JSON object")
+    config = load_config(config_json)
 
     client = parse_address(config.get("test_client_address"), "test_client_address")
     eu_server = parse_address(config.get("eu_server_address"), "eu_server_address")
@@ -75,8 +39,7 @@ def build_ru_firewall_rules(config_json: str) -> str:
         raise ValueError("eu_outline_port must be between 1 and 65535")
     if outline_port in EU_SERVICE_PORTS:
         raise ValueError("eu_outline_port conflicts with a direct EU service port")
-    ipv4 = _network_list(config.get("rkn_ipv4"), "rkn_ipv4", 4)
-    ipv6 = _network_list(config.get("rkn_ipv6"), "rkn_ipv6", 6)
+    rkn_sets = rkn_sets_block(config)
     vm_services = parse_minimal_vm_services(config.get("vm_services"))
     minimal_input = "\n".join(f"    {rule}" for rule in minimal_input_rules(vm_services))
     minimal_output = "\n".join(
@@ -126,16 +89,7 @@ def build_ru_firewall_rules(config_json: str) -> str:
 
     return f"""destroy table inet {TABLE_NAME}
 table inet {TABLE_NAME} {{
-  set rkn_ipv4 {{
-    type ipv4_addr
-    flags interval
-    elements = {{ {_nft_networks(ipv4)} }}
-  }}
-  set rkn_ipv6 {{
-    type ipv6_addr
-    flags interval
-    elements = {{ {_nft_networks(ipv6)} }}
-  }}
+{rkn_sets}
   chain input {{
     type filter hook input priority -5; policy accept;
 {minimal_input}

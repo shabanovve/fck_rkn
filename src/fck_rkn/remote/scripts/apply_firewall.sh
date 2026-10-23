@@ -10,7 +10,7 @@ set -euo pipefail
 candidate=$1
 rules_file=@RULES_FILE@
 unit_file=@UNIT_FILE@
-service_name=fck-rkn-ru-firewall.service
+service_name=fck-rkn-@HOST@-firewall.service
 
 if ! command -v nft >/dev/null 2>&1; then
   apt-get update -qq
@@ -29,7 +29,7 @@ if ! nft --check --file "$candidate"; then
 fi
 
 install -d -m 700 "$(dirname "$rules_file")" "$(dirname "$unit_file")"
-backup_dir=$(mktemp -d "$(dirname "$rules_file")/.ru-firewall-backup.XXXXXX")
+backup_dir=$(mktemp -d "$(dirname "$rules_file")/.@HOST@-firewall-backup.XXXXXX")
 had_rules=false
 had_unit=false
 if [ -f "$rules_file" ]; then
@@ -43,7 +43,7 @@ fi
 
 cat > "$backup_dir/unit.new" <<UNIT
 [Unit]
-Description=fck-rkn RU guest firewall
+Description=fck-rkn @HOST@ guest firewall
 After=network-pre.target nftables.service
 Before=docker.service
 
@@ -76,7 +76,7 @@ restore_previous() {
   if [ "$had_rules" = true ]; then
     nft -f "$rules_file" || rollback_failed=true
   else
-    printf 'destroy table inet fck_rkn_ru\n' > "$backup_dir/remove.nft"
+    printf 'destroy table inet fck_rkn_@HOST@\n' > "$backup_dir/remove.nft"
     nft -f "$backup_dir/remove.nft" || rollback_failed=true
     systemctl disable --now "$service_name" >/dev/null 2>&1 || true
   fi
@@ -91,12 +91,12 @@ restore_previous() {
 if ! systemctl daemon-reload ||
    ! systemctl enable "$service_name" ||
    ! systemctl reload-or-restart "$service_name"; then
-  echo "Could not activate the RU firewall candidate; restoring the previous configuration" >&2
+  echo "Could not activate the @HOST@ firewall candidate; restoring the previous configuration" >&2
   restore_previous
   exit 1
 fi
 
 rm -f "$backup_dir/rules" "$backup_dir/unit" "$backup_dir/unit.new" || true
 rmdir "$backup_dir" || true
-echo "RU firewall rules installed"
+echo "@HOST@ firewall rules installed"
 ROOT_SCRIPT

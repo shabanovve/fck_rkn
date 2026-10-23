@@ -10,6 +10,8 @@ import sys
 from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
+from fck_rkn.agents.eu_firewall import build_eu_firewall_rules
+from fck_rkn.agents.firewall_common import firewall_apply_command
 from fck_rkn.agents.outline import (  # noqa: F401
     OUTLINE_ACCESS_KEY_PORT,
     OUTLINE_API_PORT,
@@ -44,6 +46,7 @@ MTPROXY_STATE_DIRECTORY = "/opt/fck-rkn-mtproxy"
 OUTLINE_KEY_CREATE_TIMEOUT_SECONDS = 90
 SSH_COMMAND_TIMEOUT_SECONDS = 90
 SQUID_DEPLOY_TIMEOUT_SECONDS = 900
+FIREWALL_DEPLOY_TIMEOUT_SECONDS = 600
 
 
 def run_youtube_ping(runner: RemoteRunner) -> int:
@@ -103,6 +106,24 @@ def deploy_mtproxy(runner: RemoteRunner) -> int:
     if result == 0:
         logger.info("MTProxy deployment completed; the secret is not logged")
     return result
+
+
+def apply_eu_firewall(runner: RemoteRunner, config_json: str) -> int:
+    """Validate and transactionally install the EU traffic policy."""
+    try:
+        rules = build_eu_firewall_rules(config_json)
+    except ValueError as error:
+        logger.error("Invalid EU firewall configuration: %s", error)
+        return 1
+    logger.info("Applying the EU guest firewall policy on eu-server")
+    return execute(
+        runner,
+        firewall_apply_command("eu"),
+        "Applying the EU guest firewall policy",
+        FIREWALL_DEPLOY_TIMEOUT_SECONDS,
+        stdin=rules,
+        print_output=True,
+    )
 
 
 def follow_squid_logs(runner: RemoteRunner) -> int:
@@ -178,6 +199,7 @@ def main(argv: list[str] | None = None) -> int:
             "deploy-mtproxy",
             "deploy-outline",
             "create-outline-user",
+            "apply-firewall",
         ),
         default="ping",
         help="Action to run (default: ping)",
@@ -210,6 +232,8 @@ def main(argv: list[str] | None = None) -> int:
         return deploy_squid(runner)
     if args.action == "deploy-mtproxy":
         return deploy_mtproxy(runner)
+    if args.action == "apply-firewall":
+        return apply_eu_firewall(runner, sys.stdin.read())
     if args.action == "logs-squid":
         return follow_squid_logs(runner)
     if args.action == "deploy-outline":

@@ -16,6 +16,7 @@ from pydantic_settings.exceptions import SettingsError
 from fck_rkn.agents.eu_server import MTPROXY_PORT, SQUID_PORT
 from fck_rkn.agents.outline import deploy_outline_on
 from fck_rkn.agent_config import load_agent_settings, ru_server_runner
+from fck_rkn.agents.firewall_common import firewall_apply_command
 from fck_rkn.agents.ru_firewall import build_ru_firewall_rules
 from fck_rkn.remote import render
 from fck_rkn.remote.runner import RemoteRunner, execute
@@ -42,9 +43,6 @@ RECOVERY_ATTEMPTS = 5
 RECOVERY_DELAY_SECONDS = 10
 RECOVERY_TIMEOUT_SECONDS = 600
 FIREWALL_DEPLOY_TIMEOUT_SECONDS = 600
-FIREWALL_RULES_FILE = "/etc/fck-rkn/ru-firewall.nft"
-FIREWALL_UNIT_FILE = "/etc/systemd/system/fck-rkn-ru-firewall.service"
-FIREWALL_LOCK_FILE = "/run/lock/fck-rkn-ru-firewall.lock"
 
 
 def parse_access_url(access_url: str) -> tuple[str, str, str, int]:
@@ -107,12 +105,7 @@ def run_remote_with_key(
 
 
 def build_firewall_apply_command() -> str:
-    return render(
-        "apply_ru_firewall.sh",
-        rules_file=FIREWALL_RULES_FILE,
-        unit_file=FIREWALL_UNIT_FILE,
-        lock_file=FIREWALL_LOCK_FILE,
-    )
+    return firewall_apply_command("ru")
 
 
 def apply_ru_firewall(runner: RemoteRunner, config_json: str) -> int:

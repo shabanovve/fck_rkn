@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import ipaddress
+import json
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+from fck_rkn.remote import render
 
 IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
@@ -12,6 +16,7 @@ DHCPV4_BROADCAST = "255.255.255.255"
 DHCPV6_SERVERS = "ff02::1:2"
 ICMP_V4_TYPES = "echo-request, echo-reply, destination-unreachable, time-exceeded"
 ICMP_V6_TYPES = ICMP_V4_TYPES.replace("destination-unreachable", "destination-unreachable, packet-too-big")
+LOG_LIMIT = "limit rate 10/second burst 20 packets"
 ND_TYPES = "nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert"
 
 
@@ -138,3 +143,70 @@ def minimal_output_rules(services: MinimalVmServices) -> list[str]:
             f"{address_match('daddr', network)} {protocol} type {{ {types} }} accept"
         )
     return rules
+
+
+def load_config(config_json: str) -> dict:
+    """Parse a firewall configuration, which must be a JSON object."""
+    try:
+        config = json.loads(config_json)
+    except json.JSONDecodeError as error:
+        raise ValueError("firewall configuration is not valid JSON") from error
+    if not isinstance(config, dict):
+        raise ValueError("firewall configuration must be a JSON object")
+    return config
+
+
+def _network_list(value: object, name: str, version: int) -> list[IPNetwork]:
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"{name} must contain at least one network")
+    networks: set[IPNetwork] = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise ValueError(f"{name} contains a non-string network")
+        try:
+            network = ipaddress.ip_network(item, strict=True)
+        except ValueError as error:
+            raise ValueError(f"{name} contains an invalid network") from error
+        if network.version != version:
+            raise ValueError(f"{name} contains a network of the wrong IP version")
+        networks.add(network)
+    collapsed = ipaddress.collapse_addresses(networks)
+    return sorted(
+        collapsed,
+        key=lambda network: (int(network.network_address), network.prefixlen),
+    )
+
+
+def _nft_networks(networks: Sequence[IPNetwork]) -> str:
+    return ", ".join(network.with_prefixlen for network in networks)
+
+
+def rkn_sets_block(config: dict) -> str:
+    """Validate the RKN crawler ranges and return the nftables set definitions."""
+    ipv4 = _network_list(config.get("rkn_ipv4"), "rkn_ipv4", 4)
+    ipv6 = _network_list(config.get("rkn_ipv6"), "rkn_ipv6", 6)
+    return f"""  set rkn_ipv4 {{
+    type ipv4_addr
+    flags interval
+    elements = {{ {_nft_networks(ipv4)} }}
+  }}
+  set rkn_ipv6 {{
+    type ipv6_addr
+    flags interval
+    elements = {{ {_nft_networks(ipv6)} }}
+  }}"""
+
+
+def indent_rules(rules: Sequence[str]) -> str:
+    return "\n".join(f"    {rule}" for rule in rules)
+
+
+def firewall_apply_command(host: str) -> str:
+    """Return the transactional installer script for ``host`` ("ru" or "eu")."""
+    return render(
+        "apply_firewall.sh",
+        host=host,
+        rules_file=f"/etc/fck-rkn/{host}-firewall.nft",
+        unit_file=f"/etc/systemd/system/fck-rkn-{host}-firewall.service",
+        lock_file=f"/run/lock/fck-rkn-{host}-firewall.lock",
+    )

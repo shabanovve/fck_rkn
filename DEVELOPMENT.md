@@ -162,8 +162,11 @@ Incoming (default deny):
 
 - SSH is allowed from all IP addresses.
 - VPN connections are allowed only from `ru-server`.
-- Connections from RKN crawler address ranges are logged and denied.
+- Connections from RKN crawler address ranges are logged and denied before
+  the SSH and VPN rules are evaluated, so crawlers cannot reach SSH either.
 - All other incoming connections are logged and denied.
+- Container-published proxy ports are covered by the same policy through the
+  forward hook.
 
 Outgoing:
 

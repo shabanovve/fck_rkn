@@ -357,7 +357,8 @@ class RuServerFirewallTests(unittest.TestCase):
             lock_file = root / "run" / "ru-firewall.lock"
             lock_file.parent.mkdir()
             script = render(
-                "apply_ru_firewall.sh",
+                "apply_firewall.sh",
+                host="ru",
                 rules_file=str(rules_file),
                 unit_file=str(unit_file),
                 lock_file=str(lock_file),
