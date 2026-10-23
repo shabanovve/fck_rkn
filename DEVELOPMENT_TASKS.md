@@ -655,7 +655,7 @@ behavior that requires them.
 - **Done:** Shared module `agents/firewall_common.py` builds the minimal
   input/output rules from a validated `vm_services` input (metadata, DNS,
   DHCP, NTP addresses and local networks); the RU generator uses it, and the
-  EU generator (task 83) must call the same module. `GCP_SUBNET_CIDR` is a new
+  EU generator (task 80) must call the same module. `GCP_SUBNET_CIDR` is a new
   required test setting from which `test_env_host` supplies the local network.
   Unit tests cover the rules, their order, supplied addresses and invalid
   input; the generated ruleset passes `nft -c`.
@@ -692,7 +692,29 @@ behavior that requires them.
   GCP failure. Covered by `tests/unit/test_configure.py`; documented in
   `DEVELOPMENT.md`. Not yet run against real GCP.
 
-### 80. Rework RU server firewall rules for the new requirements
+### 80. Add EU server firewall rules
+
+- **Change:** Extend `eu-server-agent` to install and update the Ubuntu
+  guest firewall on `eu-server`. Incoming (default deny): allow SSH from all
+  addresses; allow VPN only from `ru-server`; log and deny RKN crawler
+  ranges and all other incoming traffic. Outgoing: no restrictions. Keep
+  minimal VM services working. Do not restrict direct `test-client` access
+  specially: it is denied like any other host not allowed above.
+- **Safety:** Stage and validate before activation; keep the previous saved
+  and active rules on failure; coexist with Docker-managed chains.
+
+### 81. Test and deploy EU server firewall rules
+
+- **Test:** Extend `eu-server-test-agent` to verify: SSH accepted from any
+  source; VPN accepted only from `ru-server`; RKN crawler sources and all
+  other incoming traffic (including direct `test-client` access and direct
+  proxy ports from other hosts) denied and logged with `fck-rkn eu`;
+  outgoing traffic unrestricted; minimal VM services work; rollback after an
+  invalid replacement.
+- **Orchestration:** Make `test_env_host` install the EU rules and run these
+  checks after the RU-to-EU paths are deployed. Fail on any mismatch.
+
+### 82. Rework RU server firewall rules for the new requirements
 
 - **Status:** The earlier log-only design tasks are superseded;
   enforcement replaces log-only observation.
@@ -711,7 +733,7 @@ behavior that requires them.
   and active rules on failure; coexist with Docker-managed chains; rate-limit
   log rules.
 
-### 81. Test RU server firewall rules
+### 83. Test RU server firewall rules
 
 - **Test:** Extend `ru-server-test-agent` to verify: SSH and VPN accepted;
   RKN crawler sources denied and logged; other incoming traffic denied and
@@ -724,35 +746,13 @@ behavior that requires them.
 - **Clean-up:** Remove `test-client` special-case checks and the log-only
   assertions.
 
-### 82. Deploy and test RU server firewall rules
+### 84. Deploy and test RU server firewall rules
 
 - **Orchestration:** Make `test_env_host` fetch and validate the crawler
   blacklist, build firewall input from runtime VM addresses, install the RU
-  rules, and run the task 81 checks, including an isolated crawler-source
+  rules, and run the task 83 checks, including an isolated crawler-source
   case, after the RU Outline endpoint and the VPN client paths are deployed.
   Fail on any mismatch.
-
-### 83. Add EU server firewall rules
-
-- **Change:** Extend `eu-server-agent` to install and update the Ubuntu
-  guest firewall on `eu-server`. Incoming (default deny): allow SSH from all
-  addresses; allow VPN only from `ru-server`; log and deny RKN crawler
-  ranges and all other incoming traffic. Outgoing: no restrictions. Keep
-  minimal VM services working. Do not restrict direct `test-client` access
-  specially: it is denied like any other host not allowed above.
-- **Safety:** Stage and validate before activation; keep the previous saved
-  and active rules on failure; coexist with Docker-managed chains.
-
-### 84. Test and deploy EU server firewall rules
-
-- **Test:** Extend `eu-server-test-agent` to verify: SSH accepted from any
-  source; VPN accepted only from `ru-server`; RKN crawler sources and all
-  other incoming traffic (including direct `test-client` access and direct
-  proxy ports from other hosts) denied and logged with `fck-rkn eu`;
-  outgoing traffic unrestricted; minimal VM services work; rollback after an
-  invalid replacement.
-- **Orchestration:** Make `test_env_host` install the EU rules and run these
-  checks after the RU-to-EU paths are deployed. Fail on any mismatch.
 
 ### 85. Verify plan item 10 end to end
 
