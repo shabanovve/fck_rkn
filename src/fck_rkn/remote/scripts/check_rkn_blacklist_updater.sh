@@ -16,7 +16,7 @@ if [ "$(sudo systemctl show --property=Result --value "$service_name")" != succe
   exit 1
 fi
 for set_name in rkn_ipv4 rkn_ipv6; do
-  if ! grep -Eq "^  set $set_name \\{" "$rules_file"; then
+  if ! sudo grep -Eq "^  set $set_name \\{" "$rules_file"; then
     echo "Saved firewall rules are missing $set_name" >&2
     exit 1
   fi
