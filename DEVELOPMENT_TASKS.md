@@ -899,6 +899,29 @@ behavior that requires them.
   and the existing policy check (48/56) runs the 85b checks. Unit tests only;
   not yet run on real VMs.
 
+### 85d. Reset project firewall rules at the start of a full run
+
+- **Change:** After the VMs are running and SSH-ready, and before the first
+  agent step of every full `test_env_host` run, remove the project firewall
+  rules left by an earlier run on `eu-server` and `ru-server` (a
+  `test_env_host` step only; production agents never do it automatically).
+  Firewall rules are installed only after `eu-server`, `ru-server` and
+  `test-client` are configured and verified.
+- **Test:** Unit tests for the step order and exit code; verify on the VMs that
+  no project table remains before the build starts, and that the test-client
+  Outline connection check passes after a previous run left the RU
+  default-deny active.
+
+### 85e. Make provider service networks provider-neutral
+
+- **Change:** Rename `google_networks` / `GOOGLE_SERVICE_PORTS` and the
+  `google_*` nft sets to provider-neutral names (for example
+  `provider_service_networks`), and pass the check host names as parameters
+  so that agents and remote scripts do not name a provider. The orchestrator
+  keeps fetching `goog.json` for the test environment. snapd stays common.
+- **Test:** Unit tests for the generator and agents; the test that agents do
+  not name a cloud provider must cover `fck_rkn/agents/`.
+
 ### 86. Block ru-domains in Squid
 
 - **Change:** Block Russian destination domains at the Squid level on

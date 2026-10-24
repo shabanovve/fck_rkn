@@ -29,6 +29,10 @@ credentials or expose an unauthenticated proxy to the public Internet.
 - Run `eu-server-test-agent`, `ru-server-test-agent`, and
   `test-client-agent` to verify the services and network paths at the
   applicable milestones.
+- Remove the project firewall rules left by an earlier run once the VMs are
+  running and SSH-ready, and install firewall rules only after `eu-server`,
+  `ru-server` and `test-client` are configured and verified, in that order.
+  Firewall checks reuse the test agents' code.
 - Enforce the dependency order in this plan, stop on failures, and report
   which provisioning, deployment, or test step failed.
 - Never treat a deployment-agent exit status as a substitute for running the
@@ -206,8 +210,8 @@ The authoritative requirements are in the "Firewall Requirements" section of
 - Resolve server addresses, provider metadata/DNS/DHCP addresses, the VPN
   listener and interfaces from provisioning/runtime configuration; do not
   hard-code VM addresses or interface names.
-- Order rules in every chain: loopback and established/related replies;
-  minimal VM services; project services; RKN crawler denial; log and deny
+- Order rules in the input chain: loopback and established/related replies;
+  minimal VM services; RKN crawler denial; project services; log and deny
   the rest. Log every denial with an `fck-rkn <host>` prefix
   (for example, `fck-rkn ru`), rate-limited to protect the kernel log.
 - Coexist with Docker-managed chains; do not remove them.
@@ -219,7 +223,7 @@ The authoritative requirements are in the "Firewall Requirements" section of
 | `eu-server` | VPN only | Local traffic only | No restrictions |
 | Any other host | SSH allowed; RKN crawlers and all other incoming denied and logged | SSH allowed from any address; VPN only from `ru-server`; RKN crawlers and all other incoming denied and logged | Not applicable |
 
-Minimal VM services (loopback, established/related, DNS, DHCP, Google
+Minimal VM services (loopback, established/related, DNS, DHCP, provider
 services including metadata, snapd, NTP, ICMP) stay allowed on both servers,
 as described in `DEVELOPMENT.md`. Google (AS15169) and Canonical (AS41231,
 snapd) ranges are fetched and validated when the policy is applied and must

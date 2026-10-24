@@ -13,18 +13,29 @@
 
 ## Git-tracked File Safety
 
-- Files tracked by Git must not contain concrete IPv4 or IPv6 addresses or
-  CIDR ranges, including public service ranges such as the IAP TCP forwarding
-  source range. Use descriptive placeholders in tracked templates and store
-  required real network values only in ignored local configuration or obtain
-  them at runtime from an authoritative source.
+- Except for the documented address below, `README.md` and `DEVELOPMENT.md`
+  must not contain any concrete IPv4 or IPv6 addresses or CIDR ranges,
+  including public service ranges such as the IAP TCP forwarding source
+  range. Use descriptive placeholders there.
+- `DEVELOPMENT_PLAN.md` and tests may use IP addresses, but only
+  documentation and test ranges (reserved for documentation or benchmarking),
+  never the addresses of test or production virtual machines or of real
+  Internet hosts (except the documented address below).
+- The public address `1.1.1.1` is the documented "other host" used by the
+  firewall checks. It is the one real Internet address that may appear in
+  source, tests and documentation.
+- If code needs the IP address of a test or production environment (a VM,
+  a subnet or similar), it takes it from that environment's configuration
+  (`config/test.env`, `config/agents.env`) or resolves it at runtime from the
+  environment. Such addresses are never written in source, tests or
+  documentation.
 - Files tracked by Git must never contain credentials or credential material,
   including passwords, private keys, access tokens, ADC files, or service
   account keys. Use placeholders in examples and keep real credentials in an
   approved local or managed secret store.
-- Do not put concrete IP addresses or credentials into source, tests,
-  documentation, fixtures, or commit messages. Test with injected settings or
-  non-routable symbolic placeholders instead.
+- Do not put credentials into source, tests, documentation, fixtures, or
+  commit messages. Test with injected settings or documentation and test
+  address ranges.
 
 ## Environments
 
@@ -53,9 +64,10 @@
   It must not delete VMs or their disks, network resources, or firewall rules,
   and must not run as part of the normal provisioning workflow.
 - The repository's `config/` directory may contain only the tracked
-  `config/test.env.example` template. Local configuration files, generated
-  files, credentials, and any other files under `config/` must not be added
-  to the repository.
+  templates `config/test.env.example` and `config/agents.env.example`. Local
+  configuration files, generated files (including `config/last_run/`),
+  credentials, and any other files under `config/` must not be added to the
+  repository.
 - Keep real environment values out of the example; use placeholders there.
 
 ## VPN User Provisioning
@@ -66,6 +78,25 @@
   the corresponding client connectivity tests.
 - Keep generated access keys and other credentials in a protected secret
   store; never commit them or write them to unredacted logs.
+
+## Infrastructure Build Order and Verification
+
+- The infrastructure is configured by `eu-server-agent` and
+  `ru-server-agent`. Every change made by `ru-server-agent` is verified by
+  `ru-server-test-agent`, and every change made by `eu-server-agent` by
+  `eu-server-test-agent`; `test-client-agent` additionally verifies the
+  result from the client side.
+- Build in this order: `eu-server` first, then `ru-server`, and `test-client`
+  last. Each stage must pass its checks before the next one starts.
+- Firewall rules are installed only after the whole infrastructure is
+  configured and verified (all three stages above). In the test environment,
+  `test_env_host` removes the project firewall rules left by an earlier run
+  on `eu-server` and `ru-server` as soon as the VMs are running and
+  SSH-ready, before the first agent step of every full run, so the build is
+  never affected by an old policy. This reset is a `test_env_host` step only;
+  production agents never remove rules automatically.
+- Firewall checks reuse the code of the test agents (`eu-server-test-agent`,
+  `ru-server-test-agent`, `test-client-agent`) instead of duplicating it.
 
 ## Platform Independence and Firewall
 
@@ -86,6 +117,7 @@
 - Agents receive provider-specific values (such as a VM's private address) as
   parameters; the orchestrator resolves them in the test environment and
   `agents.env` supplies them in production.
+
 ## Firewall Requirements
 
 ### Principles
@@ -100,8 +132,8 @@
 - Where a default-deny policy applies, every allowed flow is listed
   explicitly. Traffic that matches no allow rule is logged and denied.
 - IPv6 follows the same rules as IPv4.
-- Rule order in every chain: loopback and established/related replies; minimal
-  VM services; RKN crawler denial; project services (including SSH and VPN);
+- Rule order in the input chain: loopback and established/related replies;
+  minimal VM services; RKN crawler denial; project services (including SSH and VPN);
   log and deny the rest. On both servers crawlers are denied before SSH and
   VPN are evaluated, so they cannot reach any service.
 - A log rule and its verdict are separate rules. A rate-limited log rule must
@@ -112,8 +144,9 @@
 - Rules are applied transactionally with a backup and automatic rollback on
   failure, so a bad ruleset cannot lock out the VM.
 - Rules must coexist with chains managed by Docker and must not remove them.
-- Provider-specific values (metadata, DNS and DHCP addresses, peer addresses)
-  are passed to agents as parameters; agents never hard-code a provider.
+- Provider-specific values (metadata, DNS and DHCP addresses, peer addresses
+  and provider service network ranges) are passed to agents as parameters;
+  agents never hard-code or name a provider.
 
 ### Minimal VM Services (all servers)
 
@@ -126,16 +159,19 @@ keeps these services working, with the narrowest possible scope.
 | Established/related replies | in/out | any | connection tracking |
 | DNS | out | UDP/TCP 53 | provider DNS resolver |
 | DHCP | out/in | UDP 67/68 | provider DHCP server |
-| Google services | out | TCP 80 and 443 | Google network ranges (AS15169), including the provider metadata address |
-| snapd | out | TCP 443 | Canonical network ranges (AS41231) |
+| Provider services (`ru-server` only) | out | TCP 80 and 443 | provider service network ranges, including the provider metadata address |
+| snapd (`ru-server` only) | out | TCP 443 | Canonical network ranges (AS41231) |
 | NTP | out | UDP 123 | provider/approved time source |
 | ICMP (PMTU, neighbor discovery) | in/out | ICMP/ICMPv6 | local subnet |
 
-Google services are the services the guest OS depends on: the metadata
-server (a private example of such a service), the guest agent, OS Login and
-the Google APIs. nftables filters by address, not by name, so they are
-allowed by network ranges. Google ranges come from Google's published list
-(`goog.json`) plus the metadata address. snapd (the Ubuntu snap store,
+Provider services are the services the guest OS depends on: the metadata
+server (a private example of such a service), the guest agent, login and the
+provider APIs. nftables filters by address, not by name, so they are allowed
+by network ranges that the orchestrator or `agents.env` passes to the agent
+as a parameter. Agents and remote scripts do not name the provider. In the
+test environment the provider is Google and the ranges come from Google's
+published list (`goog.json`) plus the metadata address; in production the
+provider's own ranges are supplied the same way. snapd (the Ubuntu snap store,
 `api.snapcraft.io` and its CDN) is allowed through the Canonical ranges taken
 from RIPEstat for AS41231. Neither list may overlap an RKN crawler range, so
 no crawler source can match these rules; the lists are re-checked against the
@@ -232,8 +268,9 @@ Outgoing:
 
 ## Testing
 
-- Run automated tests inside GCP virtual machines; do not rely on tests run
-  directly on the host.
+- Unit tests run locally. Tests that verify the environment, firewall and
+  network behavior run inside GCP virtual machines; do not rely on the host
+  for them.
 - Tests that verify network behavior must inspect or exercise the Docker
   network configuration and confirm the intended allowed and denied traffic.
 - Do not report a test run as successful unless the Docker command exits
@@ -277,6 +314,7 @@ The target layout is:
 ```text
 config/
   test.env.example
+  agents.env.example
 pyproject.toml
 requirements.txt
 test_env_host.py               # optional compatibility launcher
@@ -412,8 +450,8 @@ repository.
    The preflight performed by `test_env_host` uses ADC to call the Compute
    Engine API and fails before provisioning if authentication or project
    access fails. Provisioning additionally requires permission to create
-   Compute Engine instances, use the selected subnet, manage the two scoped
-   VPC firewall rules, and log in through OS Login. Prefer narrowly scoped
+   Compute Engine instances, use the selected subnet, manage the scoped
+   VPC firewall rule, and log in through OS Login. Prefer narrowly scoped
    custom roles or appropriately scoped predefined roles rather than granting
    project-wide Owner access.
 
@@ -439,7 +477,7 @@ repository.
    .venv/bin/python -m fck_rkn
    ```
 
-   This command can create the `eu-server` VM and IAP SSH firewall rules in
+   This command can create the test VMs and the IAP SSH firewall rule in
    GCP, which may incur charges. Run it only when provisioning is intended and
    confirm the project and budget first.
 
