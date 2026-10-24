@@ -74,17 +74,27 @@ class EuServerAgentTests(unittest.TestCase):
         remote_command = runner.command
         self.assertIn("apt-get install -y docker.io", remote_command)
         self.assertIn(f"container_name={SQUID_CONTAINER_NAME}", remote_command)
+        self.assertIn('{{index .Config.Labels "fck-rkn.squid-config"}}', remote_command)
         self.assertIn(
-            "docker inspect --format='{{.State.Running}}' \"$container_name\"",
-            remote_command,
-        )
-        self.assertIn(
-            "Squid container is already running; leaving it unchanged",
+            "Squid container is already running with the current configuration;"
+            " leaving it unchanged",
             remote_command,
         )
         self.assertLess(
             remote_command.index("leaving it unchanged"),
             remote_command.index(f"docker pull {SQUID_IMAGE}"),
+        )
+        self.assertIn("--volume", remote_command)
+        self.assertIn("/etc/squid/squid.conf:ro", remote_command)
+        self.assertIn("http_access deny ip_literal", remote_command)
+        self.assertIn("http_access deny ru_domains", remote_command)
+        self.assertLess(
+            remote_command.index("http_access deny ip_literal"),
+            remote_command.index("http_access deny ru_domains"),
+        )
+        self.assertLess(
+            remote_command.index("http_access deny ru_domains"),
+            remote_command.index("http_access allow localnet"),
         )
         self.assertIn(f"docker pull {SQUID_IMAGE}", remote_command)
         self.assertIn('--name "$container_name"', remote_command)

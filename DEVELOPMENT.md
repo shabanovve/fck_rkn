@@ -49,7 +49,8 @@
   region, and verify outbound access through NAT as part of the relevant test
   workflow.
 - Re-running Squid deployment must leave an already-running Squid container
-  untouched; replace it only when it is not running.
+  untouched; replace it only when it is not running or its access policy
+  (the mounted `squid.conf`) has changed.
 - Squid must deny, for both plain HTTP and `CONNECT`, every request whose
   destination is a Russian domain (the `.ru`, `.su` and `.рф`/`xn--p1ai` TLDs
   and their subdomains) and every request whose destination is an IP address

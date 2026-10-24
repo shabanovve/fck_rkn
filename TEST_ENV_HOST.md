@@ -162,6 +162,11 @@ After deployment, run `.venv/bin/eu-server-test-agent` to verify that the
 Squid container is running and that TCP port 3128 accepts local connections on
 `eu-server`. `test_env_host` runs this check after Squid deployment.
 
+To check that Squid denies Russian domains (`.ru`, `.su`, `.рф`) and any
+destination given as an IP address literal, run
+`eu-server-test-agent squid-block`. `test_env_host` runs it after the Squid
+HTTP check and fails with exit status 62 if any request is not denied (403).
+
 To test an HTTP GET to `youtube.com` through Squid, run
 `.venv/bin/eu-server-test-agent http`. An HTTP status from 200 through 399 is
 considered successful; the action prints the returned status and exits

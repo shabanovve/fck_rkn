@@ -34,6 +34,7 @@ from fck_rkn.agents.eu_server_test import (
     check_eu_firewall_rollback,
     check_mtproxy,
     check_outline_health,
+    check_squid_blocking,
     check_squid_http,
     check_squid_startup,
 )
@@ -614,6 +615,22 @@ def _run(image_directory: Path) -> int:
         return 9
 
     logger.info("eu-server-test-agent Squid HTTP check passed")
+    logger.info("Invoking eu-server-test-agent Squid blocking check")
+    squid_block_exit_code = check_squid_blocking(eu_runner)
+    if squid_block_exit_code != 0:
+        logger.error(
+            "eu-server-test-agent Squid blocking check failed with exit "
+            "status %d",
+            squid_block_exit_code,
+        )
+        print(
+            "eu-server-test-agent Squid blocking check failed with exit "
+            f"status {squid_block_exit_code}.",
+            file=sys.stderr,
+        )
+        return 62
+
+    logger.info("eu-server-test-agent Squid blocking check passed")
     logger.info("Building the Outline Server image once on this host")
     if build_outline_image() != 0:
         print("Could not build the Outline Server image.", file=sys.stderr)

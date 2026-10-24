@@ -90,7 +90,8 @@ is reported accurately.
 
 - Extend `eu-server-agent` to deploy Squid in a Docker container on
   `eu-server`, listening on TCP port 3128. If its named container is already
-  running, leave it unchanged instead of restarting it.
+  running with the current access policy, leave it unchanged instead of
+  restarting it.
 - Restrict access to the test network and explicitly approved test-client
   sources. Do not create a public open proxy.
 - Configure the required host firewall rules inside the Ubuntu VM. GCP

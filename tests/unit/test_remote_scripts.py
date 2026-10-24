@@ -99,7 +99,7 @@ class LoadOutlineImageTests(unittest.TestCase):
 
 class RenderTests(unittest.TestCase):
     def test_fills_placeholders_and_expands_includes(self) -> None:
-        script = render("deploy_squid.sh", container_name="c", image="i", port=1)
+        script = render("deploy_squid.sh", container_name="c", image="i", port=1, config_directory="d")
         self.assertIn("container_name=c", script)
         self.assertIn("apt-get install -y docker.io curl", script)
         self.assertNotIn("#include", script)
@@ -107,12 +107,12 @@ class RenderTests(unittest.TestCase):
 
     def test_rejects_missing_and_unused_values(self) -> None:
         with self.assertRaisesRegex(ValueError, "no value for @IMAGE@"):
-            render("deploy_squid.sh", container_name="c", port=1)
+            render("deploy_squid.sh", container_name="c", port=1, config_directory="d")
         with self.assertRaisesRegex(ValueError, "does not use: EXTRA"):
-            render("deploy_squid.sh", container_name="c", image="i", port=1, extra="x")
+            render("deploy_squid.sh", container_name="c", image="i", port=1, config_directory="d", extra="x")
 
     def test_values_are_not_expanded_twice(self) -> None:
-        script = render("deploy_squid.sh", container_name="@IMAGE@", image="i", port=1)
+        script = render("deploy_squid.sh", container_name="@IMAGE@", image="i", port=1, config_directory="d")
         self.assertIn("container_name=@IMAGE@", script)
 
     def test_python_scripts_are_valid_python(self) -> None:

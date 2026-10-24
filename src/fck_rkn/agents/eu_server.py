@@ -42,6 +42,7 @@ PING_COMMAND = "ping -c 1 -W 10 youtube.com"
 SQUID_CONTAINER_NAME = "fck-rkn-squid"
 SQUID_IMAGE = "ubuntu/squid:latest"
 SQUID_PORT = 3128
+SQUID_CONFIG_DIRECTORY = "/etc/fck-rkn/squid"
 MTPROXY_CONTAINER_NAME = "fck-rkn-mtproxy"
 MTPROXY_IMAGE = "telegrammessenger/proxy:latest"
 MTPROXY_PORT = 8443
@@ -75,6 +76,7 @@ def deploy_squid(runner: RemoteRunner) -> int:
         container_name=SQUID_CONTAINER_NAME,
         image=SQUID_IMAGE,
         port=SQUID_PORT,
+        config_directory=SQUID_CONFIG_DIRECTORY,
     )
     logger.info("Deploying Squid on eu-server (TCP port %d)", SQUID_PORT)
     result = execute(

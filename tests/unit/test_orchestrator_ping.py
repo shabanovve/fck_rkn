@@ -45,6 +45,12 @@ class OrchestratorPingTests(unittest.TestCase):
                 compute_v1.NetworkInterface(network_i_p="10.0.0.2")
             ],
         )
+        self.squid_block = patch(
+            "fck_rkn.orchestration.test_environment.check_squid_blocking",
+            return_value=0,
+        )
+        self.squid_block_mock = self.squid_block.start()
+        self.addCleanup(self.squid_block.stop)
         self.outline_deploy = patch(
             "fck_rkn.orchestration.test_environment.deploy_outline",
             return_value=0,
@@ -655,6 +661,48 @@ class OrchestratorPingTests(unittest.TestCase):
         squid_check.assert_called_once_with(EU_RUNNER)
         http_check.assert_called_once_with(EU_RUNNER)
         self.assertIn("Squid HTTP check failed", stderr.getvalue())
+
+    def test_fails_workflow_when_squid_blocking_check_fails(self) -> None:
+        self.squid_block_mock.return_value = 1
+        stderr = StringIO()
+        with (
+            patch(
+                "fck_rkn.orchestration.test_environment.logging.basicConfig"
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.load_config",
+                return_value=self.settings,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.validate_project_access"
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.ensure_eu_server",
+                return_value=self.instance,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.run_youtube_ping",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.deploy_squid",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.check_squid_startup",
+                return_value=0,
+            ),
+            patch(
+                "fck_rkn.orchestration.test_environment.check_squid_http",
+                return_value=0,
+            ),
+            redirect_stderr(stderr),
+        ):
+            result = main()
+
+        self.assertEqual(result, 62)
+        self.squid_block_mock.assert_called_once_with(EU_RUNNER)
+        self.assertIn("Squid blocking check failed", stderr.getvalue())
 
     def test_fails_if_outline_deployment_fails_and_skips_health_check(self) -> None:
         stderr = StringIO()

@@ -22,11 +22,13 @@ from fck_rkn.agents.eu_server import (
 from fck_rkn.agents.eu_server_test import (
     MTPROXY_CHECK_COMMAND,
     OUTLINE_HEALTH_CHECK_COMMAND,
+    SQUID_BLOCK_CHECK_COMMAND,
     SQUID_HTTP_CHECK_COMMAND,
     SQUID_STARTUP_CHECK_COMMAND,
     SSH_COMMAND_TIMEOUT_SECONDS,
     check_mtproxy,
     check_outline_health,
+    check_squid_blocking,
     check_squid_http,
     check_squid_startup,
     main,
@@ -105,6 +107,34 @@ class EuServerTestAgentTests(unittest.TestCase):
         self.assertIn('request("GET", "http://youtube.com/"', SQUID_HTTP_CHECK_COMMAND)
         self.assertIn("200 <= status < 400", SQUID_HTTP_CHECK_COMMAND)
         self.assertEqual(output.getvalue(), "301\n")
+
+    def test_blocking_check_covers_ru_domains_and_ip_literals(self) -> None:
+        runner = FakeRunner(stdout="GET example.ru: 403\n")
+        with redirect_stdout(StringIO()):
+            result = check_squid_blocking(runner)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(runner.command, SQUID_BLOCK_CHECK_COMMAND)
+        self.assertIn("python3 - 3128", SQUID_BLOCK_CHECK_COMMAND)
+        for case in (
+            '"example.ru"',
+            '"example.xn--p1ai"',
+            '("CONNECT", "example.ru"',
+            '"192.0.2.1"',
+            '"[2001:db8::1]"',
+            '("CONNECT", "[2001:db8::1]"',
+        ):
+            self.assertIn(case, SQUID_BLOCK_CHECK_COMMAND)
+        self.assertIn('status != "403"', SQUID_BLOCK_CHECK_COMMAND)
+
+    def test_blocking_check_fails_when_a_request_is_not_denied(self) -> None:
+        runner = FakeRunner(exit_code=1, stdout="GET example.ru: 200\n")
+        with (
+            redirect_stdout(StringIO()),
+            redirect_stderr(StringIO()),
+            self.assertLogs("fck_rkn.remote.runner", level="ERROR"),
+        ):
+            self.assertEqual(check_squid_blocking(runner), 1)
 
     def test_http_check_fails_for_http_error_response(self) -> None:
         stderr = StringIO()

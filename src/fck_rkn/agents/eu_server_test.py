@@ -43,6 +43,7 @@ SQUID_STARTUP_CHECK_COMMAND = render(
     port=SQUID_PORT,
 )
 SQUID_HTTP_CHECK_COMMAND = render("squid_http_check.sh", port=SQUID_PORT)
+SQUID_BLOCK_CHECK_COMMAND = render("squid_block_check.sh", port=SQUID_PORT)
 MTPROXY_CHECK_COMMAND = render(
     "mtproxy_check.sh",
     container_name=MTPROXY_CONTAINER_NAME,
@@ -60,6 +61,17 @@ def check_squid_startup(runner: RemoteRunner) -> int:
             "Squid container is running and TCP port %d accepts connections",
             SQUID_PORT,
         )
+    return result
+
+
+def check_squid_blocking(runner: RemoteRunner) -> int:
+    """Check Squid denies ru-domains and IP-literal destinations."""
+    logger.info("Checking Squid denies ru-domains and IP-address destinations")
+    result = _run_check(
+        runner, SQUID_BLOCK_CHECK_COMMAND, "Squid blocking check"
+    )
+    if result == 0:
+        logger.info("Squid denied ru-domains and IP-address destinations")
     return result
 
 
@@ -201,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
         choices=(
             "startup",
             "http",
+            "squid-block",
             "outline",
             "mtproxy",
             "firewall",
@@ -240,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
         return check_eu_firewall_rollback(runner)
     if args.action == "http":
         return check_squid_http(runner)
+    if args.action == "squid-block":
+        return check_squid_blocking(runner)
     if args.action == "mtproxy":
         return check_mtproxy(runner)
     if args.action == "outline":

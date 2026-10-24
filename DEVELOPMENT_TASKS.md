@@ -949,7 +949,7 @@ behavior that requires them.
   test now rejects the word "google" in agents. `snapd_networks` is unchanged.
   Unit tests only; not yet run on real VMs.
 
-### 86. Block ru-domains in Squid
+### 86. [x] Block ru-domains and IP-address destinations in Squid
 
 - **Change:** Block at the Squid level on `eu-server`, for both HTTP and
   `CONNECT`: (1) Russian destination domains (`.ru`, `.su`, `.рф`/`xn--p1ai`
@@ -960,6 +960,16 @@ behavior that requires them.
 - **Test:** Verify requests to ru-domains and to IP-literal destinations
   (documentation ranges only in tests) are denied by Squid, and that
   other requests (e.g. `youtube.com`) still succeed.
+- **Done:** `remote/scripts/squid.conf` is written to `/etc/fck-rkn/squid/` on
+  eu-server and mounted read-only; deployment labels the container with the
+  config hash and recreates it only when it is not running or the policy
+  changed. The policy denies IP-literal URLs (IPv4, IPv6, short decimal/hex
+  forms, with user info or port, plain and `CONNECT`) before the
+  `.ru`/`.su`/`xn--p1ai` rule, because name ACLs make Squid reverse-resolve IP
+  hosts. `eu-server-test-agent squid-block` (`squid_block_check.py`) expects
+  403 for each case; the orchestrator runs it after the HTTP check (exit 62).
+  Verified locally against `ubuntu/squid` in Docker (`squid -k parse`, curl);
+  not yet run on real VMs.
 
 ### 87. Hide both servers from RKN crawlers with daily blacklist updates
 
