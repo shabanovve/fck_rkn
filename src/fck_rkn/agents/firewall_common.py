@@ -198,6 +198,60 @@ def rkn_sets_block(config: dict) -> str:
   }}"""
 
 
+def service_sets_block(
+    config: dict, key: str, set_prefix: str, forbidden: Sequence[IPNetwork] = ()
+) -> str:
+    """Validate service ranges and return nftables sets named ``<prefix>_ipv4/6``.
+
+    A range that overlaps ``forbidden`` (for example the RKN crawler ranges) is
+    rejected, so a service allow rule can never match a crawler source.
+    """
+    value = config.get(key)
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"{key} must contain at least one network")
+    blocks = []
+    for version, family in ((4, "ipv4"), (6, "ipv6")):
+        selected = [
+            item
+            for item in value
+            if isinstance(item, str) and _parsed_version(item) == version
+        ]
+        if not selected:
+            continue
+        networks = _network_list(selected, key, version)
+        for network in networks:
+            for blocked in forbidden:
+                if blocked.version == version and network.overlaps(blocked):
+                    raise ValueError(f"{key} overlaps an RKN crawler range")
+        blocks.append(
+            f"""  set {set_prefix}_{family} {{
+    type {family}_addr
+    flags interval
+    elements = {{ {_nft_networks(networks)} }}
+  }}"""
+        )
+    if sum(1 for item in value if not isinstance(item, str)):
+        raise ValueError(f"{key} contains a non-string network")
+    if not blocks:
+        raise ValueError(f"{key} contains no valid network")
+    return "\n".join(blocks)
+
+
+def _parsed_version(text: str) -> int | None:
+    try:
+        return ipaddress.ip_network(text, strict=True).version
+    except ValueError as error:
+        raise ValueError("a service range list contains an invalid network") from error
+
+
+def rkn_networks(config: dict) -> list[IPNetwork]:
+    """Return the validated RKN crawler ranges of both IP versions."""
+    return [
+        *_network_list(config.get("rkn_ipv4"), "rkn_ipv4", 4),
+        *_network_list(config.get("rkn_ipv6"), "rkn_ipv6", 6),
+    ]
+
+
 def indent_rules(rules: Sequence[str]) -> str:
     return "\n".join(f"    {rule}" for rule in rules)
 

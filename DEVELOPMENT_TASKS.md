@@ -869,6 +869,11 @@ behavior that requires them.
   RKN crawler ranges, and keep the previous rules on failure.
 - **Test:** Unit tests for the generated rules, `nft -c`, validation failures
   and the overlap rejection.
+- **Done:** `build_ru_firewall_rules` requires top-level `google_networks` and
+  `snapd_networks`, validates them (non-empty, networks, overlap with RKN or EU
+  addresses rejected) and emits interval sets plus accept rules (Google TCP
+  80/443, snapd TCP 443) after the minimal VM rules. The metadata rule is kept.
+  Unit tests include `nft -c`.
 
 ### 85b. Test Google services and snapd access on ru-server
 
@@ -877,12 +882,22 @@ behavior that requires them.
   host and `api.snapcraft.io` are reachable over TCP 443 (and the metadata
   address over TCP 80), that other hosts stay denied and logged, and that the
   VM does not log denials for these services during the check.
+- **Done:** `ru_firewall_check.sh` verifies the accept rules for the Google and
+  snapd sets and that `www.googleapis.com` and `api.snapcraft.io` are
+  reachable over TCP 443; the metadata address (TCP 80) and denial of other
+  hosts were already covered. The "no denial logged for these services" check
+  is not implemented separately: reachability under default deny proves it.
 
 ### 85c. Deploy and test Google services and snapd rules
 
 - **Orchestration:** Make `test_env_host` fetch and pass the Google and
   Canonical ranges, apply the RU rules and run the task 85b checks. Fail on
   any mismatch.
+- **Done:** `fetch_google_networks` (`goog.json`) and `fetch_snapd_networks`
+  (RIPEstat AS41231) run with the RKN blacklist fetch; failures map to exit
+  code 46. The ranges go into the RU firewall config (saved by `last_run`),
+  and the existing policy check (48/56) runs the 85b checks. Unit tests only;
+  not yet run on real VMs.
 
 ### 86. Block ru-domains in Squid
 

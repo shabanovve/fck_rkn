@@ -154,6 +154,8 @@ class RuFirewallCheckTests(unittest.TestCase):
         self.assertEqual(data["vm_service_address"], "10.0.0.250")
         self.assertEqual(data["ntp_address"], "10.0.0.253")
         self.assertEqual(data["ssh_port"], 22)
+        self.assertEqual(data["service_sets"], ["google_ipv4", "snapd_ipv4"])
+        self.assertIn("api.snapcraft.io", data["service_hosts"])
         self.assertEqual(data["eu_outline_port"], 10001)
         self.assertNotIn("test_client_address", data)
 

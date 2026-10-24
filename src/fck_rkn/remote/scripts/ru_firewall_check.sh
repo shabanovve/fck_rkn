@@ -15,6 +15,12 @@ for key in ("eu_outline_port", "ssh_port"):
         raise ValueError("invalid " + key)
 for key in keys + ("eu_outline_port", "ssh_port"):
     print(c[key])
+for key in ("service_sets", "service_hosts"):
+    items = c[key]
+    if not items or not all(isinstance(i, str) and i.isascii() and
+            all(ch.isalnum() or ch in "._-" for ch in i) for i in items):
+        raise ValueError("invalid " + key)
+    print(" ".join(items))
 ')
 eu_server=${values[0]}
 outline_server=${values[1]}
@@ -24,6 +30,8 @@ vm_service_address=${values[4]}
 ntp_address=${values[5]}
 outline_port=${values[6]}
 ssh_port=${values[7]}
+read -r -a service_sets <<<"${values[8]}"
+read -r -a service_hosts <<<"${values[9]}"
 vpn_port=@VPN_PORT@
 proxy_ports=(@PROXY_PORTS@)
 table=fck_rkn_ru
@@ -196,6 +204,11 @@ grep -q 'udp sport 68 udp dport 67 accept' <<<"$rules" ||
 grep -q 'icmp type' <<<"$rules" ||
   fail "RU firewall does not allow ICMP on the local network"
 
+for set_name in "${service_sets[@]}"; do
+  grep -Eq "daddr @$set_name tcp dport .*accept" <<<"$rules" ||
+    fail "RU firewall has no accept rule for the address set $set_name"
+done
+
 report "The active policy is default deny with separate log rules"
 
 # 2. Build the isolated source used for the incoming probes.
@@ -291,6 +304,13 @@ report "External hosts, including ICMP echo, are denied and counted"
 [ "$(host_probe "$vm_service_address" 80)" = open ] ||
   fail "The VM service address is unreachable"
 report "The VM service address is reachable"
+for service_host in "${service_hosts[@]}"; do
+  service_ip=$(getent ahostsv4 "$service_host" | awk 'NR==1 {print $1}')
+  [ -n "$service_ip" ] || fail "Could not resolve the service host $service_host"
+  [ "$(host_probe "$service_ip" 443)" = open ] ||
+    fail "The service host $service_host ($service_ip) is unreachable on TCP/443"
+  report "The service host $service_host is reachable on TCP/443"
+done
 getent hosts example.com >/dev/null || fail "Name resolution failed"
 report "Name resolution works"
 python3 - "$ntp_address" <<'PY' || fail "The time source did not answer an NTP request"
@@ -331,4 +351,4 @@ if [ "$forward_checked" = true ]; then
 else
   forward_note="has IP forwarding disabled, so the forward chain was not exercised"
 fi
-echo "RU firewall is default deny, accepts SSH, VPN and DHCP replies, denies and logs other traffic, allows only the EU VPN transport and minimal VM services outward, and $forward_note"
+echo "RU firewall is default deny, accepts SSH, VPN and DHCP replies, denies and logs other traffic, allows only the EU VPN transport, minimal VM services and the allowed service networks outward, and $forward_note"

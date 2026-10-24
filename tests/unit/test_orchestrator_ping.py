@@ -224,8 +224,14 @@ class OrchestratorPingTests(unittest.TestCase):
             "check_firewall_crawler_source",
             "check_firewall_vpn_client",
             "fetch_rkn_blacklist",
+            "fetch_google_networks",
+            "fetch_snapd_networks",
         ):
-            value = (["192.0.2.0/24"], ["2001:db8::/32"]) if name == "fetch_rkn_blacklist" else 0
+            value = {
+                "fetch_rkn_blacklist": (["192.0.2.0/24"], ["2001:db8::/32"]),
+                "fetch_google_networks": ["198.51.100.0/24"],
+                "fetch_snapd_networks": ["203.0.113.0/24"],
+            }.get(name, 0)
             firewall_patch = patch(
                 f"fck_rkn.orchestration.test_environment.{name}",
                 return_value=value,
@@ -363,6 +369,8 @@ class OrchestratorPingTests(unittest.TestCase):
                 "other_host_address": "1.1.1.1",
                 "rkn_ipv4": ["192.0.2.0/24"],
                 "rkn_ipv6": ["2001:db8::/32"],
+                "google_networks": ["198.51.100.0/24"],
+                "snapd_networks": ["203.0.113.0/24"],
                 "vm_services": {
                     "metadata_address": "169.254.169.254",
                     "dns_addresses": ["169.254.169.254"],
@@ -458,6 +466,8 @@ class OrchestratorPingTests(unittest.TestCase):
                 other_host_address="1.1.1.1",
                 rkn_ipv4=["192.0.2.0/24"],
                 rkn_ipv6=["2001:db8::/32"],
+                google_networks=["198.51.100.0/24"],
+                snapd_networks=["203.0.113.0/24"],
                 subnet_cidr="10.0.0.0/24",
             )
         )
@@ -1262,3 +1272,43 @@ class AutomaticTestEnvConfigurationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ServiceRangesFetchTests(unittest.TestCase):
+    def fetch(self, function, document):
+        from fck_rkn.orchestration import test_environment as module
+
+        with patch.object(module, "_fetch_json", return_value=document):
+            return getattr(module, function)()
+
+    def test_google_ranges_are_parsed_from_the_published_document(self) -> None:
+        document = {
+            "prefixes": [
+                {"ipv6Prefix": "2001:db8::/32"},
+                {"ipv4Prefix": "198.51.100.0/24"},
+            ]
+        }
+
+        self.assertEqual(
+            self.fetch("fetch_google_networks", document),
+            ["198.51.100.0/24", "2001:db8::/32"],
+        )
+
+    def test_snapd_ranges_are_parsed_from_the_announced_prefixes(self) -> None:
+        document = {"data": {"prefixes": [{"prefix": "203.0.113.0/24"}]}}
+
+        self.assertEqual(
+            self.fetch("fetch_snapd_networks", document), ["203.0.113.0/24"]
+        )
+
+    def test_malformed_or_empty_documents_are_rejected(self) -> None:
+        for function, document in (
+            ("fetch_google_networks", {}),
+            ("fetch_google_networks", {"prefixes": []}),
+            ("fetch_google_networks", {"prefixes": [{"ipv4Prefix": "bad"}]}),
+            ("fetch_snapd_networks", {"data": {}}),
+            ("fetch_snapd_networks", {"data": {"prefixes": [{"prefix": 5}]}}),
+        ):
+            with self.subTest(function=function, document=document):
+                with self.assertRaises(ValueError):
+                    self.fetch(function, document)

@@ -107,6 +107,11 @@ RKN_BLACKLIST_URL = (
     "blacklists_nftables/blacklist.nft"
 )
 RKN_BLACKLIST_TIMEOUT_SECONDS = 30
+GOOGLE_RANGES_URL = "https://www.gstatic.com/ipranges/goog.json"
+CANONICAL_RANGES_URL = (
+    "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS41231"
+)
+SERVICE_RANGES_TIMEOUT_SECONDS = 30
 OTHER_HOST_TEST_ADDRESS = "1.1.1.1"
 
 
@@ -168,6 +173,62 @@ def fetch_rkn_blacklist() -> tuple[list[str], list[str]]:
     return ipv4, ipv6
 
 
+def _service_networks(prefixes: list[object], source: str) -> list[str]:
+    values: set[str] = set()
+    for item in prefixes:
+        if not isinstance(item, str):
+            raise ValueError(f"{source} contains a non-string prefix")
+        try:
+            values.add(ipaddress.ip_network(item, strict=True).with_prefixlen)
+        except ValueError as error:
+            raise ValueError(f"{source} contains an invalid prefix") from error
+    if not values:
+        raise ValueError(f"{source} contains no prefixes")
+    return sorted(
+        values,
+        key=lambda value: (
+            ipaddress.ip_network(value).version,
+            int(ipaddress.ip_network(value).network_address),
+            ipaddress.ip_network(value).prefixlen,
+        ),
+    )
+
+
+def _fetch_json(url: str, source: str) -> object:
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "fck-rkn-test-firewall"}
+    )
+    try:
+        with urllib.request.urlopen(
+            request, timeout=SERVICE_RANGES_TIMEOUT_SECONDS
+        ) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (OSError, UnicodeError, ValueError, urllib.error.URLError) as error:
+        raise RuntimeError(f"Could not fetch the {source} ranges") from error
+
+
+def fetch_google_networks() -> list[str]:
+    """Fetch Google's published IPv4 and IPv6 ranges (``goog.json``)."""
+    document = _fetch_json(GOOGLE_RANGES_URL, "Google")
+    try:
+        entries = document["prefixes"]
+        prefixes = [e.get("ipv4Prefix") or e.get("ipv6Prefix") for e in entries]
+    except (KeyError, TypeError, AttributeError) as error:
+        raise ValueError("The Google ranges document is malformed") from error
+    return _service_networks(prefixes, "Google ranges")
+
+
+def fetch_snapd_networks() -> list[str]:
+    """Fetch the prefixes announced by Canonical (AS41231) for snapd."""
+    document = _fetch_json(CANONICAL_RANGES_URL, "Canonical")
+    try:
+        entries = document["data"]["prefixes"]
+        prefixes = [e["prefix"] for e in entries]
+    except (KeyError, TypeError) as error:
+        raise ValueError("The Canonical ranges document is malformed") from error
+    return _service_networks(prefixes, "Canonical ranges")
+
+
 def _crawler_probe_address(networks: list[str]) -> str:
     if not networks:
         raise ValueError("The RKN IPv4 crawler ranges are empty")
@@ -219,6 +280,8 @@ def build_ru_firewall_configuration(
     other_host_address: str,
     rkn_ipv4: list[str],
     rkn_ipv6: list[str],
+    google_networks: list[str],
+    snapd_networks: list[str],
     subnet_cidr: str,
 ) -> str:
     """Build the non-secret runtime input accepted by the RU firewall agent."""
@@ -236,6 +299,8 @@ def build_ru_firewall_configuration(
             ).compressed,
             "rkn_ipv4": rkn_ipv4,
             "rkn_ipv6": rkn_ipv6,
+            "google_networks": google_networks,
+            "snapd_networks": snapd_networks,
             "vm_services": _gcp_vm_services(subnet_cidr),
         }
     )
@@ -850,6 +915,8 @@ def _run(image_directory: Path) -> int:
             other_host_address=OTHER_HOST_TEST_ADDRESS,
             rkn_ipv4=rkn_ipv4,
             rkn_ipv6=rkn_ipv6,
+            google_networks=fetch_google_networks(),
+            snapd_networks=fetch_snapd_networks(),
             subnet_cidr=settings.GCP_SUBNET_CIDR,
         )
         eu_firewall_config = build_eu_firewall_configuration(

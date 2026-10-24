@@ -171,6 +171,8 @@ def check_outline_health(runner: RemoteRunner) -> int:
 
 
 VPN_CHECK_LOCAL_PORT = 14080
+SERVICE_NETWORK_SETS = ("google_ipv4", "snapd_ipv4")
+SERVICE_CHECK_HOSTS = ("www.googleapis.com", "api.snapcraft.io")
 FIREWALL_CHECK_TIMEOUT_SECONDS = 240
 VPN_CLIENT_CHECK_TIMEOUT_SECONDS = 240
 
@@ -221,6 +223,8 @@ def build_firewall_check_input(config_json: str) -> str:
             "vm_service_address": _first_ipv4(
                 [services.metadata_address.compressed], "vm_service_address"
             ),
+            "service_sets": list(SERVICE_NETWORK_SETS),
+            "service_hosts": list(SERVICE_CHECK_HOSTS),
             "ntp_address": _first_ipv4(
                 [address.compressed for address in services.ntp_addresses],
                 "ntp_addresses",

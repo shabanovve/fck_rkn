@@ -18,6 +18,8 @@ def valid_config(**overrides: object) -> str:
         "eu_outline_port": 10001,
         "rkn_ipv4": ["192.0.2.0/24"],
         "rkn_ipv6": ["2001:db8::/32"],
+        "google_networks": ["198.51.100.0/24", "2001:db9:1::/48"],
+        "snapd_networks": ["203.0.113.0/24"],
         "vm_services": {
             "metadata_address": "169.254.169.254",
             "dns_addresses": ["169.254.169.254"],
@@ -33,6 +35,55 @@ def valid_config(**overrides: object) -> str:
 def chain(rules: str, name: str) -> str:
     start = rules.index(f"chain {name}")
     return rules[start : rules.index("\n  }", start)]
+
+
+class RuServiceRuleTests(unittest.TestCase):
+    def test_google_and_snapd_are_allowed_outward_after_minimal_rules(self) -> None:
+        output = chain(build_ru_firewall_rules(valid_config()), "output")
+
+        self.assertIn("ip daddr @google_ipv4 tcp dport { 80, 443 } accept", output)
+        self.assertIn("ip6 daddr @google_ipv6 tcp dport { 80, 443 } accept", output)
+        self.assertIn("ip daddr @snapd_ipv4 tcp dport 443 accept", output)
+        self.assertNotIn("@snapd_ipv6", output)
+        self.assertLess(
+            output.index("169.254.169.254 tcp dport { 80, 443 } accept"),
+            output.index("@google_ipv4"),
+        )
+        self.assertLess(
+            output.index("@snapd_ipv4"), output.index("fck-rkn ru output denied")
+        )
+        self.assertLess(
+            output.index("@google_ipv4"), output.index("direct-eu-service")
+        )
+
+    def test_service_sets_contain_the_supplied_ranges(self) -> None:
+        rules = build_ru_firewall_rules(valid_config())
+
+        self.assertIn("set google_ipv4", rules)
+        self.assertIn("198.51.100.0/24", rules)
+        self.assertIn("set google_ipv6", rules)
+        self.assertIn("set snapd_ipv4", rules)
+        self.assertNotIn("set snapd_ipv6", rules)
+
+    def test_invalid_service_ranges_are_rejected(self) -> None:
+        cases = {
+            "missing": {"google_networks": None},
+            "empty": {"snapd_networks": []},
+            "invalid": {"google_networks": ["not-a-network"]},
+            "non-string": {"snapd_networks": [5]},
+            "crawler overlap": {"google_networks": ["192.0.2.128/25"]},
+            "ipv6 crawler overlap": {"snapd_networks": ["2001:db8:5::/48"]},
+            "covers eu": {"google_networks": ["10.0.0.0/24"]},
+        }
+        for name, override in cases.items():
+            with self.subTest(case=name), self.assertRaises(ValueError):
+                config = json.loads(valid_config())
+                for key, value in override.items():
+                    if value is None:
+                        del config[key]
+                    else:
+                        config[key] = value
+                build_ru_firewall_rules(json.dumps(config))
 
 
 class RuFirewallRuleTests(unittest.TestCase):
@@ -90,7 +141,7 @@ class RuFirewallRuleTests(unittest.TestCase):
         accepts = [
             line for line in self.output.splitlines() if line.endswith(" accept")
         ]
-        self.assertEqual(len(accepts), 10)
+        self.assertEqual(len(accepts), 13)
         self.assertTrue(
             self.output.rstrip().endswith(
                 f'{LOG} "fck-rkn ru output denied: " level info\n    drop'
@@ -140,7 +191,7 @@ class RuFirewallRuleTests(unittest.TestCase):
             valid_config(
                 eu_server_address="2001:db8:2::1",
                 eu_outline_address="2001:db8:2::1",
-                rkn_ipv4=["198.51.100.0/24"],
+                rkn_ipv4=["192.0.2.0/24"],
                 rkn_ipv6=["2001:db8:ffff::/48"],
             )
         )

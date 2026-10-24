@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ipaddress
+
 from fck_rkn.agents.firewall_common import (
     LOG_LIMIT,
     address_match,
@@ -11,7 +13,9 @@ from fck_rkn.agents.firewall_common import (
     minimal_output_rules,
     parse_address,
     parse_minimal_vm_services,
+    rkn_networks,
     rkn_sets_block,
+    service_sets_block,
 )
 
 
@@ -19,6 +23,8 @@ TABLE_NAME = "fck_rkn_ru"
 RU_OUTLINE_ACCESS_PORT = 10001
 EU_SERVICE_PORTS = (3128, 8443)
 DEFAULT_SSH_PORT = 22
+GOOGLE_SERVICE_PORTS = (80, 443)
+SNAPD_PORT = 443
 
 
 def _log(reason: str) -> str:
@@ -60,12 +66,40 @@ def build_ru_firewall_rules(config_json: str) -> str:
     ):
         raise ValueError("ssh_port must be between 1 and 65535")
     rkn_sets = rkn_sets_block(config)
+    crawlers = rkn_networks(config)
+    google_sets = service_sets_block(config, "google_networks", "google", crawlers)
+    snapd_sets = service_sets_block(config, "snapd_networks", "snapd", crawlers)
+    service_networks = [
+        ipaddress.ip_network(item)
+        for key in ("google_networks", "snapd_networks")
+        for item in config[key]
+    ]
+    for protected in (eu_server, outline_server):
+        if any(
+            protected.version == network.version and protected in network
+            for network in service_networks
+        ):
+            raise ValueError(
+                "Google or snapd networks must not contain an EU server address"
+            )
     vm_services = parse_minimal_vm_services(config.get("vm_services"))
 
     eu_service_ports = ", ".join(map(str, EU_SERVICE_PORTS))
     direct_eu_match = (
         f"{address_match('daddr', eu_server)} tcp dport {{ {eu_service_ports} }}"
     )
+    google_ports = ", ".join(map(str, GOOGLE_SERVICE_PORTS))
+    service_output_rules = []
+    for family in ("ipv4", "ipv6"):
+        match = "ip" if family == "ipv4" else "ip6"
+        if f"set google_{family} " in google_sets:
+            service_output_rules.append(
+                f"{match} daddr @google_{family} tcp dport {{ {google_ports} }} accept"
+            )
+        if f"set snapd_{family} " in snapd_sets:
+            service_output_rules.append(
+                f"{match} daddr @snapd_{family} tcp dport {SNAPD_PORT} accept"
+            )
     input_rules = [
         *minimal_input_rules(vm_services),
         f"ip saddr @rkn_ipv4 {_log('input crawler-v4')}",
@@ -79,6 +113,7 @@ def build_ru_firewall_rules(config_json: str) -> str:
     ]
     output_rules = [
         *minimal_output_rules(vm_services),
+        *service_output_rules,
         f"{direct_eu_match} {_log('output direct-eu-service')}",
         f"{direct_eu_match} drop",
         f"{address_match('daddr', outline_server)} tcp dport {outline_port} accept",
@@ -94,6 +129,8 @@ def build_ru_firewall_rules(config_json: str) -> str:
     return f"""destroy table inet {TABLE_NAME}
 table inet {TABLE_NAME} {{
 {rkn_sets}
+{google_sets}
+{snapd_sets}
   chain input {{
     type filter hook input priority -5; policy drop;
 {indent_rules(input_rules)}
