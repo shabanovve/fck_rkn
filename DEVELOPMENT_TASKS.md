@@ -1179,7 +1179,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `config/test.env.example` when `config/test.env` is absent.
 - **Change:** Add `config/prod.env.example` with detailed comments and only
   the settings needed for the EU stage: controller SSH settings, EU host and
-  private address, EU provider-service inputs, and the RU private peer address
+  server address, EU provider-service inputs, and the RU peer address
   needed by the EU firewall. Do not require RU SSH settings or RU-only
   provider ranges for the EU stage.
 - **Verify:** Check every setting's allowed form, value source and purpose;
@@ -1225,7 +1225,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   ambient environment variables override `config/prod.env`, and summarizes
   invalid fields without including their values.
 
-### 205. Adding the EU-only production entry point
+### 205. [x] Adding the EU-only production entry point
 
 - **Source step:** `main`, `_run`, and the test-only `shutdown-vms` dispatch.
 - **Change:** Add the `prod_env_host` CLI entry point with an explicit EU-only
@@ -1239,6 +1239,11 @@ checks restricted to the reviewed read-only behavior specified by each task.
   all failures return nonzero, and no RU action or test-only shutdown action
   can run. Verify the production entry point can be installed and invoked
   without GCP client libraries, GCP credentials or `gcloud`.
+- **Done:** Added `prod-env-host deploy-eu-squid`, which loads only
+  `config/prod.env`, creates one EU `SshRunner`, and runs the Squid deployment
+  followed by its startup, HTTP and blocking checks. Every failure stops the
+  sequence with a nonzero result. The entry point imports no GCP code and
+  exposes no RU or test-only shutdown operation.
 
 ### 206. Excluding GCP project-access validation
 
@@ -1262,11 +1267,11 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Verify:** EU-stage orchestration does not call `ensure_eu_server`,
   Compute Engine, Cloud NAT, or cloud firewall operations.
 
-### 208. Resolving the production EU private address
+### 208. Resolving the production EU address
 
 - **Source step:** `private_address_of(instance)` obtains the address passed
   to the Outline deployment and firewall configuration.
-- **Change:** Use the strictly validated `EU_SERVER_PRIVATE_ADDRESS` from
+- **Change:** Use the strictly validated `EU_SERVER_ADDRESS` from
   `config/prod.env`; do not discover it from a cloud VM object or metadata.
 - **Verify:** Test valid IPv4/IPv6 addresses and malformed/missing values;
   assert invalid values stop before any remote operation.
@@ -1416,13 +1421,13 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Next check:** Task 221, `eu-server-test-agent outline`
   (`agents.eu_server_test.check_outline_health(runner)`).
 - **Change:** Invoke the EU Outline deployment action with the validated EU
-  private address and verified image. Preserve idempotence and refusal to
+  server address and verified image. Preserve idempotence and refusal to
   replace a container with unexpected configuration.
 - **Depends on:** Task 219.
 - **Verify:** Test expected address/image arguments, reuse of a valid
   container, mismatch failure and transport failure. Standalone CLI
   equivalent: `.venv/bin/eu-server-agent deploy-outline`; production
-  orchestration must pass the `EU_SERVER_PRIVATE_ADDRESS` explicitly through
+  orchestration must pass the `EU_SERVER_ADDRESS` explicitly through
   the function call, not rely on `agents.env`.
 
 ### 221. Checking EU Outline health

@@ -343,6 +343,10 @@ Outgoing:
   .venv/bin/python -m fck_rkn
   ```
 
+  `requirements.txt` installs the optional `test-env` dependency extra for
+  local GCP test-environment work. A production-only installation can use
+  `.venv/bin/python -m pip install .` without that extra.
+
 ## Python Project Structure
 
 - Keep application code in a `src`-layout Python package named `fck_rkn`.

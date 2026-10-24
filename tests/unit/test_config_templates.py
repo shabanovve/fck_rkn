@@ -5,11 +5,13 @@ from pathlib import Path
 
 from fck_rkn.agent_config import AgentSettings
 from fck_rkn.config import TestEnvironmentSettings
+from fck_rkn.production_config import EuProductionSettings
 
 CONFIG = Path(__file__).resolve().parents[2] / "config"
 TEMPLATES = (
     ("test.env.example", TestEnvironmentSettings),
     ("agents.env.example", AgentSettings),
+    ("prod.env.example", EuProductionSettings),
 )
 
 

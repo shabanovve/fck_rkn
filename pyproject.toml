@@ -10,11 +10,14 @@ requires-python = ">=3.10"
 dependencies = [
     "pydantic-settings>=2.7,<3",
     "python-dotenv>=1.0,<2",
-    "google-cloud-compute>=1.19,<2",
 ]
+
+[project.optional-dependencies]
+test-env = ["google-cloud-compute>=1.19,<2"]
 
 [project.scripts]
 test-env-host = "fck_rkn.orchestration.test_environment:main"
+prod-env-host = "fck_rkn.orchestration.production_environment:main"
 eu-server-agent = "fck_rkn.agents.eu_server:main"
 eu-server-test-agent = "fck_rkn.agents.eu_server_test:main"
 ru-server-agent = "fck_rkn.agents.ru_server:main"
