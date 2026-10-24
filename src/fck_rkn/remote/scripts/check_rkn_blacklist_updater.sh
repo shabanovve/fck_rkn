@@ -20,7 +20,7 @@ for set_name in rkn_ipv4 rkn_ipv6; do
     echo "Saved firewall rules are missing $set_name" >&2
     exit 1
   fi
-  active_set=$(sudo nft list set inet "$table_name" "$set_name")
+  active_set=$(sudo nft list set inet "$table_name" "$set_name" | tr '\n' ' ')
   if ! grep -Eq 'elements = \{[[:space:]]*[^}]+[[:space:]]*\}' \
       <<<"$active_set"; then
     echo "Active firewall set $set_name is empty or unavailable" >&2

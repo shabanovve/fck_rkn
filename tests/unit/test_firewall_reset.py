@@ -68,6 +68,10 @@ class FirewallResetScriptTests(unittest.TestCase):
                 self.assertIn(f"fck_rkn_{host}", checker)
                 self.assertIn("rkn_ipv4 rkn_ipv6", checker)
                 self.assertIn('sudo grep -Eq "^  set $set_name', checker)
+                self.assertIn(
+                    """sudo nft list set inet "$table_name" "$set_name" | tr '\\n' ' '""",
+                    checker,
+                )
 
     def test_shared_blacklist_test_helper_executes_the_rendered_check(self) -> None:
         runner = FakeRunner()
