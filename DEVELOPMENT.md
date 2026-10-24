@@ -48,8 +48,10 @@
      filtering, and develop and verify changes only in the isolated test
      environment using `test_env_host`.
   2. **Production installation:** create production installation tooling for
-     `ru-server` and `eu-server` only after the relevant behavior has been
-     developed and verified in the test environment.
+     `eu-server` first, then `ru-server`, only after the relevant behavior
+     has been developed and verified in the test environment. Implement and
+     verify the production deployment entry point for EU before extending it
+     to deploy RU; the first stage must not configure or change `ru-server`.
 - Before implementing `prod_env_host`, analyze `test_env_host` and its full
   dependency path. Record how the test and production responsibilities
   differ; identify and justify every setting that belongs in the future
@@ -65,6 +67,16 @@
   before implementation begins. Do not treat the analysis requirement as
   evidence that `prod_env_host`, `config/prod.env`, or
   `config/prod.env.example` already exist.
+- Implement production deployment in two ordered increments: first,
+  `prod_env_host` deploys and verifies `eu-server` only; after that stage is
+  reviewed and verified, extend the same production tooling to deploy and
+  verify `ru-server`. The EU-only stage must not run RU deployment actions or
+  modify RU state. Keep any cross-server inputs needed by EU (such as the RU
+  peer address for its firewall policy) separate from permission to deploy
+  RU. If an EU-generated Outline access URL is needed by the later RU stage,
+  transfer or retrieve it through an approved protected secret mechanism;
+  never place it in `prod.env`, command arguments, logs, or an unprotected
+  file.
 - Every GCP test VM must have outbound Internet access through Cloud NAT and
   must not have an external IP address. Do not use VM external IPs as an
   outbound-access substitute. Configure Cloud NAT for the VM's subnet and
@@ -138,15 +150,20 @@
   `remote/scripts/` must not reference a cloud provider either.
 - Agents run commands through the `RemoteRunner` protocol
   (`fck_rkn/remote/`). The test environment selects `GcloudIapRunner`
-  (`fck_rkn/gcp/runner.py`); production selects `SshRunner` from
-  `config/agents.env` (`EU_SERVER_HOST`, `RU_SERVER_HOST`, `SSH_USER`,
-  `SSH_KEY_PATH`, `SSH_PORT`, `EU_SERVER_PRIVATE_ADDRESS`,
+  (`fck_rkn/gcp/runner.py`). Direct agent CLI invocations load `SshRunner`
+  settings from `config/agents.env` (`EU_SERVER_HOST`, `RU_SERVER_HOST`,
+  `SSH_USER`, `SSH_KEY_PATH`, `SSH_PORT`, `EU_SERVER_PRIVATE_ADDRESS`,
   `RU_SERVER_PRIVATE_ADDRESS`). Copy `config/agents.env.example` to the
-  ignored `config/agents.env` and fill it in locally. Production agents run
-  from a controller over SSH.
+  ignored `config/agents.env` and fill it in locally. The planned
+  `prod_env_host` instead loads production-only settings from
+  `config/prod.env` and injects `SshRunner` instances into agent functions;
+  this prevents production orchestration from depending on test settings or
+  direct-agent CLI configuration. Production agents run from a controller
+  over SSH.
 - Agents receive provider-specific values (such as a VM's private address) as
-  parameters; the orchestrator resolves them in the test environment and
-  `agents.env` supplies them in production.
+  parameters; the test orchestrator resolves them in the test environment,
+  direct agent CLI invocations load them from `agents.env`, and the planned
+  `prod_env_host` supplies them from `prod.env`.
 
 ## Firewall Requirements
 
