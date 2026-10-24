@@ -853,7 +853,7 @@ behavior that requires them.
   `test-client`. Unit tests cover the order and exit codes; not yet run on
   real VMs.
 
-### 85a. Allow Google services and snapd in the RU firewall
+### 85a. [x] Allow Google services and snapd in the RU firewall
 
 - **Reason:** Default deny on `ru-server` blocks background traffic of the OS
   itself: snapd (`api.snapcraft.io`, Canonical ranges) and Google services
@@ -863,19 +863,21 @@ behavior that requires them.
   (TCP 80 and 443 to the Google ranges, including the metadata address) and
   add a snapd rule (TCP 443 to the Canonical ranges, AS41231). Keep the rules
   in the minimal VM services group, shared by the generator, so ordering and
-  logging stay as before. Fetch Google ranges from `goog.json` and Canonical
-  ranges from RIPEstat for AS41231 on every policy application; validate
-  them (non-empty, valid networks, size limit), reject any overlap with the
-  RKN crawler ranges, and keep the previous rules on failure.
+  logging stay as before. The generator validates the supplied ranges
+  (non-empty, valid networks, at most 2000 per list), rejects any overlap with
+  the RKN crawler ranges, and the previous rules stay on failure. Fetching
+  the Google (`goog.json`) and Canonical (RIPEstat AS41231) ranges on every
+  policy application is done by the orchestrator in task 85c.
 - **Test:** Unit tests for the generated rules, `nft -c`, validation failures
   and the overlap rejection.
 - **Done:** `build_ru_firewall_rules` requires top-level `google_networks` and
   `snapd_networks`, validates them (non-empty, networks, overlap with RKN or EU
-  addresses rejected) and emits interval sets plus accept rules (Google TCP
-  80/443, snapd TCP 443) after the minimal VM rules. The metadata rule is kept.
-  Unit tests include `nft -c`.
+  addresses rejected, at most 2000 per list) and emits interval sets plus
+  accept rules (Google TCP 80/443, snapd TCP 443) after the minimal VM rules.
+  The metadata rule is kept. The `nft -c` unit test is skipped where `nft` is
+  unavailable (not run on this machine).
 
-### 85b. Test Google services and snapd access on ru-server
+### 85b. [x] Test Google services and snapd access on ru-server
 
 - **Test:** Extend `ru-server-test-agent` to verify that the active rules
   contain the Google and snapd rules, that the metadata address, a Google API
@@ -888,7 +890,7 @@ behavior that requires them.
   hosts were already covered. The "no denial logged for these services" check
   is not implemented separately: reachability under default deny proves it.
 
-### 85c. Deploy and test Google services and snapd rules
+### 85c. [x] Deploy and test Google services and snapd rules
 
 - **Orchestration:** Make `test_env_host` fetch and pass the Google and
   Canonical ranges, apply the RU rules and run the task 85b checks. Fail on

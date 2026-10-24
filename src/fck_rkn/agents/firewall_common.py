@@ -18,6 +18,7 @@ DHCPV6_SERVERS = "ff02::1:2"
 ICMP_V4_TYPES = "echo-request, echo-reply, destination-unreachable, time-exceeded"
 ICMP_V6_TYPES = ICMP_V4_TYPES.replace("destination-unreachable", "destination-unreachable, packet-too-big")
 LOG_LIMIT = "limit rate 10/second burst 20 packets"
+MAX_SERVICE_NETWORKS = 2000
 ND_TYPES = "nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert"
 
 
@@ -209,6 +210,8 @@ def service_sets_block(
     value = config.get(key)
     if not isinstance(value, list) or not value:
         raise ValueError(f"{key} must contain at least one network")
+    if len(value) > MAX_SERVICE_NETWORKS:
+        raise ValueError(f"{key} contains more than {MAX_SERVICE_NETWORKS} networks")
     blocks = []
     for version, family in ((4, "ipv4"), (6, "ipv6")):
         selected = [

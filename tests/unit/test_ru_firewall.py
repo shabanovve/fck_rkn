@@ -74,6 +74,9 @@ class RuServiceRuleTests(unittest.TestCase):
             "crawler overlap": {"google_networks": ["192.0.2.128/25"]},
             "ipv6 crawler overlap": {"snapd_networks": ["2001:db8:5::/48"]},
             "covers eu": {"google_networks": ["10.0.0.0/24"]},
+            "too many": {
+                "snapd_networks": [f"203.0.{i // 256}.{i % 256}/32" for i in range(2001)]
+            },
         }
         for name, override in cases.items():
             with self.subTest(case=name), self.assertRaises(ValueError):
