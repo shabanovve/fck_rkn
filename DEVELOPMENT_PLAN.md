@@ -245,6 +245,10 @@ are denied before the general allow rules, including SSH and VPN.
 
 **Ru-domain blocking:** performed in Squid, not in the firewall.
 
+Squid denies Russian domains (`.ru`, `.su`, `.рф`/`xn--p1ai` and subdomains)
+and any destination given as an IP address literal (IPv4 or IPv6), for both
+HTTP and `CONNECT`; only non-Russian domain names are allowed.
+
 - Update firewall configuration transactionally: stage and validate the
   complete replacement rules and blacklist before activation. Require
   non-empty blacklist data with both IPv4 and IPv6 sets and at least one

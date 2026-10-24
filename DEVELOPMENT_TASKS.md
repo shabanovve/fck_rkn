@@ -951,11 +951,15 @@ behavior that requires them.
 
 ### 86. Block ru-domains in Squid
 
-- **Change:** Block Russian destination domains at the Squid level on
-  `eu-server` so that traffic to Russian services never goes through the
-  circumvention path and the EU-server address is not exposed to them.
-- **Test:** Verify requests to listed ru-domains are denied by Squid and
-  other requests still succeed.
+- **Change:** Block at the Squid level on `eu-server`, for both HTTP and
+  `CONNECT`: (1) Russian destination domains (`.ru`, `.su`, `.рф`/`xn--p1ai`
+  and their subdomains) and (2) any destination given as an IP address literal
+  (IPv4 or IPv6, with or without a port). This keeps traffic to Russian
+  services off the circumvention path and does not expose the EU-server
+  address to them. Only non-Russian domain names are allowed.
+- **Test:** Verify requests to ru-domains and to IP-literal destinations
+  (documentation ranges only in tests) are denied by Squid, and that
+  other requests (e.g. `youtube.com`) still succeed.
 
 ### 87. Hide both servers from RKN crawlers with daily blacklist updates
 

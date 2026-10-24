@@ -50,6 +50,11 @@
   workflow.
 - Re-running Squid deployment must leave an already-running Squid container
   untouched; replace it only when it is not running.
+- Squid must deny, for both plain HTTP and `CONNECT`, every request whose
+  destination is a Russian domain (the `.ru`, `.su` and `.рф`/`xn--p1ai` TLDs
+  and their subdomains) and every request whose destination is an IP address
+  literal (IPv4 or IPv6, with or without a port). Only domain names outside
+  the Russian TLDs are allowed. Blocking is done in Squid, not in the firewall.
 - Re-running Outline Server deployment must leave an already-running,
   correctly configured Outline container untouched. Refuse to replace an
   existing Outline container with unexpected configuration.
