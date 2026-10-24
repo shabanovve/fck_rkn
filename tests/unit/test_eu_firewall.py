@@ -140,12 +140,16 @@ class EuFirewallAgentTests(unittest.TestCase):
         runner = FakeRunner(stdout="eu firewall rules installed\n")
         with redirect_stdout(StringIO()):
             self.assertEqual(apply_eu_firewall(runner, config()), 0)
-        self.assertIn("nft --check --file", runner.command)
-        self.assertIn("restore_previous", runner.command)
-        self.assertIn("fck-rkn-eu-firewall.service", runner.command)
-        self.assertIn("/etc/fck-rkn/eu-firewall.nft", runner.command)
-        self.assertIn("destroy table inet fck_rkn_eu", runner.command)
-        self.assertIn("destroy table inet fck_rkn_eu", runner.stdin)
+        apply_command, apply_stdin = runner.calls[0][:2]
+        updater_command = runner.calls[1][0]
+        self.assertIn("nft --check --file", apply_command)
+        self.assertIn("restore_previous", apply_command)
+        self.assertIn("fck-rkn-eu-firewall.service", apply_command)
+        self.assertIn("/etc/fck-rkn/eu-firewall.nft", apply_command)
+        self.assertIn("destroy table inet fck_rkn_eu", apply_command)
+        self.assertIn("destroy table inet fck_rkn_eu", apply_stdin)
+        self.assertIn("Daily RKN crawler firewall blacklist refresh", updater_command)
+        self.assertIn("systemctl start", updater_command)
 
     def test_invalid_configuration_runs_nothing(self) -> None:
         runner = FakeRunner()

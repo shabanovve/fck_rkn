@@ -20,6 +20,7 @@ def valid_config(**overrides: object) -> str:
         "rkn_ipv6": ["2001:db8::/32"],
         "provider_networks": ["198.51.100.0/24", "2001:db9:1::/48"],
         "snapd_networks": ["203.0.113.0/24"],
+        "github_networks": ["198.51.100.0/24", "2001:db9:2::/48"],
         "vm_services": {
             "metadata_address": "169.254.169.254",
             "dns_addresses": ["169.254.169.254"],
@@ -44,6 +45,8 @@ class RuServiceRuleTests(unittest.TestCase):
         self.assertIn("ip daddr @provider_ipv4 tcp dport { 80, 443 } accept", output)
         self.assertIn("ip6 daddr @provider_ipv6 tcp dport { 80, 443 } accept", output)
         self.assertIn("ip daddr @snapd_ipv4 tcp dport 443 accept", output)
+        self.assertIn("ip daddr @github_ipv4 tcp dport 443 accept", output)
+        self.assertIn("ip6 daddr @github_ipv6 tcp dport 443 accept", output)
         self.assertNotIn("@snapd_ipv6", output)
         self.assertLess(
             output.index("169.254.169.254 tcp dport { 80, 443 } accept"),
@@ -64,6 +67,8 @@ class RuServiceRuleTests(unittest.TestCase):
         self.assertIn("set provider_ipv6", rules)
         self.assertIn("set snapd_ipv4", rules)
         self.assertNotIn("set snapd_ipv6", rules)
+        self.assertIn("set github_ipv4", rules)
+        self.assertIn("set github_ipv6", rules)
 
     def test_invalid_service_ranges_are_rejected(self) -> None:
         cases = {
@@ -144,7 +149,7 @@ class RuFirewallRuleTests(unittest.TestCase):
         accepts = [
             line for line in self.output.splitlines() if line.endswith(" accept")
         ]
-        self.assertEqual(len(accepts), 13)
+        self.assertEqual(len(accepts), 15)
         self.assertTrue(
             self.output.rstrip().endswith(
                 f'{LOG} "fck-rkn ru output denied: " level info\n    drop'

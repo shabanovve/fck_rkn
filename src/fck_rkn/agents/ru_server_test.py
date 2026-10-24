@@ -18,6 +18,7 @@ from fck_rkn.agents.firewall_common import (
     load_config,
     parse_minimal_vm_services,
 )
+from fck_rkn.agents.firewall_test_common import check_rkn_blacklist_updater
 from fck_rkn.agents.outline import (
     OUTLINE_ACCESS_KEY_PORT,
     OUTLINE_HEALTH_CHECK_COMMAND,
@@ -431,6 +432,7 @@ def main(argv: list[str] | None = None) -> int:
             "firewall-rollback",
             "firewall-crawler-source",
             "firewall-vpn-client",
+            "firewall-blacklist",
         ),
         help="Check to run",
     )
@@ -480,6 +482,8 @@ def main(argv: list[str] | None = None) -> int:
         return check_firewall_policy(runner, stdin_inputs[0])
     if args.action == "firewall-vpn-client":
         return check_firewall_vpn_client(runner, *stdin_inputs)
+    if args.action == "firewall-blacklist":
+        return check_rkn_blacklist_updater(runner, "ru")
     return check_outline_client(runner, stdin_inputs[0])
 
 

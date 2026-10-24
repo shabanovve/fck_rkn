@@ -265,6 +265,15 @@ def _firewall_paths(host: str) -> dict[str, str]:
         "rules_file": f"/etc/fck-rkn/{host}-firewall.nft",
         "unit_file": f"/etc/systemd/system/fck-rkn-{host}-firewall.service",
         "service_name": f"fck-rkn-{host}-firewall.service",
+        "blacklist_service_name": f"fck-rkn-{host}-blacklist-update.service",
+        "blacklist_timer_name": f"fck-rkn-{host}-blacklist-update.timer",
+        "blacklist_service_file": (
+            f"/etc/systemd/system/fck-rkn-{host}-blacklist-update.service"
+        ),
+        "blacklist_timer_file": (
+            f"/etc/systemd/system/fck-rkn-{host}-blacklist-update.timer"
+        ),
+        "blacklist_updater_file": "/usr/local/libexec/fck-rkn/rkn_blacklist.py",
     }
 
 
@@ -281,6 +290,30 @@ def firewall_apply_command(host: str) -> str:
         rules_file=paths["rules_file"],
         unit_file=paths["unit_file"],
         lock_file=_lock_file(host),
+    )
+
+
+def firewall_blacklist_updater_install_command(host: str) -> str:
+    """Return the shared daily blacklist-updater installer for one server."""
+    if host not in ("ru", "eu"):
+        raise ValueError("host must be ru or eu")
+    paths = _firewall_paths(host)
+    return render(
+        "install_rkn_blacklist_updater.sh",
+        host=host,
+        rules_file=paths["rules_file"],
+        lock_file=_lock_file(host),
+    )
+
+
+def firewall_blacklist_updater_check_command(host: str) -> str:
+    """Return the shared remote check for the daily blacklist updater."""
+    if host not in ("ru", "eu"):
+        raise ValueError("host must be ru or eu")
+    return render(
+        "check_rkn_blacklist_updater.sh",
+        host=host,
+        rules_file=_firewall_paths(host)["rules_file"],
     )
 
 

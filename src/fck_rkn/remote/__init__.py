@@ -14,6 +14,8 @@ _PLACEHOLDER = re.compile(r"@([A-Z][A-Z0-9_]*)@")
 
 
 def _read(name: str) -> str:
+    if name.startswith("agents/"):
+        return (files("fck_rkn") / name).read_text(encoding="utf-8")
     return (files(__package__) / "scripts" / name).read_text(encoding="utf-8")
 
 

@@ -18,6 +18,7 @@ from fck_rkn.agents.outline import deploy_outline_on
 from fck_rkn.agent_config import load_agent_settings, ru_server_runner
 from fck_rkn.agents.firewall_common import (
     firewall_apply_command,
+    firewall_blacklist_updater_install_command,
     firewall_remove_command,
 )
 from fck_rkn.agents.ru_firewall import build_ru_firewall_rules
@@ -123,12 +124,22 @@ def apply_ru_firewall(runner: RemoteRunner, config_json: str) -> int:
     except ValueError as error:
         logger.error("Invalid RU firewall configuration: %s", error)
         return 1
-    return run_remote_with_input(
+    result = run_remote_with_input(
         runner,
         build_firewall_apply_command(),
         rules,
         "Applying the RU guest firewall policy",
         timeout=FIREWALL_DEPLOY_TIMEOUT_SECONDS,
+    )
+    if result != 0:
+        return result
+    return run_remote_with_input(
+        runner,
+        firewall_blacklist_updater_install_command("ru"),
+        "",
+        "Installing the daily RKN blacklist updater",
+        timeout=FIREWALL_DEPLOY_TIMEOUT_SECONDS,
+        print_stderr=True,
     )
 
 

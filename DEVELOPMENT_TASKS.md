@@ -971,18 +971,33 @@ behavior that requires them.
   Verified locally against `ubuntu/squid` in Docker (`squid -k parse`, curl);
   not yet run on real VMs.
 
-### 87. Hide both servers from RKN crawlers with daily blacklist updates
+### 87. [x] Hide both servers from RKN crawlers with daily blacklist updates
 
-- **Change:** Fetch, validate and atomically activate the
-  `C24Be/AS_Network_List` blacklist daily on both servers; keep the previous
-  list on failure and report the error.
+- **Change:** Fetch, validate and atomically activate the mixed IPv4/IPv6
+  `C24Be/AS_Network_List` blacklist daily on both servers with a local systemd
+  timer. Keep the previous saved and active rules on any fetch, validation or
+  nftables failure and report the error. `ru-server` must be allowed to fetch
+  the data without opening general Internet egress: use only GitHub's
+  published `api` and `web` network ranges for TCP/443, refreshed together
+  with the blacklist.
 - **No duplication:** Implement this requirement once in shared code (one
   fetch/validate/activate/rollback implementation, one rule template and one
   test helper) used by both servers. Do not copy the logic between
   `ru-server-agent` and `eu-server-agent`; only server-specific parameters
   such as the log prefix may differ.
-- **Test:** Verify a successful update, and that an unavailable, empty or
-  invalid list leaves the previous rules active.
+- **Test:** Verify a successful update on each server, that both IPv4 and IPv6
+  sets are populated and the daily timer is active, and that an unavailable,
+  empty or invalid list or rejected nftables candidate leaves the previous
+  rules active.
+- **Done:** Added the shared `agents/rkn_blacklist.py` fetch/parse/stage/
+  activate implementation, embedded by the common installer and used by the
+  orchestrator. The `ru-server` rules allow TCP/443 only to GitHub `api` and
+  `web` ranges; both agents install and immediately run the same systemd
+  timer/service. The shared test-agent helper verifies timer state and active
+  non-empty crawler sets on both servers. Firewall reset also removes the
+  updater timer, service and script. Unit tests cover live-format parsing,
+  successful activation and preservation of saved rules on invalid data or
+  nftables failure. Real-VM timer/network verification remains outstanding.
 
 ### 89. Add service and tunnel metrics
 

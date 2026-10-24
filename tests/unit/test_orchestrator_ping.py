@@ -233,12 +233,15 @@ class OrchestratorPingTests(unittest.TestCase):
             "check_firewall_rollback",
             "check_firewall_crawler_source",
             "check_firewall_vpn_client",
+            "check_rkn_blacklist_updater",
             "fetch_rkn_blacklist",
+            "fetch_github_networks",
             "fetch_google_networks",
             "fetch_snapd_networks",
         ):
             value = {
                 "fetch_rkn_blacklist": (["192.0.2.0/24"], ["2001:db8::/32"]),
+                "fetch_github_networks": ["198.51.100.0/24", "2001:db9:2::/48"],
                 "fetch_google_networks": ["198.51.100.0/24"],
                 "fetch_snapd_networks": ["203.0.113.0/24"],
             }.get(name, 0)
@@ -358,6 +361,7 @@ class OrchestratorPingTests(unittest.TestCase):
         )
         self.outline_check_mock.assert_called_once_with(EU_RUNNER)
         self.firewall_mocks["fetch_rkn_blacklist"].assert_called_once_with()
+        self.firewall_mocks["fetch_github_networks"].assert_called_once_with()
         self.firewall_mocks["apply_eu_firewall"].assert_called_once()
         eu_payload = json.loads(
             self.firewall_mocks["apply_eu_firewall"].call_args.args[1]
@@ -373,6 +377,9 @@ class OrchestratorPingTests(unittest.TestCase):
         self.assertEqual(self.firewall_mocks["check_eu_firewall"].call_count, 2)
         self.firewall_mocks["check_eu_firewall_rollback"].assert_called_once_with(
             EU_RUNNER
+        )
+        self.firewall_mocks["check_rkn_blacklist_updater"].assert_has_calls(
+            [call(EU_RUNNER, "eu"), call(ru_runner, "ru")]
         )
         self.firewall_mocks["apply_ru_firewall"].assert_called_once()
         firewall_payload = self.firewall_mocks[
@@ -390,6 +397,7 @@ class OrchestratorPingTests(unittest.TestCase):
                 "provider_networks": ["198.51.100.0/24"],
                 "provider_check_hosts": ["www.googleapis.com"],
                 "snapd_networks": ["203.0.113.0/24"],
+                "github_networks": ["198.51.100.0/24", "2001:db9:2::/48"],
                 "vm_services": {
                     "metadata_address": "169.254.169.254",
                     "dns_addresses": ["169.254.169.254"],
@@ -488,6 +496,7 @@ class OrchestratorPingTests(unittest.TestCase):
                 provider_networks=["198.51.100.0/24"],
                 provider_check_hosts=["www.googleapis.com"],
                 snapd_networks=["203.0.113.0/24"],
+                github_networks=["198.51.100.0/24", "2001:db9:2::/48"],
                 subnet_cidr="10.0.0.0/24",
             )
         )
@@ -928,6 +937,8 @@ class OrchestratorPingTests(unittest.TestCase):
                     mock.reset_mock(return_value=False, side_effect=False)
                     if mock is self.firewall_mocks["fetch_rkn_blacklist"]:
                         mock.return_value = (["192.0.2.0/24"], ["2001:db8::/32"])
+                    elif mock is self.firewall_mocks["fetch_github_networks"]:
+                        mock.return_value = ["198.51.100.0/24", "2001:db9:2::/48"]
                     elif mock is self.firewall_mocks["fetch_google_networks"]:
                         mock.return_value = ["198.51.100.0/24"]
                     elif mock is self.firewall_mocks["fetch_snapd_networks"]:
@@ -975,6 +986,34 @@ class OrchestratorPingTests(unittest.TestCase):
         self.firewall_mocks["apply_ru_firewall"].assert_not_called()
         self.firewall_mocks["apply_eu_firewall"].assert_not_called()
         self.assertIn("Preparing RU firewall inputs failed", stderr.getvalue())
+
+    def test_github_metadata_failure_stops_before_firewall_installation(self) -> None:
+        self.firewall_mocks["fetch_github_networks"].side_effect = RuntimeError(
+            "GitHub metadata unavailable"
+        )
+
+        result, stderr = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 46)
+        self.firewall_mocks["apply_eu_firewall"].assert_not_called()
+        self.firewall_mocks["apply_ru_firewall"].assert_not_called()
+        self.assertIn("Preparing RU firewall inputs failed", stderr.getvalue())
+
+    def test_daily_blacklist_updater_checks_fail_workflow_on_each_server(self) -> None:
+        for side_effect, expected_code, host in (
+            ([1], 65, "eu"),
+            ([0, 1], 66, "ru"),
+        ):
+            with self.subTest(host=host):
+                self.firewall_mocks[
+                    "check_rkn_blacklist_updater"
+                ].side_effect = side_effect
+                result, stderr = self.run_main_with_healthy_eu()
+                self.assertEqual(result, expected_code)
+                self.assertIn("daily RKN blacklist updater check failed", stderr.getvalue())
+                self.firewall_mocks[
+                    "check_rkn_blacklist_updater"
+                ].side_effect = None
 
     def test_project_firewall_is_reset_before_each_server_is_built(self) -> None:
         order: list[str] = []

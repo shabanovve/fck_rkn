@@ -171,6 +171,18 @@ class EuServerTestAgentTests(unittest.TestCase):
         self.assertEqual(result, 0)
         check.assert_called_once_with(make_runner.return_value)
 
+    def test_cli_dispatches_blacklist_updater_check(self) -> None:
+        with (
+            patch("fck_rkn.agents.eu_server_test.load_agent_settings"),
+            patch("fck_rkn.agents.eu_server_test.eu_server_runner") as make_runner,
+            patch(
+                "fck_rkn.agents.eu_server_test.check_rkn_blacklist_updater",
+                return_value=0,
+            ) as check,
+        ):
+            self.assertEqual(main(["firewall-blacklist"]), 0)
+        check.assert_called_once_with(make_runner.return_value, "eu")
+
     def test_checks_outline_container_authorized_api_and_access_port(self) -> None:
         output = StringIO()
         runner = FakeRunner(stdout="Outline Server is healthy\n")

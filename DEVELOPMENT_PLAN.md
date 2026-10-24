@@ -243,6 +243,11 @@ source address. IAP remains an approved but not the only SSH source.
 blacklist in `C24Be/AS_Network_List/blacklists_nftables/blacklist.nft`, fetched
 from that repository's `main` branch. The list is refreshed daily. Crawlers
 are denied before the general allow rules, including SSH and VPN.
+Each server runs the same local daily systemd updater and atomically replaces
+its saved and active firewall rules only after fetching and validating a full
+replacement. On `ru-server`, the output policy permits TCP/443 only to GitHub's
+published API and web ranges from `api.github.com/meta`; those ranges are
+refreshed transactionally with the crawler blacklist.
 
 **Ru-domain blocking:** performed in Squid, not in the firewall.
 

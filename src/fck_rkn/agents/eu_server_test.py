@@ -25,6 +25,7 @@ from fck_rkn.agents.firewall_common import (
     load_config,
     parse_minimal_vm_services,
 )
+from fck_rkn.agents.firewall_test_common import check_rkn_blacklist_updater
 from fck_rkn.agents.outline import OUTLINE_HEALTH_CHECK_COMMAND
 from fck_rkn import last_run
 from fck_rkn.agent_config import eu_server_runner, load_agent_settings
@@ -218,6 +219,7 @@ def main(argv: list[str] | None = None) -> int:
             "mtproxy",
             "firewall",
             "firewall-rollback",
+            "firewall-blacklist",
         ),
         default="startup",
         help="Check to run (default: startup)",
@@ -251,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
         return check_eu_firewall(runner, config_json)
     if args.action == "firewall-rollback":
         return check_eu_firewall_rollback(runner)
+    if args.action == "firewall-blacklist":
+        return check_rkn_blacklist_updater(runner, "eu")
     if args.action == "http":
         return check_squid_http(runner)
     if args.action == "squid-block":

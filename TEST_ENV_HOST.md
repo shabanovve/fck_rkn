@@ -183,6 +183,14 @@ the same on `ru-server` before the first RU agent step (exit codes 60 and 61).
 Firewall rules are installed again only after the whole infrastructure,
 including `test-client`, is configured and verified.
 
+After installing each server firewall, the matching agent installs and runs
+the shared daily RKN blacklist updater and enables its systemd timer. The
+orchestrator runs the shared `firewall-blacklist` test-agent check on both
+servers; it verifies that the timer is enabled and active and that both active
+crawler address sets are populated. The RU firewall allows updater HTTPS
+traffic only to GitHub's published API and web ranges. Exit codes 65 and 66
+indicate a failed updater check on `eu-server` and `ru-server`, respectively.
+
 ## Repeating a single check
 
 Before the firewall steps, `test_env_host` saves their inputs (firewall

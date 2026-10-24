@@ -354,6 +354,18 @@ class RuFirewallCheckTests(unittest.TestCase):
             self.assertEqual(main(["firewall-rollback"]), 0)
         check.assert_called_once_with(make_runner.return_value)
 
+    def test_cli_dispatches_blacklist_updater_check(self) -> None:
+        with (
+            patch("fck_rkn.agents.ru_server_test.load_agent_settings"),
+            patch("fck_rkn.agents.ru_server_test.ru_server_runner") as make_runner,
+            patch(
+                "fck_rkn.agents.ru_server_test.check_rkn_blacklist_updater",
+                return_value=0,
+            ) as check,
+        ):
+            self.assertEqual(main(["firewall-blacklist"]), 0)
+        check.assert_called_once_with(make_runner.return_value, "ru")
+
 
 class RuServerTunnelBlockedTests(unittest.TestCase):
     def test_script_requires_stopped_tunnel_and_no_squid_response(self) -> None:

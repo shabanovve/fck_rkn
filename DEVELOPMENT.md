@@ -167,6 +167,7 @@ keeps these services working, with the narrowest possible scope.
 | DHCP | out/in | UDP 67/68 | provider DHCP server |
 | Provider services (`ru-server` only) | out | TCP 80 and 443 | provider service network ranges, including the provider metadata address |
 | snapd (`ru-server` only) | out | TCP 443 | Canonical network ranges (AS41231) |
+| Crawler blacklist refresh (`ru-server` only) | out | TCP 443 | GitHub API and web ranges from the published metadata endpoint |
 | NTP | out | UDP 123 | provider/approved time source |
 | ICMP (PMTU, neighbor discovery) | in/out | ICMP/ICMPv6 | local subnet |
 
@@ -192,6 +193,12 @@ container registries, and monitoring endpoints (TCP 443) stay closed on
 `ru-server` by default and are opened only for maintenance or from an
 approved address list.
 
+The crawler blacklist is fetched and refreshed locally on both servers by a
+daily systemd timer. `ru-server` permits only TCP/443 to the published GitHub
+API and web ranges needed to fetch the metadata and blacklist; these ranges
+are refreshed together with the crawler list. Failure to fetch or validate
+any required update data leaves the saved and active firewall rules unchanged.
+
 ### ru-server
 
 Incoming (default deny):
@@ -205,6 +212,7 @@ Incoming (default deny):
 Outgoing (default deny):
 
 - Minimal VM services are allowed.
+- The crawler updater may connect to GitHub API and web ranges on TCP/443.
 - All loopback traffic is allowed. It carries the local web-proxy and MTProto
   forwards, which reach `eu-server` only through the VPN, and traffic that is
   addressed to `ru-server` itself.
@@ -230,10 +238,11 @@ VPN clients (all of them, not only `test-client`):
   forwarding, and its containers use the host network. Requests of VPN
   clients therefore leave `ru-server` through the output hook, not the
   forward hook. The output default-deny policy above is what restricts VPN
-  clients to the web proxy and the MTProto proxy: nothing but loopback
-  forwards, the VPN transport to `eu-server` and minimal VM services may
-  leave the server. Do not distinguish client traffic from host traffic with
-  per-process (cgroup or UID) rules, and do not add rules for `test-client`.
+  clients to the web proxy and the MTProto proxy: apart from the approved
+  crawler-blacklist HTTPS refresh, nothing but loopback forwards, the VPN
+  transport to `eu-server` and minimal VM services may leave the server. Do
+  not distinguish client traffic from host traffic with per-process (cgroup
+  or UID) rules, and do not add rules for `test-client`.
 
 ### eu-server
 

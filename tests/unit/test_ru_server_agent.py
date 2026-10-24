@@ -299,6 +299,7 @@ class RuServerFirewallTests(unittest.TestCase):
                 "rkn_ipv6": ["2001:db8::/32"],
                 "provider_networks": ["198.51.100.0/24"],
                 "snapd_networks": ["203.0.113.0/24"],
+                "github_networks": ["198.51.100.0/24", "2001:db9:2::/48"],
                 "vm_services": {
                     "metadata_address": "169.254.169.254",
                     "dns_addresses": ["169.254.169.254"],
@@ -314,10 +315,15 @@ class RuServerFirewallTests(unittest.TestCase):
 
         self.assertEqual(apply_ru_firewall(runner, self.config()), 0)
 
-        self.assertIn("nft --check --file", runner.command)
-        self.assertIn("systemctl reload-or-restart", runner.command)
-        self.assertIn("fck-rkn-ru-firewall.service", runner.command)
-        self.assertIn("destroy table inet fck_rkn_ru", runner.stdin)
+        apply_command, apply_stdin = runner.calls[0][:2]
+        updater_command = runner.calls[1][0]
+        self.assertIn("nft --check --file", apply_command)
+        self.assertIn("systemctl reload-or-restart", apply_command)
+        self.assertIn("fck-rkn-ru-firewall.service", apply_command)
+        self.assertIn("destroy table inet fck_rkn_ru", apply_stdin)
+        self.assertIn("github_ipv4", apply_stdin)
+        self.assertIn("https://api.github.com/meta", updater_command)
+        self.assertIn("systemctl start", updater_command)
 
     def test_rejects_invalid_configuration_without_running_remote_commands(self) -> None:
         runner = FakeRunner()

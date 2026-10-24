@@ -69,9 +69,10 @@ def build_ru_firewall_rules(config_json: str) -> str:
     crawlers = rkn_networks(config)
     provider_sets = service_sets_block(config, "provider_networks", "provider", crawlers)
     snapd_sets = service_sets_block(config, "snapd_networks", "snapd", crawlers)
+    github_sets = service_sets_block(config, "github_networks", "github", crawlers)
     service_networks = [
         ipaddress.ip_network(item)
-        for key in ("provider_networks", "snapd_networks")
+        for key in ("provider_networks", "snapd_networks", "github_networks")
         for item in config[key]
     ]
     for protected in (eu_server, outline_server):
@@ -99,6 +100,10 @@ def build_ru_firewall_rules(config_json: str) -> str:
         if f"set snapd_{family} " in snapd_sets:
             service_output_rules.append(
                 f"{match} daddr @snapd_{family} tcp dport {SNAPD_PORT} accept"
+            )
+        if f"set github_{family} " in github_sets:
+            service_output_rules.append(
+                f"{match} daddr @github_{family} tcp dport 443 accept"
             )
     input_rules = [
         *minimal_input_rules(vm_services),
@@ -131,6 +136,7 @@ table inet {TABLE_NAME} {{
 {rkn_sets}
 {provider_sets}
 {snapd_sets}
+{github_sets}
   chain input {{
     type filter hook input priority -5; policy drop;
 {indent_rules(input_rules)}

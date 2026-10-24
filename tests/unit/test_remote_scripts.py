@@ -116,9 +116,13 @@ class RenderTests(unittest.TestCase):
         self.assertIn("container_name=@IMAGE@", script)
 
     def test_python_scripts_are_valid_python(self) -> None:
-        for name in ("create_outline_user.py", "squid_http_check.py"):
+        for name in (
+            "create_outline_user.py",
+            "squid_http_check.py",
+        ):
             source = (files("fck_rkn.remote") / "scripts" / name).read_text()
             ast.parse(source)
+        ast.parse((files("fck_rkn") / "agents/rkn_blacklist.py").read_text())
 
     def test_shell_scripts_are_valid_bash(self) -> None:
         scripts = files("fck_rkn.remote") / "scripts"
@@ -127,8 +131,12 @@ class RenderTests(unittest.TestCase):
                 with self.subTest(script=entry.name):
                     text = entry.read_text()
                     text = text.replace("#include docker_setup.sh", "true")
-                    for include in ("create_outline_user.py", "squid_http_check.py",
-                                    "outline_shadowbox.Dockerfile"):
+                    for include in (
+                        "create_outline_user.py",
+                        "squid_http_check.py",
+                        "agents/rkn_blacklist.py",
+                        "outline_shadowbox.Dockerfile",
+                    ):
                         text = text.replace(f"#include {include}", "")
                     result = subprocess.run(
                         ["bash", "-n"], input=text, text=True, capture_output=True

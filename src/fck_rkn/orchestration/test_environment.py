@@ -39,6 +39,12 @@ from fck_rkn.agents.eu_server_test import (
     check_squid_startup,
 )
 from fck_rkn.agents.outline import load_outline_image
+from fck_rkn.agents.firewall_test_common import check_rkn_blacklist_updater
+from fck_rkn.agents.rkn_blacklist import (
+    fetch_blacklist as fetch_rkn_blacklist,
+    fetch_github_networks,
+    parse_network_set,
+)
 from fck_rkn.agents.ru_server import (
     apply_ru_firewall,
     remove_ru_firewall,
@@ -107,11 +113,6 @@ from fck_rkn.orchestration.outline_image import (
 logger = logging.getLogger(__name__)
 RU_PROBE_OUTLINE_USER = "ru-server-feasibility-probe"
 TEST_CLIENT_OUTLINE_USER = "test-client"
-RKN_BLACKLIST_URL = (
-    "https://raw.githubusercontent.com/C24Be/AS_Network_List/main/"
-    "blacklists_nftables/blacklist.nft"
-)
-RKN_BLACKLIST_TIMEOUT_SECONDS = 30
 GOOGLE_RANGES_URL = "https://www.gstatic.com/ipranges/goog.json"
 CANONICAL_RANGES_URL = (
     "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS41231"
@@ -123,60 +124,7 @@ OTHER_HOST_TEST_ADDRESS = "1.1.1.1"
 
 def _blacklist_networks(content: str, set_name: str, version: int) -> list[str]:
     """Extract and validate one non-empty address set from the upstream nft file."""
-    marker = f"set {set_name}"
-    set_start = content.find(marker)
-    if set_start < 0:
-        raise ValueError(f"RKN blacklist is missing {set_name}")
-    elements_start = content.find("elements", set_start)
-    if elements_start < 0:
-        raise ValueError(f"RKN blacklist set {set_name} has no elements")
-    opening_brace = content.find("{", elements_start)
-    closing_brace = content.find("}", opening_brace + 1)
-    if opening_brace < 0 or closing_brace < 0:
-        raise ValueError(f"RKN blacklist set {set_name} is malformed")
-    values: set[str] = set()
-    for raw_value in content[opening_brace + 1 : closing_brace].split(","):
-        value = raw_value.strip()
-        if not value:
-            continue
-        try:
-            network = ipaddress.ip_network(value, strict=False)
-        except ValueError as error:
-            raise ValueError(
-                f"RKN blacklist set {set_name} contains an invalid network"
-            ) from error
-        if network.version != version:
-            raise ValueError(
-                f"RKN blacklist set {set_name} contains the wrong IP version"
-            )
-        values.add(network.with_prefixlen)
-    if not values:
-        raise ValueError(f"RKN blacklist set {set_name} is empty")
-    return sorted(
-        values,
-        key=lambda value: (
-            int(ipaddress.ip_network(value).network_address),
-            ipaddress.ip_network(value).prefixlen,
-        ),
-    )
-
-
-def fetch_rkn_blacklist() -> tuple[list[str], list[str]]:
-    """Fetch the confirmed mixed IPv4/IPv6 crawler blacklist artifact."""
-    request = urllib.request.Request(
-        RKN_BLACKLIST_URL,
-        headers={"User-Agent": "fck-rkn-test-firewall"},
-    )
-    try:
-        with urllib.request.urlopen(
-            request, timeout=RKN_BLACKLIST_TIMEOUT_SECONDS
-        ) as response:
-            content = response.read().decode("utf-8")
-    except (OSError, UnicodeError, urllib.error.URLError) as error:
-        raise RuntimeError("Could not fetch the RKN crawler blacklist") from error
-    ipv4 = _blacklist_networks(content, "blacklist_v4", 4)
-    ipv6 = _blacklist_networks(content, "blacklist_v6", 6)
-    return ipv4, ipv6
+    return parse_network_set(content, set_name, version)
 
 
 def _service_networks(prefixes: list[object], source: str) -> list[str]:
@@ -301,6 +249,7 @@ def build_ru_firewall_configuration(
     provider_networks: list[str],
     provider_check_hosts: list[str],
     snapd_networks: list[str],
+    github_networks: list[str],
     subnet_cidr: str,
 ) -> str:
     """Build the non-secret runtime input accepted by the RU firewall agent."""
@@ -321,6 +270,7 @@ def build_ru_firewall_configuration(
             "provider_networks": provider_networks,
             "provider_check_hosts": provider_check_hosts,
             "snapd_networks": snapd_networks,
+            "github_networks": github_networks,
             "vm_services": _gcp_vm_services(subnet_cidr),
         }
     )
@@ -986,8 +936,10 @@ def _run(image_directory: Path) -> int:
     try:
         rkn_ipv4, rkn_ipv6 = fetch_rkn_blacklist()
         crawler_probe_address = _crawler_probe_address(rkn_ipv4)
+        github_networks = fetch_github_networks()
         google_networks = fetch_google_networks()
         snapd_networks = fetch_snapd_networks()
+        _reject_crawler_overlap(github_networks, rkn_ipv4, rkn_ipv6, "GitHub ranges")
         _reject_crawler_overlap(google_networks, rkn_ipv4, rkn_ipv6, "Google ranges")
         _reject_crawler_overlap(snapd_networks, rkn_ipv4, rkn_ipv6, "Canonical ranges")
         firewall_config = build_ru_firewall_configuration(
@@ -999,6 +951,7 @@ def _run(image_directory: Path) -> int:
             provider_networks=google_networks,
             provider_check_hosts=list(PROVIDER_CHECK_HOSTS),
             snapd_networks=snapd_networks,
+            github_networks=github_networks,
             subnet_cidr=settings.GCP_SUBNET_CIDR,
         )
         eu_firewall_config = build_eu_firewall_configuration(
@@ -1046,6 +999,11 @@ def _run(image_directory: Path) -> int:
             52,
         ),
         ("EU firewall rollback", lambda: check_eu_firewall_rollback(eu_runner), 53),
+        (
+            "EU daily RKN blacklist updater",
+            lambda: check_rkn_blacklist_updater(eu_runner, "eu"),
+            65,
+        ),
     )
     for description, step, failure_code in eu_firewall_checks:
         logger.info("Running %s check", description)
@@ -1097,6 +1055,11 @@ def _run(image_directory: Path) -> int:
                 ru_runner, client_access_url, firewall_config
             ),
             54,
+        ),
+        (
+            "RU daily RKN blacklist updater",
+            lambda: check_rkn_blacklist_updater(ru_runner, "ru"),
+            66,
         ),
     )
     for description, step, failure_code in firewall_checks:

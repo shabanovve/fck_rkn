@@ -13,6 +13,7 @@ from pydantic_settings.exceptions import SettingsError
 from fck_rkn.agents.eu_firewall import build_eu_firewall_rules
 from fck_rkn.agents.firewall_common import (
     firewall_apply_command,
+    firewall_blacklist_updater_install_command,
     firewall_remove_command,
 )
 from fck_rkn.agents.outline import (  # noqa: F401
@@ -121,13 +122,23 @@ def apply_eu_firewall(runner: RemoteRunner, config_json: str) -> int:
         logger.error("Invalid EU firewall configuration: %s", error)
         return 1
     logger.info("Applying the EU guest firewall policy on eu-server")
-    return execute(
+    result = execute(
         runner,
         firewall_apply_command("eu"),
         "Applying the EU guest firewall policy",
         FIREWALL_DEPLOY_TIMEOUT_SECONDS,
         stdin=rules,
         print_output=True,
+    )
+    if result != 0:
+        return result
+    logger.info("Installing the daily RKN blacklist updater on eu-server")
+    return execute(
+        runner,
+        firewall_blacklist_updater_install_command("eu"),
+        "Installing the daily RKN blacklist updater",
+        FIREWALL_DEPLOY_TIMEOUT_SECONDS,
+        stream_output=True,
     )
 
 
