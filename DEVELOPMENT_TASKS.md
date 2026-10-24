@@ -1109,7 +1109,7 @@ behavior that requires them.
 
 ## Production deployment task decomposition
 
-### 200. Decomposing EU production deployment into small tasks
+### 200. [x] Decomposing EU production deployment into small tasks
 
 - **Depends on:** Task 88.
 - **Change:** Trace `test_env_host` and its dependencies in execution order,
@@ -1124,9 +1124,10 @@ behavior that requires them.
   destructive test checks, and test cleanup). The EU-only task breakdown must
   not include RU deployment actions or RU state changes; RU peer data needed
   by EU policy is configuration input only.
-- **Deliverable:** Add the detailed, dependency-ordered EU task breakdown to
-  this file. Number all resulting implementation tasks starting at 202 and
-  do not implement them as part of task 200.
+- **Done:** The EU-only step-by-step trace and exclusions are recorded below.
+  Each production-equivalent EU step has its own implementation task,
+  numbered from 202, with dependencies and verification criteria. No
+  production behavior was implemented by task 200.
 
 ### 201. Decomposing RU production deployment into small tasks
 
@@ -1143,8 +1144,536 @@ behavior that requires them.
   access-key provisioning and protected cross-stage key handoff as explicit
   prerequisite tasks if they are still unresolved.
 - **Deliverable:** Add the detailed, dependency-ordered RU task breakdown to
-  this file. Continue numbering after the tasks created by task 200. Do not
-  implement the RU production deployment as part of task 201.
+  this file. Continue numbering after the tasks created by task 200 (currently
+  task 243 is the next available number). Do not implement the RU production
+  deployment as part of task 201.
+
+## EU production implementation tasks created by task 200
+
+These tasks follow the EU sequence in `src/fck_rkn/orchestration/test_environment.py`.
+Each item names the corresponding test-environment step and its production
+adaptation. Complete and review these tasks before beginning the RU
+implementation tasks produced by task 201.
+
+#### Agent invocation convention for tasks 213–229
+
+The CLI forms below name the existing agent action and the equivalent
+operator-facing invocation. They are not instructions for `prod_env_host` to
+spawn the CLI as a subprocess: the current CLIs load `config/agents.env`,
+whereas production must load `config/prod.env`. The production orchestrator
+must construct the EU `SshRunner` from validated production settings and call
+the corresponding Python action/check function directly with that runner.
+The CLI command examples are useful for understanding the action mapping and
+for standalone operations only after the agent configuration path has been
+explicitly configured for the intended environment. Never pass an Outline
+access URL as a command-line argument or enable `--last-run` for production.
+
+For the action pairs below, a nonzero deploy action must stop the sequence;
+the test-agent check runs only after its corresponding deploy succeeds. A
+nonzero test-agent status stops all later EU actions. Keep the production
+checks restricted to the reviewed read-only behavior specified by each task.
+
+### 202. [x] Creating the production configuration template
+
+- **Source step:** `configure_missing_test_env` copies
+  `config/test.env.example` when `config/test.env` is absent.
+- **Change:** Add `config/prod.env.example` with detailed comments and only
+  the settings needed for the EU stage: controller SSH settings, EU host and
+  private address, EU provider-service inputs, and the RU private peer address
+  needed by the EU firewall. Do not require RU SSH settings or RU-only
+  provider ranges for the EU stage.
+- **Verify:** Check every setting's allowed form, value source and purpose;
+  assert no secrets or concrete production addresses are present and every
+  template variable has a comment.
+- **Done:** Added `config/prod.env.example` with detailed comments for the
+  EU-stage SSH settings, EU and RU peer addresses, and EU provider-service
+  inputs. Its keys exactly match the EU production settings model; all
+  example values are placeholders except the default SSH port.
+
+### 203. [x] Creating a missing production configuration file
+
+- **Source step:** `_configure_missing_test_env` creates the test config before
+  `_run` loads it.
+- **Change:** On production startup, create `config/prod.env` atomically from
+  the tracked template only when absent. Keep an existing file untouched.
+  Do not discover or invent production addresses or credentials; if the
+  copied template still has placeholders or incomplete required values, stop
+  with instructions to fill the local file. On failure, leave no partial
+  file.
+- **Verify:** Test missing/existing file, write failure, no partial-file
+  behavior and that existing operator values are not overwritten.
+- **Done:** `ensure_prod_config` creates the file from the template with
+  mode `0600`, flushes it before atomic publication, does not replace an
+  existing or concurrently created config, and removes temporary files on
+  failure. It does not fill or print production values.
+
+### 204. [x] Validating EU production settings
+
+- **Source step:** `load_config` and the `TestEnvironmentSettings` validation
+  before any remote work.
+- **Change:** Add a production settings model and loader that validate the
+  EU-only schema from task 202, including IP addresses, SSH port, CIDR and
+  address-list encodings, non-empty firewall inputs and placeholder rejection.
+  Validate before constructing a runner or running a remote command; do not
+  load `config/test.env` or require GCP credentials.
+- **Verify:** Unit-test valid and malformed values, missing settings and
+  placeholder rejection without exposing input values in errors.
+- **Done:** `EuProductionSettings` and `load_eu_production_settings` validate
+  the EU-only schema, SSH port/account/key path, host/IP addresses, JSON
+  address lists and strict CIDR lists. The loader rejects placeholders,
+  reports dotenv syntax errors by line without echoing content, does not let
+  ambient environment variables override `config/prod.env`, and summarizes
+  invalid fields without including their values.
+
+### 205. Adding the EU-only production entry point
+
+- **Source step:** `main`, `_run`, and the test-only `shutdown-vms` dispatch.
+- **Change:** Add the `prod_env_host` CLI entry point with an explicit EU-only
+  deployment operation. It must call only EU operations and must not construct
+  an RU runner, invoke RU agent/test-agent functions, or change RU state.
+  Register the entry point in `pyproject.toml`, keep GCP imports out of its
+  import path, and make GCP client libraries optional/test-only rather than a
+  production runtime requirement. There is no production VM-shutdown
+  operation.
+- **Verify:** Fake-runner orchestration tests prove EU dispatch is available,
+  all failures return nonzero, and no RU action or test-only shutdown action
+  can run. Verify the production entry point can be installed and invoked
+  without GCP client libraries, GCP credentials or `gcloud`.
+
+### 206. Excluding GCP project-access validation
+
+- **Source step:** `validate_project_access(settings)` verifies Google Cloud
+  credentials, APIs and access to the isolated test project.
+- **Production disposition:** Do not add a cloud-project preflight to
+  `prod_env_host`; production is not provisioned or authenticated through
+  GCP. Validate production settings locally and let an actual SSH operation
+  report access failures.
+- **Verify:** EU-stage tests do not call GCP client libraries or request cloud
+  credentials.
+
+### 207. Excluding test VM and network provisioning
+
+- **Source step:** `_provision_server(... ensure_eu_server ...)` creates or
+  reuses the test VM and prepares its test network, Cloud NAT and scoped SSH
+  firewall.
+- **Production disposition:** Do not create, stop, reconfigure or inspect
+  production infrastructure. `eu-server` is operator-provisioned and
+  production network policy is managed outside this installer.
+- **Verify:** EU-stage orchestration does not call `ensure_eu_server`,
+  Compute Engine, Cloud NAT, or cloud firewall operations.
+
+### 208. Resolving the production EU private address
+
+- **Source step:** `private_address_of(instance)` obtains the address passed
+  to the Outline deployment and firewall configuration.
+- **Change:** Use the strictly validated `EU_SERVER_PRIVATE_ADDRESS` from
+  `config/prod.env`; do not discover it from a cloud VM object or metadata.
+- **Verify:** Test valid IPv4/IPv6 addresses and malformed/missing values;
+  assert invalid values stop before any remote operation.
+
+### 209. Selecting the EU production SSH runner
+
+- **Source step:** Construction of `GcloudIapRunner` after test VM readiness.
+- **Change:** Construct an `SshRunner` for the existing EU server from
+  validated host, user, protected key path and port settings. Report
+  connection/transport failures without printing key material or remote
+  output that may contain secrets.
+- **Verify:** Use a fake transport to test successful command execution,
+  authentication/start failure and timeout; assert the private key is never
+  included in argv or logs.
+
+### 210. Excluding removal of the test EU firewall
+
+- **Source step:** `_reset_firewall` calls `remove_eu_firewall` before the
+  initial EU agent action.
+- **Production disposition:** Never remove or disable an existing production
+  guest firewall as a startup reset. Preserve its active policy until a
+  reviewed replacement is transactionally applied.
+- **Verify:** EU-only orchestration tests assert no firewall-removal action
+  is called.
+
+### 211. Excluding the test EU firewall-absence check
+
+- **Source step:** `_reset_firewall` calls `check_eu_firewall_removed` after
+  the removal action.
+- **Production disposition:** Do not require or verify that the production
+  firewall is absent; absence is an artifact of the isolated test reset
+  workflow and unsafe as a production precondition.
+- **Verify:** EU-only orchestration never invokes the firewall-absence check.
+
+### 212. Excluding the standalone ICMP ping gate
+
+- **Source step:** `run_youtube_ping` invokes the initial
+  `eu-server-agent` ping action.
+- **Production disposition:** Do not make ICMP reachability to an external
+  host a production deployment gate. ICMP can be independently blocked and
+  does not verify the proxy service; use the service-specific HTTP and health
+  checks below. Do not change guest firewall state to make ping pass.
+- **Verify:** EU production orchestration does not invoke `run_youtube_ping`;
+  document any future diagnostic ping as optional and non-gating.
+
+### 213. Deploying EU Squid
+
+- **Source step:** `deploy_squid`.
+- **Deploy action:** `eu-server-agent deploy-squid`
+  (`agents.eu_server.deploy_squid(runner)`).
+- **Next check:** Task 214, `eu-server-test-agent startup`
+  (`agents.eu_server_test.check_squid_startup(runner)`).
+- **Change:** Invoke the deploy function with the EU `SshRunner`. Preserve
+  idempotence and stop immediately on a nonzero exit status; do not continue
+  to the health check after deployment failure.
+- **Verify:** Fake-runner tests cover success, remote failure and timeout;
+  confirm the orchestrator reports the named EU action and fails closed.
+  The standalone CLI equivalent is
+  `.venv/bin/eu-server-agent deploy-squid`.
+
+### 214. Checking EU Squid startup
+
+- **Source step:** `check_squid_startup`.
+- **Check action:** `eu-server-test-agent startup`
+  (`agents.eu_server_test.check_squid_startup(runner)`), after task 213
+  succeeds.
+- **Next check:** Task 215, `eu-server-test-agent http`
+  (`agents.eu_server_test.check_squid_http(runner)`).
+- **Change:** Invoke the reviewed read-only Squid health check; confirm
+  container status and expected listener without changing service or
+  firewall state.
+- **Verify:** Test success/failure ordering and prove later EU actions do not
+  run when the check fails. Standalone CLI equivalent:
+  `.venv/bin/eu-server-test-agent startup`.
+
+### 215. Checking an HTTP request through EU Squid
+
+- **Source step:** `check_squid_http`.
+- **Check action:** `eu-server-test-agent http`
+  (`agents.eu_server_test.check_squid_http(runner)`), after task 214
+  succeeds.
+- **Next check:** Task 216, `eu-server-test-agent squid-block`
+  (`agents.eu_server_test.check_squid_blocking(runner)`).
+- **Change:** Run the agreed HTTP-through-Squid health request as a distinct
+  production step after Squid startup. Keep request output bounded and avoid
+  logging credentials or sensitive response content.
+- **Verify:** Cover accepted status/header conditions, request failure and
+  timeout with a fake runner; ensure failure stops the EU stage. Standalone
+  CLI equivalent: `.venv/bin/eu-server-test-agent http`.
+
+### 216. Checking EU Squid destination blocking
+
+- **Source step:** `check_squid_blocking`.
+- **Check action:** `eu-server-test-agent squid-block`
+  (`agents.eu_server_test.check_squid_blocking(runner)`), after task 215
+  succeeds.
+- **Next deployment action:** Task 220, `eu-server-agent deploy-outline`
+  (`agents.eu_server.deploy_outline(runner, private_address)`), after the
+  image-artifact tasks 217–219 are completed.
+- **Change:** Add an explicit production-safe check that verifies Russian
+  domains and IP-literal destinations are denied by EU Squid, without
+  changing server configuration. The check must not send credentials or
+  access keys.
+- **Verify:** Use the established denied/allowed destination cases and confirm
+  that the check is read-only and fail-fast. Standalone CLI equivalent:
+  `.venv/bin/eu-server-test-agent squid-block`.
+
+### 217. Selecting the production Outline image artifact
+
+- **Source step:** `build_outline_image` builds the patched image locally
+  after the Squid checks.
+- **Change:** Decide and document the approved production source, immutable
+  identity, provenance and update policy for the patched Outline image.
+  Production deployment must consume a reviewed artifact rather than build
+  an unpinned image as a side effect. This is a prerequisite to loading or
+  deploying Outline in production.
+- **Verify:** The approved artifact can be identified reproducibly and its
+  provenance/integrity verification method is documented. Do not choose a
+  registry or publishing service without approval.
+
+### 218. Retrieving and verifying the EU Outline image artifact
+
+- **Source step:** `export_outline_image` creates the archive passed to the VM.
+- **Change:** Implement retrieval of the approved immutable production
+  artifact and verify its expected digest/signature before transfer. Do not
+  export a locally built test image or trust a mutable tag alone.
+- **Depends on:** Task 217.
+- **Verify:** Fake artifact-source tests cover a valid artifact, missing
+  artifact and integrity mismatch; invalid artifacts never reach the server.
+
+### 219. Loading the Outline image on EU
+
+- **Source step:** `load_outline_image(eu_runner, image_archive)`.
+- **Change:** Load the verified artifact on `eu-server` only when the expected
+  image is absent. Keep binary data out of argv and logs, and do not change
+  RU. Preserve existing deployment protections around unexpected or running
+  Outline containers.
+- **Depends on:** Task 218.
+- **Verify:** Fake-runner tests cover skip-if-present, successful load and
+  failed load; assert the archive is streamed through stdin.
+
+### 220. Deploying EU Outline Server
+
+- **Source step:** `deploy_outline(eu_runner, eu_private_address)`.
+- **Deploy action:** `eu-server-agent deploy-outline`
+  (`agents.eu_server.deploy_outline(runner, private_address)`).
+- **Next check:** Task 221, `eu-server-test-agent outline`
+  (`agents.eu_server_test.check_outline_health(runner)`).
+- **Change:** Invoke the EU Outline deployment action with the validated EU
+  private address and verified image. Preserve idempotence and refusal to
+  replace a container with unexpected configuration.
+- **Depends on:** Task 219.
+- **Verify:** Test expected address/image arguments, reuse of a valid
+  container, mismatch failure and transport failure. Standalone CLI
+  equivalent: `.venv/bin/eu-server-agent deploy-outline`; production
+  orchestration must pass the `EU_SERVER_PRIVATE_ADDRESS` explicitly through
+  the function call, not rely on `agents.env`.
+
+### 221. Checking EU Outline health
+
+- **Source step:** `check_outline_health`.
+- **Check action:** `eu-server-test-agent outline`
+  (`agents.eu_server_test.check_outline_health(runner)`), after task 220
+  succeeds.
+- **Next deployment action:** Task 222, `eu-server-agent deploy-mtproxy`
+  (`agents.eu_server.deploy_mtproxy(runner)`).
+- **Change:** Run the reviewed read-only health check after Outline deployment.
+  It must not print the management API URL, keys or remote secret-bearing
+  output.
+- **Verify:** Test healthy/unhealthy outcomes and assert no key-like material
+  is emitted. Standalone CLI equivalent:
+  `.venv/bin/eu-server-test-agent outline`.
+
+### 222. Deploying EU MTProxy
+
+- **Source step:** `deploy_mtproxy`.
+- **Deploy action:** `eu-server-agent deploy-mtproxy`
+  (`agents.eu_server.deploy_mtproxy(runner)`).
+- **Next check:** Task 223, `eu-server-test-agent mtproxy`
+  (`agents.eu_server_test.check_mtproxy(runner)`).
+- **Change:** Invoke the EU MTProxy deployment after Outline is healthy.
+  Preserve the remote secret-generation/storage behavior and ensure the secret
+  is not returned to the controller or logged.
+- **Verify:** Test ordering, nonzero/timeout handling and secret-free logs.
+  Standalone CLI equivalent:
+  `.venv/bin/eu-server-agent deploy-mtproxy`.
+
+### 223. Checking EU MTProxy health
+
+- **Source step:** `check_mtproxy`.
+- **Check action:** `eu-server-test-agent mtproxy`
+  (`agents.eu_server_test.check_mtproxy(runner)`), after task 222 succeeds.
+- **Next EU action:** Task 224, create or reuse the dedicated EU Outline key
+  for the future RU stage.
+- **Change:** Run the reviewed read-only MTProxy health check after deployment.
+- **Verify:** Test health-check success/failure and ensure a failure stops the
+  EU stage. Standalone CLI equivalent:
+  `.venv/bin/eu-server-test-agent mtproxy`.
+
+### 224. Provisioning the EU Outline key for the later RU stage
+
+- **Source step:** `create_outline_user(eu_runner, RU_PROBE_OUTLINE_USER)`,
+  currently called during the RU portion of the test run.
+- **Agent action:** `eu-server-agent create-outline-user --name ru-server-feasibility-probe`
+(`agents.eu_server.create_outline_user(
+runner, "ru-server-feasibility-probe")`), matching
+`RU_PROBE_OUTLINE_USER` in the test orchestrator.
+- **Change:** Create or reuse the dedicated EU Outline key needed by the later
+  RU stage and store/retrieve it using an explicitly approved protected
+  secret mechanism. Never place it in `prod.env`, logs, argv, test run state,
+  or an unprotected file. This EU-side credential operation does not authorize
+  any RU deployment during Phase 2A.
+- **Prerequisite:** Approve the secret backend and its access/retention policy.
+- **Verify:** Test secure write/read, no-overwrite or rotation behavior as
+  approved, and redaction on success/failure. Do not implement against an
+  unapproved backend. The standalone CLI prints the access URL to stdout and
+  is therefore not the production orchestration mechanism; the orchestrator
+  must capture the function return value in memory and send it directly to
+  the approved secret-store client without printing it.
+
+### 225. Preparing production EU firewall inputs
+
+- **Source step:** Fetch/validate the RKN blacklist and construct EU firewall
+  JSON with the RU peer address and VM service settings.
+- **Agent actions:** This is orchestrator-side preparation; it has no
+  deployment-agent CLI action. The resulting validated rules are passed to
+  `agents.eu_server.apply_eu_firewall(runner, config_json)` in task 226.
+- **Change:** Make the shared RKN fetch/validation usable by production
+  without importing the GCP orchestrator. Build the EU firewall input from
+  validated `prod.env` values, including EU metadata/DNS/DHCP/NTP/local
+  networks and the RU peer address. Do not include test-only crawler probes,
+  test-client addresses, Google-specific defaults, or RU-only provider
+  ranges.
+- **Verify:** Test valid IPv4/IPv6 input, empty/invalid/upstream failure,
+  RKN/service-range overlap rules where applicable, and ensure no firewall
+  command runs when preparation fails.
+
+### 226. Applying the EU guest firewall
+
+- **Source step:** `apply_eu_firewall`.
+- **Deploy action:** `eu-server-agent apply-firewall`
+  (`agents.eu_server.apply_eu_firewall(runner, config_json)`); send the
+  validated JSON on stdin for the standalone CLI form. The production
+  orchestrator should call the function directly with the production runner.
+- **Next check:** Task 227, read-only EU firewall policy verification.
+- **Change:** Apply the validated EU firewall transactionally only after the
+  EU service checks pass. Preserve the active firewall on candidate failure;
+  do not run a preceding reset or disable the existing policy.
+- **Depends on:** Task 225.
+- **Verify:** Fake-runner tests cover accepted/rejected candidates and confirm
+  no reset action occurs and a failed apply stops the stage.
+
+### 227. Verifying the EU firewall policy safely after application
+
+- **Source step:** The first `check_eu_firewall` call after applying EU rules.
+- **Check action:** The existing CLI spelling is
+  `eu-server-test-agent firewall`, with the firewall configuration on stdin.
+  Its current implementation is an invasive test, not an approved production
+  check. Add a separately named `eu-server-test-agent firewall-readonly`
+  action backed by `agents.eu_server_test.check_eu_firewall_readonly(runner,
+  config_json)` and call that from the production orchestrator; do not wire
+  the existing `firewall` action to production. The read-only action receives
+  the expected policy/configuration on stdin, but must only inspect active
+  state remotely.
+- **Next check:** Task 229, `eu-server-test-agent firewall-blacklist`
+  (`agents.firewall_test_common.check_rkn_blacklist_updater(runner, "eu")`).
+- **Change:** Add a production-safe, read-only EU policy inspection that
+  verifies the active rules, SSH/VPN allowances, crawler sets and default
+  policy without creating namespaces, routes, probe rules, listeners or
+  external test sources. Use it after application; do not repeat test
+  simulation steps that depend on rollback testing.
+- **Verify:** Test inspection against expected/missing/mismatched policy
+  output and assert it performs no remote mutation.
+
+### 228. Excluding the EU firewall rollback simulation
+
+- **Source step:** `check_eu_firewall_rollback` submits an intentionally
+  invalid replacement and checks rollback.
+- **Production disposition:** Do not run the invalid-update simulation against
+  production. The transactional updater remains required and is exercised in
+  the isolated test environment; production gets the read-only policy
+  verification from task 227.
+- **Verify:** Assert the production EU operation never invokes
+  `check_eu_firewall_rollback`.
+
+### 229. Checking the EU RKN blacklist updater
+
+- **Source step:** `check_rkn_blacklist_updater(eu_runner, "eu")`.
+- **Check action:** `eu-server-test-agent firewall-blacklist`
+  (`agents.firewall_test_common.check_rkn_blacklist_updater(runner, "eu")`),
+  after task 226 and task 227 succeed.
+- **Change:** Run the reviewed read-only check for an active daily timer and
+  populated active IPv4/IPv6 crawler sets after firewall installation. It
+  must not update, restart, or reset the firewall.
+- **Verify:** Test active/inactive timer, missing/empty sets, command failure
+  and timeout without leaking remote output.
+
+### 230. Excluding the repeated final EU firewall check
+
+- **Source step:** The final `check_eu_firewall` call after RU firewall and
+  rollback checks in the test workflow.
+- **Production disposition:** Do not add this later test-matrix repetition
+  to the EU-only stage. It follows test-only RU and rollback operations; task
+  227 provides the production-safe EU policy verification immediately after
+  applying the EU rules.
+- **Verify:** EU-only orchestration does not defer its success or require RU
+  actions to repeat the already completed EU policy inspection.
+
+### 231. Excluding persistence of test-run inputs
+
+- **Source step:** The `last_run.save(...)` calls persist firewall payloads,
+  crawler probe input and test Outline keys for rerunning test checks.
+- **Production disposition:** Do not persist production inputs in
+  `config/last_run/`. EU configuration belongs in validated production
+  settings; the EU Outline key is handled only by task 224's protected
+  mechanism.
+- **Verify:** EU-stage tests assert no production value or key is written to
+  test run state.
+
+### 232. Excluding test-client lookup
+
+- **Source step:** `lookup_test_client(settings)` checks whether the GCP
+  test-client VM already exists.
+- **Production disposition:** Do not look up a test-client or query GCP from
+  the EU production stage.
+- **Verify:** EU-stage tests assert there are no test-client lookup or GCP
+  compute calls.
+
+### 233. Excluding test-client provisioning
+
+- **Source step:** `ensure_test_client(settings)`.
+- **Production disposition:** Do not create or manage a GCP test-client VM in
+  the EU production stage. A separately approved production canary is outside
+  this deployment scope.
+- **Verify:** EU-stage orchestration does not call test-client provisioning
+  or GCP compute APIs.
+
+### 234. Excluding creation of a test-client Outline key
+
+- **Source step:** `create_outline_user(ru_runner, TEST_CLIENT_OUTLINE_USER)`.
+- **Production disposition:** Do not create a non-production Outline key on
+  RU for a test-client. The dedicated EU key for the later RU tunnel is a
+  separate operation in task 224.
+- **Verify:** The EU stage does not invoke RU actions or create this key.
+
+### 235. Excluding test-client Outline connection deployment
+
+- **Source step:** `connect_to_outline(client_runner, client_access_url)`.
+- **Production disposition:** Do not connect a GCP test-client to production
+  Outline as part of EU deployment.
+- **Verify:** No test-client runner or client access URL is created or passed.
+
+### 236. Excluding the test-client Outline connection check
+
+- **Source step:** `check_outline_connection(client_runner, client_access_url)`.
+- **Production disposition:** Do not run this test-client connectivity check
+  against production.
+- **Verify:** EU-stage orchestration never invokes the test-client check.
+
+### 237. Excluding test-client Squid tunnel deployment
+
+- **Source step:** `deploy_squid_tunnel(client_runner, client_access_url)`.
+- **Production disposition:** Do not deploy a test-client Squid tunnel in the
+  EU production stage.
+- **Verify:** No test-client container or tunnel action is started.
+
+### 238. Excluding the test-client Squid tunnel check
+
+- **Source step:** `check_squid_tunnel(client_runner)`.
+- **Production disposition:** Do not run the test-client Squid tunnel check
+  against production.
+- **Verify:** EU-stage orchestration never invokes the check.
+
+### 239. Excluding test-client MTProxy tunnel deployment
+
+- **Source step:** `deploy_mtproxy_tunnel(client_runner, client_access_url)`.
+- **Production disposition:** Do not deploy a test-client MTProxy tunnel in
+  the EU production stage.
+- **Verify:** No test-client MTProxy container or tunnel action is started.
+
+### 240. Excluding the test-client MTProxy tunnel check
+
+- **Source step:** `check_mtproxy_tunnel(client_runner)`.
+- **Production disposition:** Do not run the test-client MTProxy tunnel check
+  against production.
+- **Verify:** EU-stage orchestration never invokes the check.
+
+### 241. Excluding the final test-client proxy request
+
+- **Source step:** `request_youtube(client_runner)`.
+- **Production disposition:** Do not make a production deployment depend on
+  a request from the isolated GCP test-client. A separately approved canary
+  and traffic source require their own operational design.
+- **Verify:** The EU stage completes without creating or invoking a
+  test-client runner.
+
+### 242. Reporting the EU deployment result
+
+- **Source step:** The final project/zone success message and completion log
+  in `_run`.
+- **Change:** Report a successful EU production deployment using the
+  configured EU host/stage, not a GCP project or zone. Keep secrets,
+  addresses not approved for logs, and remote command output out of the
+  summary; failures must already have returned nonzero with the failed step
+  identified.
+- **Verify:** Test success/failure summaries and assert no secret or
+  test-environment value is emitted.
 
 ## Decisions that block dependent tasks
 
