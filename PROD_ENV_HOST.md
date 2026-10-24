@@ -1,28 +1,29 @@
-# Руководство по `prod-env-host`
+# `prod-env-host` Guide
 
-`prod-env-host` — контроллер production-развёртывания. Сейчас реализована
-только операция `deploy-eu-squid`: подключение к существующему `eu-server`,
-развёртывание Squid и последовательная проверка его запуска, HTTP-доступа
-через прокси и блокировки запрещённых назначений.
+`prod-env-host` is the production deployment controller. Its only implemented
+operation is currently `deploy-eu-squid`: it connects to the existing
+`eu-server`, deploys Squid, and sequentially checks that it starts, serves HTTP
+requests through the proxy, and blocks prohibited destinations.
 
-Эта команда **не** развёртывает Outline или MTProxy, не применяет и не
-сбрасывает firewall, не подключается к `ru-server` и не создаёт тестовую
-инфраструктуру. Полный production rollout ещё не реализован.
+This command does **not** deploy Outline or MTProxy, apply or reset the
+firewall, connect to `ru-server`, or create test infrastructure. The complete
+production rollout has not been implemented yet.
 
-## Требования
+## Requirements
 
-- Контроллер с Python 3.10 или новее, `ssh` и исходным checkout проекта.
-- Существующий `eu-server`, доступный по SSH с контроллера.
-- SSH-аккаунт с разрешением выполнять команды развёртывания, включая
-  необходимые команды `sudo`.
-- SSH-ключ, разрешённый для этого аккаунта. На сервере должны быть доступны
-  Docker и сеть для загрузки образа Squid и выполнения проверок.
+- A controller with Python 3.10 or later, `ssh`, and a project checkout.
+- An existing `eu-server` accessible from the controller over SSH.
+- An SSH account permitted to run deployment commands, including the
+  necessary `sudo` commands.
+- An SSH key authorized for that account. Docker and network access for
+  downloading the Squid image and running checks must be available on the
+  server.
 
-## Установка
+## Installation
 
-Выполняйте команды из корня checkout проекта. Установка в editable-режиме
-нужна, чтобы `prod-env-host` находил `config/prod.env` в этом checkout.
-Production-зависимости не включают GCP extra:
+Run these commands from the project checkout root. An editable installation
+ensures that `prod-env-host` finds `config/prod.env` in this checkout.
+Production dependencies do not include the GCP extra:
 
 ```sh
 python3 -m venv .venv
@@ -30,35 +31,35 @@ python3 -m venv .venv
 .venv/bin/prod-env-host --help
 ```
 
-Для локальной тестовой среды используйте установку из `requirements.txt`,
-которая дополнительно устанавливает extra `test-env`.
+For the local test environment, install from `requirements.txt`, which also
+installs the `test-env` extra.
 
-## Настройка `config/prod.env`
+## Configure `config/prod.env`
 
-При первом запуске команда атомарно создаёт отсутствующий
-`config/prod.env` из `config/prod.env.example` с правами `0600`. Она не
-перезаписывает уже существующий файл. Заполните значения в созданном файле
-перед повторным запуском.
+On first run, the command atomically creates a missing `config/prod.env` from
+`config/prod.env.example` with permissions `0600`. It does not overwrite an
+existing file. Fill in the values in the new file before running the command
+again.
 
-Обязательные настройки EU-stage:
+Required EU-stage settings:
 
-| Переменная | Что указать |
+| Variable | Value |
 | --- | --- |
-| `EU_SERVER_HOST` | IP-адрес или DNS-имя для SSH-подключения к `eu-server` с контроллера. |
-| `EU_SERVER_ADDRESS` | IPv4- или IPv6-адрес `eu-server`, используемый как адрес сервиса. |
-| `RU_SERVER_ADDRESS` | IPv4- или IPv6-адрес peer для будущего правила EU firewall. Наличие этого значения не разрешает команде подключаться к RU. |
-| `SSH_USER` | SSH-аккаунт на `eu-server`. |
-| `SSH_KEY_PATH` | Абсолютный путь на контроллере к SSH-ключу; сам ключ в `prod.env` не помещать. |
-| `SSH_PORT` | TCP-порт SSH; по умолчанию `22`. |
-| `EU_METADATA_ADDRESS`, `EU_DHCP_SERVER_ADDRESS` | IPv4- или IPv6-адреса metadata- и DHCP-сервисов сети EU. |
-| `EU_DNS_ADDRESSES`, `EU_NTP_ADDRESSES` | Непустые JSON-массивы IPv4/IPv6-адресов DNS- и NTP-сервисов EU. |
-| `EU_LOCAL_NETWORKS` | Непустой JSON-массив сетей EU в строгом CIDR-формате. |
+| `EU_SERVER_HOST` | IP address or DNS name used by the controller to connect to `eu-server` over SSH. |
+| `EU_SERVER_ADDRESS` | IPv4 or IPv6 address of `eu-server`, used as a service address. |
+| `RU_SERVER_ADDRESS` | IPv4 or IPv6 peer address for a future EU firewall rule. This value does not authorize the command to connect to RU. |
+| `SSH_USER` | SSH account on `eu-server`. |
+| `SSH_KEY_PATH` | Absolute path on the controller to the SSH key; do not put the key itself in `prod.env`. |
+| `SSH_PORT` | SSH TCP port; defaults to `22`. |
+| `EU_METADATA_ADDRESS`, `EU_DHCP_SERVER_ADDRESS` | IPv4 or IPv6 addresses of the EU network's metadata and DHCP services. |
+| `EU_DNS_ADDRESSES`, `EU_NTP_ADDRESSES` | Non-empty JSON arrays of IPv4/IPv6 addresses for EU DNS and NTP services. |
+| `EU_LOCAL_NETWORKS` | Non-empty JSON array of EU networks in strict CIDR notation. |
 
-Адреса серверов валидируются как IP-адреса; для `EU_SERVER_HOST` также
-допускается DNS-имя. Имена `EU_SERVER_ADDRESS` и `RU_SERVER_ADDRESS` сами
-по себе не устанавливают ограничение на тип адресного диапазона.
+Server addresses are validated as IP addresses; `EU_SERVER_HOST` also accepts
+a DNS name. The `EU_SERVER_ADDRESS` and `RU_SERVER_ADDRESS` names do not
+themselves restrict the address range.
 
-Списки записываются как JSON непосредственно в dotenv-файл, например:
+Lists must be written as JSON directly in the dotenv file, for example:
 
 ```dotenv
 EU_DNS_ADDRESSES=["192.0.2.53","2001:db8::53"]
@@ -66,47 +67,47 @@ EU_NTP_ADDRESSES=["192.0.2.123"]
 EU_LOCAL_NETWORKS=["192.0.2.0/24","2001:db8:1::/64"]
 ```
 
-Замените все `SET_TO_*` placeholders реальными настройками выбранной
-production-сети. Валидатор не подставляет значения автоматически; при
-ошибке он сообщает имена некорректных полей, но не выводит их значения.
-Настройки берутся из `config/prod.env`, а не из переменных окружения процесса.
+Replace every `SET_TO_*` placeholder with real settings for the selected
+production network. The validator does not fill values automatically; on
+error, it reports the names of invalid fields without displaying their
+values. Settings are loaded from `config/prod.env`, not from the process
+environment.
 
-Схема пока требует все перечисленные значения, хотя операция
-`deploy-eu-squid` непосредственно использует только `EU_SERVER_HOST` и
-SSH-настройки. Адреса, DNS/DHCP/NTP и локальные сети нужны последующим
-production-этапам и сейчас только проверяются.
+The schema currently requires all the settings listed above, although
+`deploy-eu-squid` directly uses only `EU_SERVER_HOST` and the SSH settings.
+The addresses, DNS/DHCP/NTP settings, and local networks are needed by later
+production stages and are only validated at this point.
 
-## Запуск
+## Run
 
 ```sh
 .venv/bin/prod-env-host deploy-eu-squid
 ```
 
-Команда выполняет действия по порядку и останавливается при первой ошибке:
+The command runs these steps in order and stops at the first failure:
 
-1. Развёртывает Squid на `eu-server`.
-2. Проверяет работающий контейнер и локальный TCP listener.
-3. Проверяет HTTP-запрос через Squid.
-4. Проверяет блокировку запрещённых назначений.
+1. Deploys Squid on `eu-server`.
+2. Checks the running container and its local TCP listener.
+3. Checks an HTTP request through Squid.
+4. Checks that prohibited destinations are blocked.
 
-При успешном завершении возвращается код `0`. Ошибка production-конфигурации
-возвращает код `2`; ошибка SSH-команды или проверки возвращает ненулевой код.
-В логах указывается неуспешный шаг. Команда не удаляет старый firewall и не
-сбрасывает конфигурацию перед запуском. Если существующий контейнер Squid
-работает с другой конфигурацией, скрипт развёртывания заменит его контейнер,
-чтобы применить текущую политику доступа.
+On success, it returns exit code `0`. A production configuration error returns
+code `2`; an SSH command or check failure returns a nonzero code. Logs identify
+the failed step. The command does not remove the existing firewall or reset
+configuration before running. If an existing Squid container is running with
+a different configuration, the deployment script replaces it to apply the
+current access policy.
 
-## Если запуск не проходит
+## Troubleshooting
 
-- **Ошибка конфигурации:** проверьте, что `config/prod.env` заполнен и все
-  значения адресов, CIDR и JSON-массивов корректны.
-- **SSH или transport failure:** проверьте `EU_SERVER_HOST`, порт, имя
-  пользователя, права на ключе, сетевую доступность и разрешения `sudo`.
-- **Ошибка развёртывания Squid:** проверьте Docker и сетевой доступ сервера
-  для загрузки образа.
-- **Ошибка health check:** устраните причину на EU-сервере и запустите
-  команду снова; последующие шаги после ошибки автоматически не выполняются.
+- **Configuration error:** Check that `config/prod.env` is complete and that
+  address values, CIDRs, and JSON arrays are valid.
+- **SSH or transport failure:** Check `EU_SERVER_HOST`, the port, username,
+  key permissions, network reachability, and `sudo` permissions.
+- **Squid deployment failure:** Check Docker and the server's network access
+  for downloading the image.
+- **Health check failure:** Resolve the issue on the EU server and run the
+  command again; later steps are not run automatically after a failure.
 
-Не передавайте ключевой материал и секреты в аргументах команды, логах или
-репозитории. `config/prod.env` предназначен для локальных настроек и не
-должен коммититься.
+Do not pass key material or secrets in command arguments, logs, or the
+repository. `config/prod.env` is for local settings and must not be committed.
