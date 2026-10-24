@@ -866,6 +866,10 @@ class OrchestratorPingTests(unittest.TestCase):
                     mock.reset_mock(return_value=False, side_effect=False)
                     if mock is self.firewall_mocks["fetch_rkn_blacklist"]:
                         mock.return_value = (["192.0.2.0/24"], ["2001:db8::/32"])
+                    elif mock is self.firewall_mocks["fetch_google_networks"]:
+                        mock.return_value = ["198.51.100.0/24"]
+                    elif mock is self.firewall_mocks["fetch_snapd_networks"]:
+                        mock.return_value = ["203.0.113.0/24"]
                     else:
                         mock.return_value = 0
                 self.client_request_mock.reset_mock(return_value=False)
@@ -909,6 +913,49 @@ class OrchestratorPingTests(unittest.TestCase):
         self.firewall_mocks["apply_ru_firewall"].assert_not_called()
         self.firewall_mocks["apply_eu_firewall"].assert_not_called()
         self.assertIn("Preparing RU firewall inputs failed", stderr.getvalue())
+
+    def test_service_range_problems_stop_before_installation(self) -> None:
+        cases = (
+            ("fetch_google_networks", RuntimeError("upstream unavailable")),
+            ("fetch_snapd_networks", RuntimeError("upstream unavailable")),
+            ("fetch_google_networks", ValueError("malformed")),
+        )
+        for name, error in cases:
+            with self.subTest(fetch=name, error=error):
+                self.firewall_mocks[name].side_effect = error
+
+                result, stderr = self.run_main_with_healthy_eu()
+
+                self.assertEqual(result, 46)
+                self.firewall_mocks["apply_ru_firewall"].assert_not_called()
+                self.firewall_mocks["apply_eu_firewall"].assert_not_called()
+                self.assertIn("Preparing RU firewall inputs failed", stderr.getvalue())
+                self.firewall_mocks[name].side_effect = None
+                for mock in self.firewall_mocks.values():
+                    mock.reset_mock()
+
+    def test_service_ranges_overlapping_crawlers_stop_before_installation(
+        self,
+    ) -> None:
+        for name, value in (
+            ("fetch_google_networks", ["192.0.2.128/25"]),
+            ("fetch_snapd_networks", ["2001:db8:1::/48"]),
+        ):
+            with self.subTest(fetch=name):
+                self.firewall_mocks[name].return_value = value
+
+                result, stderr = self.run_main_with_healthy_eu()
+
+                self.assertEqual(result, 46)
+                self.firewall_mocks["apply_ru_firewall"].assert_not_called()
+                self.assertIn("overlap an RKN crawler range", stderr.getvalue())
+                self.firewall_mocks[name].return_value = (
+                    ["198.51.100.0/24"]
+                    if name == "fetch_google_networks"
+                    else ["203.0.113.0/24"]
+                )
+                for mock in self.firewall_mocks.values():
+                    mock.reset_mock(return_value=False)
 
     def test_firewall_install_failure_stops_before_firewall_tests(self) -> None:
         self.firewall_mocks["apply_ru_firewall"].return_value = 1

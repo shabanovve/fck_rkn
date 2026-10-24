@@ -903,8 +903,10 @@ behavior that requires them.
 - **Done:** `fetch_google_networks` (`goog.json`) and `fetch_snapd_networks`
   (RIPEstat AS41231) run with the RKN blacklist fetch; failures map to exit
   code 46. The ranges go into the RU firewall config (saved by `last_run`),
-  and the existing policy check (48/56) runs the 85b checks. Unit tests only;
-  not yet run on real VMs.
+  and the existing policy check (48/56) runs the 85b checks. A failed fetch,
+  an invalid document, or a range overlapping the RKN ranges stops the run
+  with code 46 before anything is installed. Unit tests cover each case; not
+  yet run on real VMs.
 
 ### 85d. Reset project firewall rules at the start of a full run
 

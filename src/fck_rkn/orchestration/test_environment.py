@@ -207,6 +207,18 @@ def _fetch_json(url: str, source: str) -> object:
         raise RuntimeError(f"Could not fetch the {source} ranges") from error
 
 
+def _reject_crawler_overlap(
+    networks: list[str], rkn_ipv4: list[str], rkn_ipv6: list[str], source: str
+) -> None:
+    """Fail early when a service range overlaps an RKN crawler range."""
+    crawlers = [ipaddress.ip_network(item) for item in (*rkn_ipv4, *rkn_ipv6)]
+    for item in networks:
+        network = ipaddress.ip_network(item)
+        for crawler in crawlers:
+            if network.version == crawler.version and network.overlaps(crawler):
+                raise ValueError(f"{source} overlap an RKN crawler range")
+
+
 def fetch_google_networks() -> list[str]:
     """Fetch Google's published IPv4 and IPv6 ranges (``goog.json``)."""
     document = _fetch_json(GOOGLE_RANGES_URL, "Google")
@@ -909,14 +921,18 @@ def _run(image_directory: Path) -> int:
     try:
         rkn_ipv4, rkn_ipv6 = fetch_rkn_blacklist()
         crawler_probe_address = _crawler_probe_address(rkn_ipv4)
+        google_networks = fetch_google_networks()
+        snapd_networks = fetch_snapd_networks()
+        _reject_crawler_overlap(google_networks, rkn_ipv4, rkn_ipv6, "Google ranges")
+        _reject_crawler_overlap(snapd_networks, rkn_ipv4, rkn_ipv6, "Canonical ranges")
         firewall_config = build_ru_firewall_configuration(
             eu_server_address=eu_private_address,
             eu_access_url=access_url,
             other_host_address=OTHER_HOST_TEST_ADDRESS,
             rkn_ipv4=rkn_ipv4,
             rkn_ipv6=rkn_ipv6,
-            google_networks=fetch_google_networks(),
-            snapd_networks=fetch_snapd_networks(),
+            google_networks=google_networks,
+            snapd_networks=snapd_networks,
             subnet_cidr=settings.GCP_SUBNET_CIDR,
         )
         eu_firewall_config = build_eu_firewall_configuration(
