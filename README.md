@@ -42,6 +42,8 @@ The project aims to provide:
 - **All parameters** are provided as ENV variables for Docker.
 
 The detailed firewall requirements are in [DEVELOPMENT.md](DEVELOPMENT.md).
+For the current EU production deployment command, see
+[PROD_ENV_HOST.md](PROD_ENV_HOST.md).
 
 Because the proxy services operate at the application layer, this architecture
 is intended to prevent the Max messenger from detecting the circumvention
