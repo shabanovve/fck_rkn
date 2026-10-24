@@ -105,6 +105,8 @@ class RuFirewallCheckTests(unittest.TestCase):
                 "eu_outline_address": "10.0.0.2",
                 "eu_outline_port": 10001,
                 "other_host_address": "10.0.0.4",
+                "google_networks": ["198.51.100.0/24", "2001:db9:1::/48"],
+                "snapd_networks": ["203.0.113.0/24"],
                 "vm_services": {
                     "metadata_address": "10.0.0.250",
                     "dns_addresses": ["10.0.0.251"],
@@ -114,6 +116,16 @@ class RuFirewallCheckTests(unittest.TestCase):
                 },
             }
         )
+
+    def test_policy_script_checks_service_access_and_absence_of_denials(
+        self,
+    ) -> None:
+        script = build_firewall_check_command()
+
+        self.assertIn('for port in 80 443; do', script)
+        self.assertIn('daddr @$set_name tcp dport', script)
+        self.assertIn('DST=$service_ip ', script)
+        self.assertIn("No denial is logged for the allowed service addresses", script)
 
     def test_policy_script_requires_default_deny_and_logged_denials(self) -> None:
         script = build_firewall_check_command()
@@ -154,7 +166,9 @@ class RuFirewallCheckTests(unittest.TestCase):
         self.assertEqual(data["vm_service_address"], "10.0.0.250")
         self.assertEqual(data["ntp_address"], "10.0.0.253")
         self.assertEqual(data["ssh_port"], 22)
-        self.assertEqual(data["service_sets"], ["google_ipv4", "snapd_ipv4"])
+        self.assertEqual(
+            data["service_sets"], ["google_ipv4", "google_ipv6", "snapd_ipv4"]
+        )
         self.assertIn("api.snapcraft.io", data["service_hosts"])
         self.assertEqual(data["eu_outline_port"], 10001)
         self.assertNotIn("test_client_address", data)

@@ -301,16 +301,30 @@ increased "$output_denied_before" "$output_denied_after" ||
   fail "The outgoing denial rule did not count the probes"
 report "External hosts, including ICMP echo, are denied and counted"
 
-[ "$(host_probe "$vm_service_address" 80)" = open ] ||
-  fail "The VM service address is unreachable"
-report "The VM service address is reachable"
+service_marker=$(date '+%Y-%m-%d %H:%M:%S')
+service_ips=("$vm_service_address")
+for port in 80 443; do
+  [ "$(host_probe "$vm_service_address" "$port")" = open ] ||
+    fail "The VM service address is unreachable on TCP/$port"
+  report "The VM service address is reachable on TCP/$port"
+done
 for service_host in "${service_hosts[@]}"; do
   service_ip=$(getent ahostsv4 "$service_host" | awk 'NR==1 {print $1}')
   [ -n "$service_ip" ] || fail "Could not resolve the service host $service_host"
+  service_ips+=("$service_ip")
   [ "$(host_probe "$service_ip" 443)" = open ] ||
     fail "The service host $service_host ($service_ip) is unreachable on TCP/443"
   report "The service host $service_host is reachable on TCP/443"
 done
+sleep 2
+service_log=$( (sudo journalctl -k --since "$service_marker" --no-pager 2>/dev/null ||
+  sudo dmesg 2>/dev/null) | grep 'fck-rkn ru output denied' || true)
+for service_ip in "${service_ips[@]}"; do
+  if grep -Fq "DST=$service_ip " <<<"$service_log"; then
+    fail "A denial was logged for the allowed service address $service_ip"
+  fi
+done
+report "No denial is logged for the allowed service addresses"
 getent hosts example.com >/dev/null || fail "Name resolution failed"
 report "Name resolution works"
 python3 - "$ntp_address" <<'PY' || fail "The time source did not answer an NTP request"

@@ -884,11 +884,16 @@ behavior that requires them.
   host and `api.snapcraft.io` are reachable over TCP 443 (and the metadata
   address over TCP 80), that other hosts stay denied and logged, and that the
   VM does not log denials for these services during the check.
-- **Done:** `ru_firewall_check.sh` verifies the accept rules for the Google and
-  snapd sets and that `www.googleapis.com` and `api.snapcraft.io` are
-  reachable over TCP 443; the metadata address (TCP 80) and denial of other
-  hosts were already covered. The "no denial logged for these services" check
-  is not implemented separately: reachability under default deny proves it.
+- **Done:** `ru_firewall_check.sh` verifies the accept rules for every Google
+  and snapd address set present (IPv4 and IPv6, derived from the supplied
+  ranges), that the VM service address is reachable over TCP 80 and 443, that
+  `www.googleapis.com` and `api.snapcraft.io` are reachable over TCP 443, and
+  that no denial is logged for these addresses during the probes (kernel log
+  since the probe start). Denial of other hosts and logging were already
+  covered. IPv6 reachability is not probed (the VMs have no IPv6 Internet
+  access); only the IPv6 rules are checked. The check host names are still
+  fixed in the agent until task 85e. Unit tests cover the input and the script
+  text and syntax; not yet run on real VMs.
 
 ### 85c. [x] Deploy and test Google services and snapd rules
 
