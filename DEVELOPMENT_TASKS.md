@@ -931,7 +931,7 @@ behavior that requires them.
   installed after `test-client` is verified. Unit tests cover scripts, agents,
   order and exit codes; not yet run on real VMs.
 
-### 85e. Make provider service networks provider-neutral
+### 85e. [x] Make provider service networks provider-neutral
 
 - **Change:** Rename `google_networks` / `GOOGLE_SERVICE_PORTS` and the
   `google_*` nft sets to provider-neutral names (for example
@@ -940,6 +940,14 @@ behavior that requires them.
   keeps fetching `goog.json` for the test environment. snapd stays common.
 - **Test:** Unit tests for the generator and agents; the test that agents do
   not name a cloud provider must cover `fck_rkn/agents/`.
+- **Done:** The RU firewall config uses `provider_networks` (nft sets
+  `provider_ipv4` / `provider_ipv6`, `PROVIDER_SERVICE_PORTS`) and
+  `provider_check_hosts`; the orchestrator fills them from `goog.json` and
+  `PROVIDER_CHECK_HOSTS` (`www.googleapis.com`). `ru-server-test-agent` checks
+  the supplied hosts plus the constant `api.snapcraft.io`. No Google name
+  remains in `fck_rkn/agents/` or `remote/scripts/`; the platform-independence
+  test now rejects the word "google" in agents. `snapd_networks` is unchanged.
+  Unit tests only; not yet run on real VMs.
 
 ### 86. Block ru-domains in Squid
 

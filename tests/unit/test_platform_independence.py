@@ -4,7 +4,7 @@ from pathlib import Path
 
 AGENTS = Path(__file__).resolve().parents[2] / "src" / "fck_rkn" / "agents"
 MIGRATED = tuple(p.name for p in AGENTS.glob("*.py") if p.name != "__init__.py")
-FORBIDDEN = re.compile(r"gcloud|\bIAP\b|iap|fck_rkn\.gcp|TestEnvironmentSettings|metadata\.google")
+FORBIDDEN = re.compile(r"gcloud|\bIAP\b|iap|fck_rkn\.gcp|TestEnvironmentSettings|metadata\.google|(?i:google)")
 
 
 class PlatformIndependenceTests(unittest.TestCase):

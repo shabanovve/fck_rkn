@@ -381,7 +381,8 @@ class OrchestratorPingTests(unittest.TestCase):
                 "other_host_address": "1.1.1.1",
                 "rkn_ipv4": ["192.0.2.0/24"],
                 "rkn_ipv6": ["2001:db8::/32"],
-                "google_networks": ["198.51.100.0/24"],
+                "provider_networks": ["198.51.100.0/24"],
+                "provider_check_hosts": ["www.googleapis.com"],
                 "snapd_networks": ["203.0.113.0/24"],
                 "vm_services": {
                     "metadata_address": "169.254.169.254",
@@ -478,7 +479,8 @@ class OrchestratorPingTests(unittest.TestCase):
                 other_host_address="1.1.1.1",
                 rkn_ipv4=["192.0.2.0/24"],
                 rkn_ipv6=["2001:db8::/32"],
-                google_networks=["198.51.100.0/24"],
+                provider_networks=["198.51.100.0/24"],
+                provider_check_hosts=["www.googleapis.com"],
                 snapd_networks=["203.0.113.0/24"],
                 subnet_cidr="10.0.0.0/24",
             )

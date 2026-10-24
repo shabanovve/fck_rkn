@@ -105,7 +105,8 @@ class RuFirewallCheckTests(unittest.TestCase):
                 "eu_outline_address": "10.0.0.2",
                 "eu_outline_port": 10001,
                 "other_host_address": "10.0.0.4",
-                "google_networks": ["198.51.100.0/24", "2001:db9:1::/48"],
+                "provider_networks": ["198.51.100.0/24", "2001:db9:1::/48"],
+                "provider_check_hosts": ["provider-api.example"],
                 "snapd_networks": ["203.0.113.0/24"],
                 "vm_services": {
                     "metadata_address": "10.0.0.250",
@@ -126,6 +127,17 @@ class RuFirewallCheckTests(unittest.TestCase):
         self.assertIn('daddr @$set_name tcp dport', script)
         self.assertIn('DST=$service_ip ', script)
         self.assertIn("No denial is logged for the allowed service addresses", script)
+
+    def test_policy_input_requires_provider_check_hosts(self) -> None:
+        for value in (None, [], [""], "host", [5]):
+            with self.subTest(value=value):
+                config = json.loads(self.config())
+                if value is None:
+                    del config["provider_check_hosts"]
+                else:
+                    config["provider_check_hosts"] = value
+                with self.assertRaises(ValueError):
+                    build_firewall_check_input(json.dumps(config))
 
     def test_policy_script_requires_default_deny_and_logged_denials(self) -> None:
         script = build_firewall_check_command()
@@ -167,9 +179,11 @@ class RuFirewallCheckTests(unittest.TestCase):
         self.assertEqual(data["ntp_address"], "10.0.0.253")
         self.assertEqual(data["ssh_port"], 22)
         self.assertEqual(
-            data["service_sets"], ["google_ipv4", "google_ipv6", "snapd_ipv4"]
+            data["service_sets"], ["provider_ipv4", "provider_ipv6", "snapd_ipv4"]
         )
-        self.assertIn("api.snapcraft.io", data["service_hosts"])
+        self.assertEqual(
+            data["service_hosts"], ["provider-api.example", "api.snapcraft.io"]
+        )
         self.assertEqual(data["eu_outline_port"], 10001)
         self.assertNotIn("test_client_address", data)
 
