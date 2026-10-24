@@ -134,7 +134,6 @@ def apply_ru_firewall(runner: RemoteRunner, config_json: str) -> int:
 
 def remove_ru_firewall(runner: RemoteRunner) -> int:
     """Remove the project firewall (table, unit and saved rules) from ru-server."""
-    logger.info("Removing the RU guest firewall from ru-server")
     return run_remote_with_input(
         runner,
         firewall_remove_command("ru"),

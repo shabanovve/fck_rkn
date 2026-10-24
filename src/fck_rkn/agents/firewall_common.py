@@ -259,17 +259,6 @@ def indent_rules(rules: Sequence[str]) -> str:
     return "\n".join(f"    {rule}" for rule in rules)
 
 
-def firewall_apply_command(host: str) -> str:
-    """Return the transactional installer script for ``host`` ("ru" or "eu")."""
-    return render(
-        "apply_firewall.sh",
-        host=host,
-        rules_file=f"/etc/fck-rkn/{host}-firewall.nft",
-        unit_file=f"/etc/systemd/system/fck-rkn-{host}-firewall.service",
-        lock_file=f"/run/lock/fck-rkn-{host}-firewall.lock",
-    )
-
-
 def _firewall_paths(host: str) -> dict[str, str]:
     return {
         "host": host,
@@ -279,11 +268,27 @@ def _firewall_paths(host: str) -> dict[str, str]:
     }
 
 
+def _lock_file(host: str) -> str:
+    return f"/run/lock/fck-rkn-{host}-firewall.lock"
+
+
+def firewall_apply_command(host: str) -> str:
+    """Return the transactional installer script for ``host`` ("ru" or "eu")."""
+    paths = _firewall_paths(host)
+    return render(
+        "apply_firewall.sh",
+        host=host,
+        rules_file=paths["rules_file"],
+        unit_file=paths["unit_file"],
+        lock_file=_lock_file(host),
+    )
+
+
 def firewall_remove_command(host: str) -> str:
     """Return a script that removes the project firewall of ``host`` completely."""
     return render(
         "remove_firewall.sh",
-        lock_file=f"/run/lock/fck-rkn-{host}-firewall.lock",
+        lock_file=_lock_file(host),
         **_firewall_paths(host),
     )
 
@@ -298,10 +303,11 @@ def firewall_rollback_check_command(host: str) -> str:
     installer = base64.b64encode(
         firewall_apply_command(host).encode("utf-8")
     ).decode("ascii")
+    paths = _firewall_paths(host)
     return render(
         "firewall_rollback_check.sh",
         host=host,
         installer_base64=installer,
-        rules_file=f"/etc/fck-rkn/{host}-firewall.nft",
-        service_name=f"fck-rkn-{host}-firewall.service",
+        rules_file=paths["rules_file"],
+        service_name=paths["service_name"],
     )
