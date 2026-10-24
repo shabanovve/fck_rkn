@@ -13,6 +13,40 @@ Services run in Docker on the VMs.
 This plan describes a non-production test environment. Do not use production
 credentials or expose an unauthenticated proxy to the public Internet.
 
+## Development and deployment phases
+
+### Phase 1: Test infrastructure and traffic filtering
+
+Develop infrastructure and traffic-filtering behavior in the isolated
+`fck-rkn-test` environment. `test_env_host` provisions and coordinates that
+environment; the deployment agents configure the servers, and the corresponding
+test agents verify each change. Do not use Phase 1 code or test credentials to
+modify production.
+
+### Phase 2: Production installation
+
+Create production installation tooling for `ru-server` and `eu-server` only
+after the relevant deployment behavior has passed its test-environment
+verification. Before implementing `prod_env_host`, complete and record an
+analysis of `test_env_host` and its dependency path. The analysis must:
+
+- Distinguish test-only responsibilities from production installation
+  responsibilities, including provisioning, transport, test-client work,
+  firewall resets, and cleanup.
+- Determine the required and optional variables for `config/prod.env` and
+  document them in the future `config/prod.env.example`, with validation,
+  allowed values, value sources, and secret handling.
+- Decide and document how `prod_env_host` will invoke and sequence
+  `ru-server-agent`, `ru-server-test-agent`, `eu-server-agent`, and
+  `eu-server-test-agent`. Account for each agent's runner and configuration,
+  side effects, exit status, and failure behavior; do not assume test agents
+  are safe to run against production without reviewing their checks.
+
+The analysis must be completed before the production orchestrator is
+implemented. Keep the analysis and its decisions in this plan. Do not treat
+this planned work as an existing `prod_env_host` implementation or as proof
+that the production configuration files already exist.
+
 ## Implementation sequence
 
 ### Orchestration responsibility

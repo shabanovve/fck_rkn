@@ -43,6 +43,28 @@
 - Name the production environment `fck_rkn`.
 - Keep test and production resources, credentials, and configuration
   separated.
+- Divide development and deployment into two phases:
+  1. **Test infrastructure:** build the infrastructure, deploy traffic
+     filtering, and develop and verify changes only in the isolated test
+     environment using `test_env_host`.
+  2. **Production installation:** create production installation tooling for
+     `ru-server` and `eu-server` only after the relevant behavior has been
+     developed and verified in the test environment.
+- Before implementing `prod_env_host`, analyze `test_env_host` and its full
+  dependency path. Record how the test and production responsibilities
+  differ; identify and justify every setting that belongs in the future
+  `config/prod.env` and `config/prod.env.example`; and decide how
+  `prod_env_host` will invoke and sequence `ru-server-agent`,
+  `ru-server-test-agent`, `eu-server-agent`, and `eu-server-test-agent`.
+  Include each agent's configuration, runner, side effects, exit status, and
+  failure behavior in the analysis. Do not assume that the test orchestrator
+  can be reused unchanged: test-only GCP provisioning, IAP access, test
+  clients, firewall resets, and test-environment cleanup must remain out of
+  production installation unless explicitly justified and approved.
+- Keep the production analysis and its decisions in the development plan
+  before implementation begins. Do not treat the analysis requirement as
+  evidence that `prod_env_host`, `config/prod.env`, or
+  `config/prod.env.example` already exist.
 - Every GCP test VM must have outbound Internet access through Cloud NAT and
   must not have an external IP address. Do not use VM external IPs as an
   outbound-access substitute. Configure Cloud NAT for the VM's subnet and
@@ -70,8 +92,10 @@
   It must not delete VMs or their disks, network resources, or firewall rules,
   and must not run as part of the normal provisioning workflow.
 - The repository's `config/` directory may contain only the tracked
-  templates `config/test.env.example` and `config/agents.env.example`. Local
-  configuration files, generated files (including `config/last_run/`),
+  templates `config/test.env.example`, `config/agents.env.example`, and,
+  when defined by the Phase 2 analysis, `config/prod.env.example`. Local
+  configuration files (`config/test.env`, `config/agents.env`, and the
+  future `config/prod.env`), generated files (including `config/last_run/`),
   credentials, and any other files under `config/` must not be added to the
   repository.
 - Keep real environment values out of the example; use placeholders there.

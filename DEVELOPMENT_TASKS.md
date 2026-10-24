@@ -999,6 +999,27 @@ behavior that requires them.
   successful activation and preservation of saved rules on invalid data or
   nftables failure. Real-VM timer/network verification remains outstanding.
 
+### 88. Analyze production deployment requirements before implementation
+
+- **Phase:** Phase 2 (production installation); this analysis must precede
+  implementation of `prod_env_host`.
+- **Change:** Trace `test_env_host` and its dependencies. Record which
+  responsibilities are test-only and which are applicable to production.
+  Identify the required and optional variables for `config/prod.env` and
+  `config/prod.env.example`, including validation, allowed values, value
+  sources, and secret handling. Decide and document how `prod_env_host` will
+  invoke and sequence `ru-server-agent`, `ru-server-test-agent`,
+  `eu-server-agent`, and `eu-server-test-agent`.
+- **Analysis must cover:** runner selection and configuration, agent
+  side-effects, exit statuses and failure handling, as well as test-only GCP
+  provisioning, IAP, test-client checks, firewall resets, and cleanup. Review
+  test-agent actions before deciding whether any are safe to run against
+  production.
+- **Deliverable:** Update `DEVELOPMENT_PLAN.md` with the evidence and
+  decisions. Do not implement `prod_env_host` as part of this analysis task;
+  define its implementation as a separate task after the analysis is
+  reviewed.
+
 ### 89. Add service and tunnel metrics
 
 - **Change:** Add Prometheus metrics for service health, host resources, and
