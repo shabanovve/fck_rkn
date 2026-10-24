@@ -18,6 +18,7 @@ from google.cloud import compute_v1
 from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
+from fck_rkn import last_run
 from fck_rkn.agents.eu_server import (
     apply_eu_firewall,
     create_outline_user,
@@ -842,6 +843,7 @@ def _run(image_directory: Path) -> int:
 
     try:
         rkn_ipv4, rkn_ipv6 = fetch_rkn_blacklist()
+        crawler_probe_address = _crawler_probe_address(rkn_ipv4)
         firewall_config = build_ru_firewall_configuration(
             eu_server_address=eu_private_address,
             eu_access_url=access_url,
@@ -860,6 +862,20 @@ def _run(image_directory: Path) -> int:
         logger.error("Preparing RU firewall inputs failed: %s", error)
         print(f"Preparing RU firewall inputs failed: {error}", file=sys.stderr)
         return 46
+
+    last_run.save(last_run.EU_FIREWALL_CONFIG, eu_firewall_config)
+    last_run.save(last_run.RU_FIREWALL_CONFIG, firewall_config)
+    last_run.save(last_run.RU_PROBE_KEY, access_url)
+    last_run.save(last_run.TEST_CLIENT_KEY, client_access_url)
+    last_run.save(
+        last_run.CRAWLER_SOURCE_CONFIG,
+        json.dumps(
+            {
+                "ru_server_address": ru_private_address,
+                "crawler_source_address": crawler_probe_address,
+            }
+        ),
+    )
 
     logger.info("Installing the plan-item-10 firewall on eu-server")
     eu_firewall_exit_code = apply_eu_firewall(eu_runner, eu_firewall_config)
@@ -922,7 +938,7 @@ def _run(image_directory: Path) -> int:
             lambda: check_firewall_crawler_source(
                 ru_runner,
                 ru_private_address,
-                _crawler_probe_address(rkn_ipv4),
+                crawler_probe_address,
             ),
             50,
         ),

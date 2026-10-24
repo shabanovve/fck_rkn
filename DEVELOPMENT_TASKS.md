@@ -853,6 +853,37 @@ behavior that requires them.
   `test-client`. Unit tests cover the order and exit codes; not yet run on
   real VMs.
 
+### 85a. Allow Google services and snapd in the RU firewall
+
+- **Reason:** Default deny on `ru-server` blocks background traffic of the OS
+  itself: snapd (`api.snapcraft.io`, Canonical ranges) and Google services
+  other than the metadata server (for example `216.239.0.0/16`), seen in the
+  `fck-rkn ru output denied` log.
+- **Change:** Replace the metadata-only rule with a Google services rule
+  (TCP 80 and 443 to the Google ranges, including the metadata address) and
+  add a snapd rule (TCP 443 to the Canonical ranges, AS41231). Keep the rules
+  in the minimal VM services group, shared by the generator, so ordering and
+  logging stay as before. Fetch Google ranges from `goog.json` and Canonical
+  ranges from RIPEstat for AS41231 on every policy application; validate
+  them (non-empty, valid networks, size limit), reject any overlap with the
+  RKN crawler ranges, and keep the previous rules on failure.
+- **Test:** Unit tests for the generated rules, `nft -c`, validation failures
+  and the overlap rejection.
+
+### 85b. Test Google services and snapd access on ru-server
+
+- **Test:** Extend `ru-server-test-agent` to verify that the active rules
+  contain the Google and snapd rules, that the metadata address, a Google API
+  host and `api.snapcraft.io` are reachable over TCP 443 (and the metadata
+  address over TCP 80), that other hosts stay denied and logged, and that the
+  VM does not log denials for these services during the check.
+
+### 85c. Deploy and test Google services and snapd rules
+
+- **Orchestration:** Make `test_env_host` fetch and pass the Google and
+  Canonical ranges, apply the RU rules and run the task 85b checks. Fail on
+  any mismatch.
+
 ### 86. Block ru-domains in Squid
 
 - **Change:** Block Russian destination domains at the Squid level on

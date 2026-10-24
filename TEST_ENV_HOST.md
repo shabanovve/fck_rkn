@@ -168,6 +168,26 @@ considered successful; the action prints the returned status and exits
 nonzero for a failed request or any other status. `test_env_host` runs this
 check after the Squid startup check.
 
+## Repeating a single check
+
+Before the firewall steps, `test_env_host` saves their inputs (firewall
+configurations, a crawler-source address and the test Outline keys) to
+`config/last_run/`, which is git-ignored and readable by you only. With the
+VMs still running, repeat one check from the latest run by adding
+`--last-run` to a test agent action instead of piping input through stdin:
+
+```
+.venv/bin/ru-server-test-agent firewall-policy --last-run
+.venv/bin/ru-server-test-agent firewall-vpn-client --last-run
+.venv/bin/ru-server-test-agent firewall-crawler-source --last-run
+.venv/bin/eu-server-test-agent firewall --last-run
+```
+
+`outline-client --last-run` uses the saved RU probe key. Actions that need no
+input (for example `firewall-rollback`) run the same way with or without the
+flag. Run `test-env-host` first; without a saved run the agent reports which
+input is missing.
+
 ## Behavior and safety
 
 - If `eu-server` is absent, the tool creates it without an external IP.

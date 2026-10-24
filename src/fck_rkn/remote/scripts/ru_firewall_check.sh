@@ -122,8 +122,9 @@ for line in sys.stdin:
 insert_before_input_denial() {
   local comment=$1 handle
   shift
-  handle=$(sudo nft -a list chain inet "$table" input |
-    sed -nE '/fck-rkn ru input denied:/ s/.*# handle ([0-9]+).*/\1/p' | head -1)
+  handle=$(sudo nft -a list chain inet "$table" input)
+  handle=$(sed -nE '/fck-rkn ru input denied:/ s/.*# handle ([0-9]+).*/\1/p' \
+    <<<"$handle" | head -1)
   [ -n "$handle" ] || fail "Could not locate the input denial rule"
   sudo nft insert rule inet "$table" input position "$handle" \
     "$@" counter comment "\"$probe_comment-$comment\""
@@ -161,14 +162,16 @@ if ! sudo nft list table inet "$table" >/dev/null 2>&1; then
 fi
 rules=$(sudo nft list table inet "$table")
 for chain in input output forward; do
-  if ! sudo nft list chain inet "$table" "$chain" | grep -q 'policy drop'; then
-    fail "RU firewall $chain chain is not default deny"
+  chain_rules=$(sudo nft list chain inet "$table" "$chain")
+  if ! grep -q 'policy drop' <<<"$chain_rules"; then
+    fail "RU firewall $chain chain is not default deny: $(grep -m1 hook <<<"$chain_rules")"
   fi
 done
-if printf '%s\n' "$rules" | grep -Eq 'policy accept|default-policy|test-client'; then
+if grep -Eq 'policy accept|default-policy|test-client' <<<"$rules"; then
   fail "RU firewall still contains log-only or test-client rules"
 fi
-if printf '%s\n' "$rules" | grep 'log prefix' | grep -Eq '[[:space:]](drop|accept)$'; then
+log_rules=$(grep 'log prefix' <<<"$rules" || true)
+if grep -Eq '[[:space:]](drop|accept)$' <<<"$log_rules"; then
   fail "A RU firewall log rule carries a verdict"
 fi
 for prefix in \
@@ -178,17 +181,19 @@ for prefix in \
   "fck-rkn ru output direct-eu-service:" \
   "fck-rkn ru output denied:" \
   "fck-rkn ru forward denied:"; do
-  printf '%s\n' "$rules" | grep -Fq "$prefix" ||
+  grep -Fq "$prefix" <<<"$rules" ||
     fail "RU firewall is missing the rule with the log prefix: $prefix"
 done
 for set_name in rkn_ipv4 rkn_ipv6; do
-  sudo nft list set inet "$table" "$set_name" |
-    grep -Eq 'elements[[:space:]]*=[[:space:]]*\{[[:space:]]*[^}]+[[:space:]]*\}' ||
+  set_rules=$(sudo nft list set inet "$table" "$set_name")
+  set_rules=$(tr '\n' ' ' <<<"$set_rules")
+  grep -Eq 'elements[[:space:]]*=[[:space:]]*\{[[:space:]]*[^}[:space:]][^}]*\}' \
+    <<<"$set_rules" ||
     fail "RU firewall crawler set $set_name is missing or empty"
 done
-printf '%s\n' "$rules" | grep -q 'udp sport 68 udp dport 67 accept' ||
+grep -q 'udp sport 68 udp dport 67 accept' <<<"$rules" ||
   fail "RU firewall does not allow outgoing DHCP renewal"
-printf '%s\n' "$rules" | grep -q 'icmp type' ||
+grep -q 'icmp type' <<<"$rules" ||
   fail "RU firewall does not allow ICMP on the local network"
 
 report "The active policy is default deny with separate log rules"
@@ -310,7 +315,7 @@ for _ in $(seq 1 10); do
     sudo dmesg 2>/dev/null) | grep 'fck-rkn ru' || true)
   missing=false
   for prefix in "${expected_prefixes[@]}"; do
-    printf '%s' "$kernel_log" | grep -q "$prefix" || missing=true
+    grep -q "$prefix" <<<"$kernel_log" || missing=true
   done
   if [ "$missing" = false ]; then
     logged=true

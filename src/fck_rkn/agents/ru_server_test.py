@@ -36,6 +36,7 @@ from fck_rkn.agents.ru_server import (
     parse_access_url,
     run_remote_with_input,
 )
+from fck_rkn import last_run
 from fck_rkn.agent_config import load_agent_settings, ru_server_runner
 from fck_rkn.remote import render
 from fck_rkn.remote.runner import RemoteRunner, execute
@@ -356,6 +357,32 @@ def check_firewall_policy(runner: RemoteRunner, config_json: str) -> int:
     return check_firewall_policy_rules(runner, config_json)
 
 
+def _action_inputs(action: str, use_last_run: bool) -> tuple[str, ...]:
+    """Return the key and configuration inputs of an action.
+
+    Keys are read from stdin or the saved run so they never appear in argv or
+    shell history.
+    """
+    if use_last_run:
+        saved = {
+            "outline-client": (last_run.RU_PROBE_KEY,),
+            "firewall-policy": (last_run.RU_FIREWALL_CONFIG,),
+            "firewall-crawler-source": (last_run.CRAWLER_SOURCE_CONFIG,),
+            "firewall-vpn-client": (
+                last_run.TEST_CLIENT_KEY,
+                last_run.RU_FIREWALL_CONFIG,
+            ),
+        }
+        return tuple(last_run.load(name) for name in saved.get(action, ()))
+    if action in ("outline-client",):
+        return (sys.stdin.readline(),)
+    if action == "firewall-vpn-client":
+        return sys.stdin.readline(), sys.stdin.read()
+    if action in ("firewall-policy", "firewall-crawler-source"):
+        return (sys.stdin.read(),)
+    return ()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run ru-server service checks.")
     parser.add_argument(
@@ -374,6 +401,12 @@ def main(argv: list[str] | None = None) -> int:
         ),
         help="Check to run",
     )
+    parser.add_argument(
+        "--last-run",
+        action="store_true",
+        help="Read the check input saved by the latest test-env-host run "
+        "instead of stdin",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -390,6 +423,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    try:
+        stdin_inputs = _action_inputs(args.action, args.last_run)
+    except ValueError as error:
+        logger.error("%s", error)
+        return 2
+
     if args.action == "squid-forward":
         return check_squid_forward(runner)
     if args.action == "mtproxy-forward":
@@ -403,15 +442,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "firewall-rollback":
         return check_firewall_rollback(runner)
     if args.action == "firewall-crawler-source":
-        return check_firewall_crawler_source_from_config(runner, sys.stdin.read())
+        return check_firewall_crawler_source_from_config(runner, stdin_inputs[0])
     if args.action == "firewall-policy":
-        return check_firewall_policy(runner, sys.stdin.read())
-
-    # The key is read from stdin so it never appears in argv or shell history.
-    access_url = sys.stdin.readline()
+        return check_firewall_policy(runner, stdin_inputs[0])
     if args.action == "firewall-vpn-client":
-        return check_firewall_vpn_client(runner, access_url, sys.stdin.read())
-    return check_outline_client(runner, access_url)
+        return check_firewall_vpn_client(runner, *stdin_inputs)
+    return check_outline_client(runner, stdin_inputs[0])
 
 
 if __name__ == "__main__":

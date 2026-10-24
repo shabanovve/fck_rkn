@@ -210,6 +210,9 @@ class OrchestratorPingTests(unittest.TestCase):
         self.addCleanup(self.ru_client_check.stop)
         self.ru_key_mock = self.ru_key.start()
         self.addCleanup(self.ru_key.stop)
+        last_run_patch = patch("fck_rkn.orchestration.test_environment.last_run.save")
+        self.last_run_save_mock = last_run_patch.start()
+        self.addCleanup(last_run_patch.stop)
         self.firewall_mocks = {}
         for name in (
             "apply_eu_firewall",
@@ -387,6 +390,26 @@ class OrchestratorPingTests(unittest.TestCase):
             client_runner, EU_OUTLINE_KEY
         )
         self.client_mtproxy_check_mock.assert_called_once_with(client_runner)
+
+    def test_saves_the_firewall_inputs_for_repeating_single_checks(self) -> None:
+        result, _ = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 0)
+        saved = {c.args[0]: c.args[1] for c in self.last_run_save_mock.call_args_list}
+        self.assertEqual(
+            set(saved),
+            {
+                "eu-firewall.json",
+                "ru-firewall.json",
+                "crawler-source.json",
+                "ru-probe-key.txt",
+                "test-client-key.txt",
+            },
+        )
+        self.assertEqual(
+            json.loads(saved["crawler-source.json"]),
+            {"ru_server_address": "10.0.0.1", "crawler_source_address": "192.0.2.0"},
+        )
 
     def test_parses_non_empty_ipv4_and_ipv6_blacklist_sets(self) -> None:
         artifact = """table inet filter {

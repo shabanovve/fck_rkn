@@ -25,6 +25,7 @@ from fck_rkn.agents.firewall_common import (
     parse_minimal_vm_services,
 )
 from fck_rkn.agents.outline import OUTLINE_HEALTH_CHECK_COMMAND
+from fck_rkn import last_run
 from fck_rkn.agent_config import eu_server_runner, load_agent_settings
 from fck_rkn.remote import render
 from fck_rkn.remote.runner import RemoteRunner, execute
@@ -195,6 +196,12 @@ def main(argv: list[str] | None = None) -> int:
         default="startup",
         help="Check to run (default: startup)",
     )
+    parser.add_argument(
+        "--last-run",
+        action="store_true",
+        help="Read the firewall input saved by the latest test-env-host run "
+        "instead of stdin",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -207,7 +214,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.action == "firewall":
-        return check_eu_firewall(runner, sys.stdin.read())
+        if args.last_run:
+            try:
+                config_json = last_run.load(last_run.EU_FIREWALL_CONFIG)
+            except ValueError as error:
+                logger.error("%s", error)
+                return 2
+        else:
+            config_json = sys.stdin.read()
+        return check_eu_firewall(runner, config_json)
     if args.action == "firewall-rollback":
         return check_eu_firewall_rollback(runner)
     if args.action == "http":

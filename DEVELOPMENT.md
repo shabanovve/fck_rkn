@@ -126,13 +126,29 @@ keeps these services working, with the narrowest possible scope.
 | Established/related replies | in/out | any | connection tracking |
 | DNS | out | UDP/TCP 53 | provider DNS resolver |
 | DHCP | out/in | UDP 67/68 | provider DHCP server |
-| Metadata server | out | TCP 80 (and 443) | provider metadata address |
+| Google services | out | TCP 80 and 443 | Google network ranges (AS15169), including the provider metadata address |
+| snapd | out | TCP 443 | Canonical network ranges (AS41231) |
 | NTP | out | UDP 123 | provider/approved time source |
 | ICMP (PMTU, neighbor discovery) | in/out | ICMP/ICMPv6 | local subnet |
 
-SSH is allowed per server as described below. Package repositories, container
-registries, and monitoring endpoints (TCP 443) stay closed on `ru-server` by
-default and are opened only for maintenance or from an approved address list.
+Google services are the services the guest OS depends on: the metadata
+server (a private example of such a service), the guest agent, OS Login and
+the Google APIs. nftables filters by address, not by name, so they are
+allowed by network ranges. Google ranges come from Google's published list
+(`goog.json`) plus the metadata address. snapd (the Ubuntu snap store,
+`api.snapcraft.io` and its CDN) is allowed through the Canonical ranges taken
+from RIPEstat for AS41231. Neither list may overlap an RKN crawler range, so
+no crawler source can match these rules; the lists are re-checked against the
+blacklist whenever the policy is applied. The ranges are fetched on every
+policy application and validated (non-empty, valid networks, IPv4 and IPv6
+accepted); on any failure the previously active rules stay in place, as for
+the crawler blacklist. These rules are needed on `ru-server` only, because
+`eu-server` has no outgoing restrictions.
+
+SSH is allowed per server as described below. Other package repositories,
+container registries, and monitoring endpoints (TCP 443) stay closed on
+`ru-server` by default and are opened only for maintenance or from an
+approved address list.
 
 ### ru-server
 

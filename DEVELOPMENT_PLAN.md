@@ -219,10 +219,13 @@ The authoritative requirements are in the "Firewall Requirements" section of
 | `eu-server` | VPN only | Local traffic only | No restrictions |
 | Any other host | SSH allowed; RKN crawlers and all other incoming denied and logged | SSH allowed from any address; VPN only from `ru-server`; RKN crawlers and all other incoming denied and logged | Not applicable |
 
-Minimal VM services (loopback, established/related, DNS, DHCP, metadata, NTP,
-ICMP) stay allowed on both servers, as described in `DEVELOPMENT.md`.
-Package repositories, registries and monitoring endpoints stay closed on
-`ru-server` except for maintenance or an approved address list.
+Minimal VM services (loopback, established/related, DNS, DHCP, Google
+services including metadata, snapd, NTP, ICMP) stay allowed on both servers,
+as described in `DEVELOPMENT.md`. Google (AS15169) and Canonical (AS41231,
+snapd) ranges are fetched and validated when the policy is applied and must
+not overlap RKN crawler ranges.
+Other package repositories, registries and monitoring endpoints stay closed
+on `ru-server` except for maintenance or an approved address list.
 
 **Default policy:** `ru-server` uses default deny for incoming and outgoing
 traffic; `eu-server` uses default deny for incoming traffic and has no
