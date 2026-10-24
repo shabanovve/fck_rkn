@@ -16,7 +16,10 @@ from pydantic_settings.exceptions import SettingsError
 from fck_rkn.agents.eu_server import MTPROXY_PORT, SQUID_PORT
 from fck_rkn.agents.outline import deploy_outline_on
 from fck_rkn.agent_config import load_agent_settings, ru_server_runner
-from fck_rkn.agents.firewall_common import firewall_apply_command
+from fck_rkn.agents.firewall_common import (
+    firewall_apply_command,
+    firewall_remove_command,
+)
 from fck_rkn.agents.ru_firewall import build_ru_firewall_rules
 from fck_rkn.remote import render
 from fck_rkn.remote.runner import RemoteRunner, execute
@@ -126,6 +129,19 @@ def apply_ru_firewall(runner: RemoteRunner, config_json: str) -> int:
         rules,
         "Applying the RU guest firewall policy",
         timeout=FIREWALL_DEPLOY_TIMEOUT_SECONDS,
+    )
+
+
+def remove_ru_firewall(runner: RemoteRunner) -> int:
+    """Remove the project firewall (table, unit and saved rules) from ru-server."""
+    logger.info("Removing the RU guest firewall from ru-server")
+    return run_remote_with_input(
+        runner,
+        firewall_remove_command("ru"),
+        "",
+        "Removing the RU guest firewall",
+        timeout=FIREWALL_DEPLOY_TIMEOUT_SECONDS,
+        print_stderr=True,
     )
 
 

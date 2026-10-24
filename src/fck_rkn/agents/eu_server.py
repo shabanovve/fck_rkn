@@ -11,7 +11,10 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_firewall import build_eu_firewall_rules
-from fck_rkn.agents.firewall_common import firewall_apply_command
+from fck_rkn.agents.firewall_common import (
+    firewall_apply_command,
+    firewall_remove_command,
+)
 from fck_rkn.agents.outline import (  # noqa: F401
     OUTLINE_ACCESS_KEY_PORT,
     OUTLINE_API_PORT,
@@ -123,6 +126,19 @@ def apply_eu_firewall(runner: RemoteRunner, config_json: str) -> int:
         FIREWALL_DEPLOY_TIMEOUT_SECONDS,
         stdin=rules,
         print_output=True,
+    )
+
+
+def remove_eu_firewall(runner: RemoteRunner) -> int:
+    """Remove the project firewall (table, unit and saved rules) from eu-server."""
+    logger.info("Removing the EU guest firewall from eu-server")
+    return execute(
+        runner,
+        firewall_remove_command("eu"),
+        "Removing the EU guest firewall",
+        FIREWALL_DEPLOY_TIMEOUT_SECONDS,
+        print_output=True,
+        print_stderr=True,
     )
 
 

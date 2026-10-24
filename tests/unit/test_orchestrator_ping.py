@@ -215,6 +215,10 @@ class OrchestratorPingTests(unittest.TestCase):
         self.addCleanup(last_run_patch.stop)
         self.firewall_mocks = {}
         for name in (
+            "remove_eu_firewall",
+            "check_eu_firewall_removed",
+            "remove_ru_firewall",
+            "check_firewall_removed",
             "apply_eu_firewall",
             "check_eu_firewall",
             "check_eu_firewall_rollback",
@@ -332,6 +336,14 @@ class OrchestratorPingTests(unittest.TestCase):
             else:
                 mock.assert_called_once_with(ru_runner)
         ping.assert_called_once_with(EU_RUNNER)
+        self.firewall_mocks["remove_eu_firewall"].assert_called_once_with(EU_RUNNER)
+        self.firewall_mocks["check_eu_firewall_removed"].assert_called_once_with(
+            EU_RUNNER
+        )
+        self.firewall_mocks["remove_ru_firewall"].assert_called_once_with(ru_runner)
+        self.firewall_mocks["check_firewall_removed"].assert_called_once_with(
+            ru_runner
+        )
         deploy.assert_called_once_with(EU_RUNNER)
         squid_check.assert_called_once_with(EU_RUNNER)
         http_check.assert_called_once_with(EU_RUNNER)
@@ -913,6 +925,64 @@ class OrchestratorPingTests(unittest.TestCase):
         self.firewall_mocks["apply_ru_firewall"].assert_not_called()
         self.firewall_mocks["apply_eu_firewall"].assert_not_called()
         self.assertIn("Preparing RU firewall inputs failed", stderr.getvalue())
+
+    def test_project_firewall_is_reset_before_each_server_is_built(self) -> None:
+        order: list[str] = []
+        for name in (
+            "remove_eu_firewall",
+            "check_eu_firewall_removed",
+            "remove_ru_firewall",
+            "check_firewall_removed",
+        ):
+            self.firewall_mocks[name].side_effect = (
+                lambda *args, name=name: order.append(name) or 0
+            )
+        self.image_mocks["load_outline_image"].side_effect = (
+            lambda runner, archive: order.append(f"load:{runner.instance_name}") or 0
+        )
+
+        result, _ = self.run_main_with_healthy_eu()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            order[:6],
+            [
+                "remove_eu_firewall",
+                "check_eu_firewall_removed",
+                "load:eu-server",
+                "remove_ru_firewall",
+                "check_firewall_removed",
+                "load:ru-server",
+            ],
+        )
+
+    def test_firewall_reset_failures_stop_before_the_server_is_built(self) -> None:
+        cases = (
+            ("remove_eu_firewall", 58, None),
+            ("check_eu_firewall_removed", 59, None),
+            ("remove_ru_firewall", 60, "load_outline_image"),
+            ("check_firewall_removed", 61, "load_outline_image"),
+        )
+        for name, expected_code, skipped in cases:
+            with self.subTest(step=name):
+                for mock in self.firewall_mocks.values():
+                    mock.reset_mock()
+                self.image_mocks["load_outline_image"].reset_mock()
+                self.firewall_mocks[name].return_value = 1
+
+                result, stderr = self.run_main_with_healthy_eu()
+
+                self.assertEqual(result, expected_code)
+                self.assertIn("firewall removal", stderr.getvalue())
+                self.firewall_mocks["apply_eu_firewall"].assert_not_called()
+                if skipped is None:
+                    self.image_mocks["load_outline_image"].assert_not_called()
+                else:
+                    self.assertEqual(
+                        self.image_mocks["load_outline_image"].call_count, 1
+                    )
+                    self.ru_outline_deploy_mock.assert_not_called()
+                self.firewall_mocks[name].return_value = 0
 
     def test_service_range_problems_stop_before_installation(self) -> None:
         cases = (

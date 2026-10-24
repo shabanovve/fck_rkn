@@ -20,6 +20,7 @@ from fck_rkn.agents.eu_server import (
     SQUID_PORT,
 )
 from fck_rkn.agents.firewall_common import (
+    firewall_absent_check_command,
     firewall_rollback_check_command,
     load_config,
     parse_minimal_vm_services,
@@ -157,6 +158,18 @@ def check_eu_firewall_rollback(runner: RemoteRunner) -> int:
         firewall_rollback_check_command("eu"),
         "EU firewall update rollback check",
         FIREWALL_ROLLBACK_TIMEOUT_SECONDS,
+        print_output=True,
+        print_stderr=True,
+    )
+
+
+def check_eu_firewall_removed(runner: RemoteRunner) -> int:
+    """Verify no project firewall remains on eu-server."""
+    return execute(
+        runner,
+        firewall_absent_check_command("eu"),
+        "EU firewall removal check",
+        SSH_COMMAND_TIMEOUT_SECONDS,
         print_output=True,
         print_stderr=True,
     )

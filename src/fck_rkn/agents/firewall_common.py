@@ -270,6 +270,29 @@ def firewall_apply_command(host: str) -> str:
     )
 
 
+def _firewall_paths(host: str) -> dict[str, str]:
+    return {
+        "host": host,
+        "rules_file": f"/etc/fck-rkn/{host}-firewall.nft",
+        "unit_file": f"/etc/systemd/system/fck-rkn-{host}-firewall.service",
+        "service_name": f"fck-rkn-{host}-firewall.service",
+    }
+
+
+def firewall_remove_command(host: str) -> str:
+    """Return a script that removes the project firewall of ``host`` completely."""
+    return render(
+        "remove_firewall.sh",
+        lock_file=f"/run/lock/fck-rkn-{host}-firewall.lock",
+        **_firewall_paths(host),
+    )
+
+
+def firewall_absent_check_command(host: str) -> str:
+    """Return a test that no project firewall of ``host`` remains."""
+    return render("firewall_absent_check.sh", **_firewall_paths(host))
+
+
 def firewall_rollback_check_command(host: str) -> str:
     """Return a test that exercises the same transactional firewall installer."""
     installer = base64.b64encode(

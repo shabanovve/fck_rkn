@@ -168,6 +168,16 @@ considered successful; the action prints the returned status and exits
 nonzero for a failed request or any other status. `test_env_host` runs this
 check after the Squid startup check.
 
+## Firewall reset at the start of a run
+
+Each full run starts from a clean state. As soon as `eu-server` is running and
+SSH-ready, and before any agent step on it, `test_env_host` removes the
+project firewall left by an earlier run (nftables table, systemd unit and
+saved rules) and verifies that nothing remains (exit codes 58 and 59). It does
+the same on `ru-server` before the first RU agent step (exit codes 60 and 61).
+Firewall rules are installed again only after the whole infrastructure,
+including `test-client`, is configured and verified.
+
 ## Repeating a single check
 
 Before the firewall steps, `test_env_host` saves their inputs (firewall

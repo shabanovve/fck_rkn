@@ -908,7 +908,7 @@ behavior that requires them.
   with code 46 before anything is installed. Unit tests cover each case; not
   yet run on real VMs.
 
-### 85d. Reset project firewall rules at the start of a full run
+### 85d. [x] Reset project firewall rules at the start of a full run
 
 - **Change:** After the VMs are running and SSH-ready, and before the first
   agent step of every full `test_env_host` run, remove the project firewall
@@ -920,6 +920,16 @@ behavior that requires them.
   no project table remains before the build starts, and that the test-client
   Outline connection check passes after a previous run left the RU
   default-deny active.
+- **Done:** `eu-server-agent` and `ru-server-agent` gained `remove_eu_firewall`
+  and `remove_ru_firewall` (shared script `remove_firewall.sh`: stops and
+  disables the unit, deletes the unit and saved rules, destroys the nft table,
+  under the installer's lock). `eu-server-test-agent` and
+  `ru-server-test-agent` verify with `firewall_absent_check.sh` (no table, no
+  files, service neither enabled nor active). `test_env_host` runs the pair for
+  `eu-server` before its first agent step (exit codes 58/59) and for
+  `ru-server` before its first agent step (60/61), so the firewall is only
+  installed after `test-client` is verified. Unit tests cover scripts, agents,
+  order and exit codes; not yet run on real VMs.
 
 ### 85e. Make provider service networks provider-neutral
 

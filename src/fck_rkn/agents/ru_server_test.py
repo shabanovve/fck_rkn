@@ -13,6 +13,7 @@ from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import SQUID_PORT
 from fck_rkn.agents.firewall_common import (
+    firewall_absent_check_command,
     firewall_rollback_check_command,
     load_config,
     parse_minimal_vm_services,
@@ -308,6 +309,17 @@ def check_firewall_rollback(runner: RemoteRunner) -> int:
         "Checking RU firewall update rollback",
         FIREWALL_ROLLBACK_TIMEOUT_SECONDS,
         stream_output=True,
+    )
+
+
+def check_firewall_removed(runner: RemoteRunner) -> int:
+    """Verify no project firewall remains on ru-server."""
+    return run_remote_with_input(
+        runner,
+        firewall_absent_check_command("ru"),
+        "",
+        "Checking that no RU firewall remains",
+        print_stderr=True,
     )
 
 

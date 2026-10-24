@@ -21,6 +21,7 @@ from pydantic_settings.exceptions import SettingsError
 from fck_rkn import last_run
 from fck_rkn.agents.eu_server import (
     apply_eu_firewall,
+    remove_eu_firewall,
     create_outline_user,
     deploy_mtproxy,
     deploy_outline,
@@ -29,6 +30,7 @@ from fck_rkn.agents.eu_server import (
 )
 from fck_rkn.agents.eu_server_test import (
     check_eu_firewall,
+    check_eu_firewall_removed,
     check_eu_firewall_rollback,
     check_mtproxy,
     check_outline_health,
@@ -38,6 +40,7 @@ from fck_rkn.agents.eu_server_test import (
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.ru_server import (
     apply_ru_firewall,
+    remove_ru_firewall,
     deploy_outline_client,
     deploy_mtproxy_forward,
     deploy_outline_server,
@@ -60,6 +63,7 @@ from fck_rkn.agents.test_client import (
 from fck_rkn.agents.ru_server_test import (
     check_firewall_crawler_source,
     check_firewall_policy,
+    check_firewall_removed,
     check_firewall_vpn_client,
     check_firewall_rollback,
     check_outline_client,
@@ -339,6 +343,30 @@ def _shutdown_vms(settings: TestEnvironmentSettings) -> int:
     return 0
 
 
+def _reset_firewall(
+    name: str,
+    remove: Callable[[], int],
+    verify: Callable[[], int],
+    failure_codes: tuple[int, int],
+) -> int:
+    """Remove the project firewall left by an earlier run and verify it is gone."""
+    for description, step, failure_code in (
+        ("firewall removal", remove, failure_codes[0]),
+        ("firewall removal check", verify, failure_codes[1]),
+    ):
+        exit_code = step()
+        if exit_code != 0:
+            logger.error(
+                "%s %s failed with exit status %d", name, description, exit_code
+            )
+            print(
+                f"{name} {description} failed with exit status {exit_code}.",
+                file=sys.stderr,
+            )
+            return failure_code
+    return 0
+
+
 def _provision_server(
     name: str,
     ensure_server: Callable[[TestEnvironmentSettings], compute_v1.Instance],
@@ -514,6 +542,14 @@ def _run(image_directory: Path) -> int:
         f"GCP access is valid; {instance.name} is running and SSH-ready "
         f"in {settings.GCP_ZONE}."
     )
+    exit_code = _reset_firewall(
+        "eu-server",
+        lambda: remove_eu_firewall(eu_runner),
+        lambda: check_eu_firewall_removed(eu_runner),
+        (58, 59),
+    )
+    if exit_code != 0:
+        return exit_code
     logger.info("Invoking eu-server-agent ping check")
     ping_exit_code = run_youtube_ping(eu_runner)
     if ping_exit_code != 0:
@@ -660,6 +696,15 @@ def _run(image_directory: Path) -> int:
         logger.error("%s", error)
         print(str(error), file=sys.stderr)
         return 12
+
+    exit_code = _reset_firewall(
+        "ru-server",
+        lambda: remove_ru_firewall(ru_runner),
+        lambda: check_firewall_removed(ru_runner),
+        (60, 61),
+    )
+    if exit_code != 0:
+        return exit_code
 
     if load_outline_image(ru_runner, image_archive) != 0:
         print(
