@@ -68,10 +68,19 @@ EU_LOCAL_NETWORKS=["192.0.2.0/24","2001:db8:1::/64"]
 ```
 
 Replace every `SET_TO_*` placeholder with real settings for the selected
-production network. The validator does not fill values automatically; on
-error, it reports the names of invalid fields without displaying their
-values. Settings are loaded from `config/prod.env`, not from the process
-environment.
+production network. The validator does not fill values automatically.
+Settings are loaded from `config/prod.env`, not from the process environment.
+
+### Configuration validation errors
+
+When configuration validation fails, `prod-env-host` must report each
+actionable problem separately, including the setting name and why it is
+invalid (for example, missing value, unreplaced placeholder, invalid IP/CIDR,
+or malformed JSON list). Dotenv syntax errors must include the file and line
+number. Diagnostics must not print the supplied value or other secret
+configuration contents. A generic message such as “Could not load valid
+production configuration” alone is insufficient. This diagnostic behavior is
+a requirement; the current implementation does not yet meet it.
 
 The schema currently requires all the settings listed above, although
 `deploy-eu-squid` directly uses only `EU_SERVER_ADDRESS` and the SSH settings.
@@ -109,8 +118,9 @@ current access policy.
 
 ## Troubleshooting
 
-- **Configuration error:** Check that `config/prod.env` is complete and that
-  address values, CIDRs, and JSON arrays are valid.
+- **Configuration error:** Use the field-specific validation reason and line
+  number, when applicable, to correct `config/prod.env`; do not include
+  secrets when sharing diagnostics.
 - **SSH or transport failure:** Check `EU_SERVER_ADDRESS`, the port, username,
   key permissions, network reachability, and `sudo` permissions.
 - **Squid deployment failure:** Check Docker and the server's network access

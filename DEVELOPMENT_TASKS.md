@@ -1681,6 +1681,22 @@ runner, "ru-server-feasibility-probe")`), matching
 - **Verify:** Test success/failure summaries and assert no secret or
   test-environment value is emitted.
 
+### 243. Reporting actionable production configuration errors
+
+- **Source step:** `load_eu_production_settings` validates the local
+  `config/prod.env` before `prod-env-host` creates an SSH runner or performs
+  remote work.
+- **Change:** Replace the generic configuration-failure summary with
+  field-specific diagnostics for every missing or invalid setting. Identify
+  the setting and the reason it failed (such as an unreplaced placeholder,
+  invalid IP/CIDR, malformed address list, or missing required value).
+  Dotenv syntax errors must identify the file and line. Never include
+  configured values or secret contents in diagnostics.
+- **Verify:** Cover multiple simultaneous validation failures, missing
+  settings, invalid values, placeholders and dotenv syntax errors. Assert
+  that output identifies each failing field and reason, includes syntax-error
+  line information, omits the supplied values, and causes no remote operation.
+
 ## Decisions that block dependent tasks
 
 - GCP project ID, billing/account, region/zone, Ubuntu image, VM size/cost,
