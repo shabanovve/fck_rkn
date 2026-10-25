@@ -89,6 +89,25 @@ class ProductionEnvironmentTests(unittest.TestCase):
         self.assertIsInstance(deploy.call_args.args[0], SshRunner)
         self.assertEqual(deploy.call_args.args[0].host, "eu.example.net")
 
+    def test_main_defaults_to_eu_squid_deployment_without_arguments(self) -> None:
+        with (
+            patch.object(production_environment, "ensure_prod_config"),
+            patch.object(
+                production_environment,
+                "load_eu_production_settings",
+                return_value=settings(),
+            ),
+            patch.object(
+                production_environment,
+                "deploy_eu_squid",
+                return_value=0,
+            ) as deploy,
+        ):
+            self.assertEqual(production_environment.main([]), 0)
+
+        self.assertIsInstance(deploy.call_args.args[0], SshRunner)
+        self.assertEqual(deploy.call_args.args[0].host, "eu.example.net")
+
     def test_main_returns_nonzero_if_configuration_is_invalid(self) -> None:
         with (
             patch.object(production_environment, "ensure_prod_config"),

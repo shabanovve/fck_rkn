@@ -1243,7 +1243,8 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `config/prod.env`, creates one EU `SshRunner`, and runs the Squid deployment
   followed by its startup, HTTP and blocking checks. Every failure stops the
   sequence with a nonzero result. The entry point imports no GCP code and
-  exposes no RU or test-only shutdown operation.
+  exposes no RU or test-only shutdown operation. `deploy-eu-squid` is also the
+  default when `prod-env-host` is invoked without arguments.
 
 ### 206. Excluding GCP project-access validation
 

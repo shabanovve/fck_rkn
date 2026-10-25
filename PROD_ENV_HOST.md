@@ -80,6 +80,15 @@ production stages and are only validated at this point.
 
 ## Run
 
+With no arguments, `prod-env-host` runs its current default operation,
+`deploy-eu-squid`:
+
+```sh
+.venv/bin/prod-env-host
+```
+
+The operation can also be selected explicitly:
+
 ```sh
 .venv/bin/prod-env-host deploy-eu-squid
 ```

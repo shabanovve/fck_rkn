@@ -62,8 +62,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "operation",
+        nargs="?",
+        default="deploy-eu-squid",
         choices=("deploy-eu-squid",),
-        help="Deploy and verify Squid on eu-server",
+        help="Operation to run (default: deploy-eu-squid)",
     )
     args = parser.parse_args(argv)
     logging.basicConfig(
