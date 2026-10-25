@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import os
 import re
 import tempfile
 from pathlib import Path
 
+from dotenv import dotenv_values
 from dotenv.parser import parse_stream
 from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,6 +20,11 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROD_CONFIG_FILE = REPOSITORY_ROOT / "config" / "prod.env"
 PROD_TEMPLATE_FILE = PROD_CONFIG_FILE.with_name("prod.env.example")
 PLACEHOLDER_MARKERS = ("SET_TO_", "TODO", "<", ">")
+JSON_LIST_FIELDS = {
+    "EU_DNS_ADDRESSES": "a JSON array of IPv4/IPv6 addresses",
+    "EU_NTP_ADDRESSES": "a JSON array of IPv4/IPv6 addresses",
+    "EU_LOCAL_NETWORKS": "a JSON array of CIDR networks",
+}
 
 
 class ProductionConfigError(ValueError):
@@ -196,18 +203,61 @@ def load_eu_production_settings(
         ) from error
 
     try:
-        return EuProductionSettings(_env_file=path)
-    except SettingsError as error:
+        values = dotenv_values(path, encoding="utf-8", interpolate=False)
+    except OSError as error:
         raise ProductionConfigError(
             f"Could not read production configuration {path.name}"
         ) from error
+    except UnicodeError as error:
+        raise ProductionConfigError(
+            f"{path.name} must be valid UTF-8; its contents are not shown"
+        ) from error
+
+    issues: dict[str, str] = {}
+    for field, expected in JSON_LIST_FIELDS.items():
+        raw_value = values.get(field)
+        if raw_value is None:
+            continue
+        if any(marker in raw_value.upper() for marker in PLACEHOLDER_MARKERS):
+            issues[field] = "contains a placeholder that must be replaced"
+            values.pop(field)
+            continue
+        try:
+            parsed_value = json.loads(raw_value)
+        except json.JSONDecodeError:
+            issues[field] = f"must be {expected}"
+            values.pop(field)
+        else:
+            if not isinstance(parsed_value, list):
+                issues[field] = f"must be {expected}"
+                values.pop(field)
+            else:
+                values[field] = parsed_value
+
+    try:
+        settings = EuProductionSettings(_env_file=None, **values)
+    except SettingsError as error:
+        raise ProductionConfigError(
+            f"Could not parse production configuration {path.name}"
+        ) from error
     except ValidationError as error:
-        fields = sorted(
-            {
-                ".".join(str(part) for part in detail["loc"])
-                for detail in error.errors(include_input=False, include_context=False)
-            }
+        validation_errors = error.errors(
+            include_input=False, include_context=False
+        )
+        for detail in validation_errors:
+            field = str(detail["loc"][0])
+            if field in issues:
+                continue
+            reason = str(detail["msg"])
+            if reason.startswith("Value error, "):
+                reason = reason.removeprefix("Value error, ")
+            issues.setdefault(field, reason)
+
+    if issues:
+        details = "\n".join(
+            f"- {field}: {reason}" for field, reason in sorted(issues.items())
         )
         raise ProductionConfigError(
-            f"Invalid production configuration: {', '.join(fields)}"
-        ) from error
+            f"Invalid production configuration in {path.name}:\n{details}"
+        )
+    return settings

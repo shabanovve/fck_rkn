@@ -108,18 +108,28 @@ class ProductionEnvironmentTests(unittest.TestCase):
         self.assertEqual(deploy.call_args.args[0].host, "192.0.2.10")
 
     def test_main_returns_nonzero_if_configuration_is_invalid(self) -> None:
+        diagnostic = (
+            "Invalid production configuration in prod.env:\n"
+            "- EU_SERVER_ADDRESS: must be an IPv4 or IPv6 address"
+        )
         with (
             patch.object(production_environment, "ensure_prod_config"),
             patch.object(
                 production_environment,
                 "load_eu_production_settings",
-                side_effect=ProductionConfigError("invalid settings"),
+                side_effect=ProductionConfigError(diagnostic),
             ),
+            patch.object(production_environment, "create_eu_runner") as create_runner,
             patch.object(production_environment, "deploy_eu_squid") as deploy,
+            self.assertLogs(production_environment.logger, level="ERROR") as logs,
         ):
             self.assertEqual(production_environment.main(["deploy-eu-squid"]), 2)
 
+        create_runner.assert_not_called()
         deploy.assert_not_called()
+        self.assertIn(
+            "EU_SERVER_ADDRESS: must be an IPv4 or IPv6 address", logs.output[0]
+        )
 
 
 if __name__ == "__main__":

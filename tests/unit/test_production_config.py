@@ -111,8 +111,74 @@ class ProductionConfigTests(unittest.TestCase):
         with self.assertRaises(ProductionConfigError) as raised:
             load_eu_production_settings(self.config_path)
 
-        self.assertIn("SSH_USER", str(raised.exception))
+        self.assertIn("- SSH_USER: Field required", str(raised.exception))
+        self.assertIn("- SSH_KEY_PATH: Field required", str(raised.exception))
         self.assertNotIn("secret-value", str(raised.exception))
+
+    def test_reports_multiple_validation_errors_without_exposing_values(self) -> None:
+        self.config_path.parent.mkdir(parents=True)
+        invalid = VALID.replace(
+            "EU_SERVER_ADDRESS=192.0.2.10",
+            "EU_SERVER_ADDRESS=not-an-ip-secret",
+        ).replace(
+            'EU_DNS_ADDRESSES=["192.0.2.53","2001:db8::53"]',
+            "EU_DNS_ADDRESSES=not-json-secret",
+        ).replace(
+            'EU_NTP_ADDRESSES=["192.0.2.123"]',
+            "EU_NTP_ADDRESSES=not-json-ntp-secret",
+        )
+        self.config_path.write_text(invalid, encoding="utf-8")
+
+        with self.assertRaises(ProductionConfigError) as raised:
+            load_eu_production_settings(self.config_path)
+
+        message = str(raised.exception)
+        self.assertIn("EU_SERVER_ADDRESS: must be an IPv4 or IPv6 address", message)
+        self.assertIn(
+            "EU_DNS_ADDRESSES: must be a JSON array of IPv4/IPv6 addresses",
+            message,
+        )
+        self.assertIn(
+            "EU_NTP_ADDRESSES: must be a JSON array of IPv4/IPv6 addresses",
+            message,
+        )
+        self.assertNotIn("not-an-ip-secret", message)
+        self.assertNotIn("not-json-secret", message)
+        self.assertNotIn("not-json-ntp-secret", message)
+
+    def test_reports_non_array_json_for_list_settings(self) -> None:
+        self.config_path.parent.mkdir(parents=True)
+        invalid = VALID.replace(
+            'EU_DNS_ADDRESSES=["192.0.2.53","2001:db8::53"]',
+            'EU_DNS_ADDRESSES="not-an-array-secret"',
+        )
+        self.config_path.write_text(invalid, encoding="utf-8")
+
+        with self.assertRaises(ProductionConfigError) as raised:
+            load_eu_production_settings(self.config_path)
+
+        message = str(raised.exception)
+        self.assertIn("EU_DNS_ADDRESSES", message)
+        self.assertIn("JSON array of IPv4/IPv6 addresses", message)
+        self.assertNotIn("not-an-array-secret", message)
+
+    def test_reports_unreplaced_placeholders_in_json_list_settings(self) -> None:
+        self.config_path.parent.mkdir(parents=True)
+        invalid = VALID.replace(
+            'EU_DNS_ADDRESSES=["192.0.2.53","2001:db8::53"]',
+            'EU_DNS_ADDRESSES=["SET_TO_DNS_SECRET"]',
+        )
+        self.config_path.write_text(invalid, encoding="utf-8")
+
+        with self.assertRaises(ProductionConfigError) as raised:
+            load_eu_production_settings(self.config_path)
+
+        message = str(raised.exception)
+        self.assertIn(
+            "EU_DNS_ADDRESSES: contains a placeholder that must be replaced",
+            message,
+        )
+        self.assertNotIn("SET_TO_DNS_SECRET", message)
 
     def test_rejects_template_placeholders(self) -> None:
         self.config_path.parent.mkdir(parents=True)
@@ -124,8 +190,14 @@ class ProductionConfigTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        with self.assertRaisesRegex(ProductionConfigError, "EU_SERVER_ADDRESS"):
+        with self.assertRaises(ProductionConfigError) as raised:
             load_eu_production_settings(self.config_path)
+
+        self.assertIn(
+            "EU_SERVER_ADDRESS: must be replaced with an operator-supplied value",
+            str(raised.exception),
+        )
+        self.assertNotIn("SET_TO_ADDRESS", str(raised.exception))
 
     def test_rejects_invalid_addresses_networks_and_ssh_port(self) -> None:
         invalid_variants = (
@@ -153,6 +225,7 @@ class ProductionConfigTests(unittest.TestCase):
             load_eu_production_settings(self.config_path)
 
         self.assertEqual(raised.exception.line, 12)
+        self.assertIn("prod.env at line 12", str(raised.exception))
         self.assertNotIn("super-secret-value", str(raised.exception))
 
 

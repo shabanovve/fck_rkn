@@ -79,8 +79,9 @@ invalid (for example, missing value, unreplaced placeholder, invalid IP/CIDR,
 or malformed JSON list). Dotenv syntax errors must include the file and line
 number. Diagnostics must not print the supplied value or other secret
 configuration contents. A generic message such as “Could not load valid
-production configuration” alone is insufficient. This diagnostic behavior is
-a requirement; the current implementation does not yet meet it.
+production configuration” alone is insufficient. Validation failures are
+reported as a field-by-field list; dotenv syntax errors identify the file and
+line.
 
 The schema currently requires all the settings listed above, although
 `deploy-eu-squid` directly uses only `EU_SERVER_ADDRESS` and the SSH settings.

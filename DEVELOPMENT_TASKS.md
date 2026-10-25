@@ -1681,7 +1681,7 @@ runner, "ru-server-feasibility-probe")`), matching
 - **Verify:** Test success/failure summaries and assert no secret or
   test-environment value is emitted.
 
-### 243. Reporting actionable production configuration errors
+### 243. [x] Reporting actionable production configuration errors
 
 - **Source step:** `load_eu_production_settings` validates the local
   `config/prod.env` before `prod-env-host` creates an SSH runner or performs
@@ -1696,6 +1696,10 @@ runner, "ru-server-feasibility-probe")`), matching
   settings, invalid values, placeholders and dotenv syntax errors. Assert
   that output identifies each failing field and reason, includes syntax-error
   line information, omits the supplied values, and causes no remote operation.
+- **Done:** `load_eu_production_settings` reports all missing and invalid
+  fields with sanitized reasons, including malformed JSON arrays. The CLI
+  prints these diagnostics and exits before creating a runner; syntax errors
+  identify the config file and line without exposing its contents.
 
 ## Decisions that block dependent tasks
 

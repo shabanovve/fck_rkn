@@ -78,10 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         ensure_prod_config()
         settings = load_eu_production_settings()
     except (OSError, UnicodeError, ProductionConfigError) as error:
-        logger.error(
-            "Could not load valid production configuration (%s)",
-            type(error).__name__,
-        )
+        logger.error("Could not load valid production configuration:\n%s", error)
         return 2
 
     runner = create_eu_runner(settings)
