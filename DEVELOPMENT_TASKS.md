@@ -332,7 +332,7 @@ behavior that requires them.
   settings (target host and runner selection). Agents must not import
   `fck_rkn.gcp` or `TestEnvironmentSettings`.
 - **Done:** `fck_rkn/agent_config.py` (`AgentSettings` from `config/agents.env`:
-  `EU_SERVER_HOST`, `RU_SERVER_HOST`, `SSH_USER`, `SSH_KEY_PATH`, `SSH_PORT`)
+  `EU_SERVER_ADDRESS`, `RU_SERVER_HOST`, `SSH_USER`, `SSH_KEY_PATH`, `SSH_PORT`)
   with `eu_server_runner` / `ru_server_runner` building `SshRunner`. Production
   agents run remotely over SSH from a controller. `TestEnvironmentSettings`
   stays in `config.py` for `test_env_host` and `fck_rkn/gcp/`; agents still
@@ -373,7 +373,7 @@ behavior that requires them.
   a cloud provider.
 - **Done:** `deploy_outline.sh` takes `@PRIVATE_ADDRESS@` (shell-quoted);
   `deploy_outline_on`, `deploy_outline` and `deploy_outline_server` take
-  `private_address`. Production reads `EU_SERVER_PRIVATE_ADDRESS` and
+  `private_address`. Production reads `EU_SERVER_ADDRESS` and
   `RU_SERVER_PRIVATE_ADDRESS` from `config/agents.env`; the orchestrator uses
   `gcp.compute.private_address_of(instance)` (exit code 5 if missing).
 

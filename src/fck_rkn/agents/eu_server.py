@@ -266,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "logs-squid":
         return follow_squid_logs(runner)
     if args.action == "deploy-outline":
-        return deploy_outline(runner, settings.EU_SERVER_PRIVATE_ADDRESS)
+        return deploy_outline(runner, settings.EU_SERVER_ADDRESS)
     if args.action == "create-outline-user":
         access_url = create_outline_user(runner, args.name)
         if access_url is None:

@@ -11,7 +11,6 @@ from fck_rkn.remote.ssh import SshRunner
 
 def settings() -> EuProductionSettings:
     return EuProductionSettings(
-        EU_SERVER_HOST="eu.example.net",
         EU_SERVER_ADDRESS="192.0.2.10",
         RU_SERVER_ADDRESS="192.0.2.20",
         SSH_USER="deploy",
@@ -31,7 +30,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
         self.assertEqual(
             runner,
             SshRunner(
-                host="eu.example.net",
+                host="192.0.2.10",
                 user="deploy",
                 key_path=Path("/run/secrets/deploy_key"),
                 port=22,
@@ -87,7 +86,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
 
         ensure.assert_called_once_with()
         self.assertIsInstance(deploy.call_args.args[0], SshRunner)
-        self.assertEqual(deploy.call_args.args[0].host, "eu.example.net")
+        self.assertEqual(deploy.call_args.args[0].host, "192.0.2.10")
 
     def test_main_defaults_to_eu_squid_deployment_without_arguments(self) -> None:
         with (
@@ -106,7 +105,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
             self.assertEqual(production_environment.main([]), 0)
 
         self.assertIsInstance(deploy.call_args.args[0], SshRunner)
-        self.assertEqual(deploy.call_args.args[0].host, "eu.example.net")
+        self.assertEqual(deploy.call_args.args[0].host, "192.0.2.10")
 
     def test_main_returns_nonzero_if_configuration_is_invalid(self) -> None:
         with (

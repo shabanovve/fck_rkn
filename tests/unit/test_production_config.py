@@ -17,7 +17,6 @@ from fck_rkn.production_config import (
 
 
 VALID = """\
-EU_SERVER_HOST=eu.example.net
 EU_SERVER_ADDRESS=192.0.2.10
 RU_SERVER_ADDRESS=192.0.2.20
 SSH_USER=deploy
@@ -81,7 +80,6 @@ class ProductionConfigTests(unittest.TestCase):
         settings = load_eu_production_settings(self.config_path)
 
         self.assertIsInstance(settings, EuProductionSettings)
-        self.assertEqual(settings.EU_SERVER_HOST, "eu.example.net")
         self.assertEqual(settings.EU_SERVER_ADDRESS, "192.0.2.10")
         self.assertEqual(settings.SSH_PORT, 2222)
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "2001:db8::53"])
@@ -91,10 +89,10 @@ class ProductionConfigTests(unittest.TestCase):
         self.config_path.parent.mkdir(parents=True)
         self.config_path.write_text(VALID, encoding="utf-8")
 
-        with patch.dict(os.environ, {"EU_SERVER_HOST": "attacker.example"}):
+        with patch.dict(os.environ, {"EU_SERVER_ADDRESS": "192.0.2.99"}):
             settings = load_eu_production_settings(self.config_path)
 
-        self.assertEqual(settings.EU_SERVER_HOST, "eu.example.net")
+        self.assertEqual(settings.EU_SERVER_ADDRESS, "192.0.2.10")
 
     def test_defaults_ssh_port_to_22(self) -> None:
         self.config_path.parent.mkdir(parents=True)
@@ -106,7 +104,9 @@ class ProductionConfigTests(unittest.TestCase):
 
     def test_rejects_missing_required_values_without_exposing_values(self) -> None:
         self.config_path.parent.mkdir(parents=True)
-        self.config_path.write_text("EU_SERVER_HOST=secret-value\n", encoding="utf-8")
+        self.config_path.write_text(
+            "EU_SERVER_ADDRESS=192.0.2.10\n", encoding="utf-8"
+        )
 
         with self.assertRaises(ProductionConfigError) as raised:
             load_eu_production_settings(self.config_path)
@@ -117,17 +117,19 @@ class ProductionConfigTests(unittest.TestCase):
     def test_rejects_template_placeholders(self) -> None:
         self.config_path.parent.mkdir(parents=True)
         self.config_path.write_text(
-            VALID.replace("EU_SERVER_HOST=eu.example.net", "EU_SERVER_HOST=SET_TO_HOST"),
+            VALID.replace(
+                "EU_SERVER_ADDRESS=192.0.2.10",
+                "EU_SERVER_ADDRESS=SET_TO_ADDRESS",
+            ),
             encoding="utf-8",
         )
 
-        with self.assertRaisesRegex(ProductionConfigError, "EU_SERVER_HOST"):
+        with self.assertRaisesRegex(ProductionConfigError, "EU_SERVER_ADDRESS"):
             load_eu_production_settings(self.config_path)
 
     def test_rejects_invalid_addresses_networks_and_ssh_port(self) -> None:
         invalid_variants = (
-            ("EU_SERVER_HOST=eu.example.net", "EU_SERVER_HOST=bad host"),
-            ("EU_SERVER_ADDRESS=192.0.2.10", "EU_SERVER_ADDRESS=not-ip"),
+            ("EU_SERVER_ADDRESS=192.0.2.10", "EU_SERVER_ADDRESS=not-an-ip"),
             ("EU_DNS_ADDRESSES=[\"192.0.2.53\",\"2001:db8::53\"]", "EU_DNS_ADDRESSES=[]"),
             ("EU_NTP_ADDRESSES=[\"192.0.2.123\"]", "EU_NTP_ADDRESSES=[\"ntp.example\"]"),
             ("EU_LOCAL_NETWORKS=[\"192.0.2.0/24\",\"2001:db8:1::/64\"]", "EU_LOCAL_NETWORKS=[\"192.0.2.1/24\"]"),
@@ -150,7 +152,7 @@ class ProductionConfigTests(unittest.TestCase):
         with self.assertRaises(ProductionDotenvSyntaxError) as raised:
             load_eu_production_settings(self.config_path)
 
-        self.assertEqual(raised.exception.line, 13)
+        self.assertEqual(raised.exception.line, 12)
         self.assertNotIn("super-secret-value", str(raised.exception))
 
 

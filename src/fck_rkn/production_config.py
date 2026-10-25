@@ -17,7 +17,6 @@ from pydantic_settings.exceptions import SettingsError
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROD_CONFIG_FILE = REPOSITORY_ROOT / "config" / "prod.env"
 PROD_TEMPLATE_FILE = PROD_CONFIG_FILE.with_name("prod.env.example")
-HOST_LABEL_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\Z")
 PLACEHOLDER_MARKERS = ("SET_TO_", "TODO", "<", ">")
 
 
@@ -57,7 +56,6 @@ class EuProductionSettings(BaseSettings):
     ) -> tuple[object, ...]:
         return init_settings, dotenv_settings
 
-    EU_SERVER_HOST: str = Field(min_length=1)
     EU_SERVER_ADDRESS: str = Field(min_length=1)
     RU_SERVER_ADDRESS: str = Field(min_length=1)
     SSH_USER: str = Field(min_length=1)
@@ -70,7 +68,6 @@ class EuProductionSettings(BaseSettings):
     EU_LOCAL_NETWORKS: list[str]
 
     @field_validator(
-        "EU_SERVER_HOST",
         "EU_SERVER_ADDRESS",
         "RU_SERVER_ADDRESS",
         "SSH_USER",
@@ -85,24 +82,6 @@ class EuProductionSettings(BaseSettings):
         ):
             raise ValueError("must be replaced with an operator-supplied value")
         return value
-
-    @field_validator("EU_SERVER_HOST")
-    @classmethod
-    def validate_server_host(cls, value: str) -> str:
-        candidate = value.strip()
-        try:
-            return ipaddress.ip_address(candidate).compressed
-        except ValueError:
-            if (
-                len(candidate) > 253
-                or not candidate
-                or any(
-                    not HOST_LABEL_PATTERN.fullmatch(label)
-                    for label in candidate.rstrip(".").split(".")
-                )
-            ):
-                raise ValueError("must be an IP address or DNS hostname")
-            return candidate.rstrip(".")
 
     @field_validator(
         "EU_SERVER_ADDRESS",

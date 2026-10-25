@@ -39,9 +39,8 @@ def make_access_url() -> str:
 
 def make_settings(**overrides) -> AgentSettings:
     values = dict(
-        EU_SERVER_HOST="eu",
+        EU_SERVER_ADDRESS="192.0.2.10",
         RU_SERVER_HOST="ru",
-        EU_SERVER_PRIVATE_ADDRESS="eu-private",
         RU_SERVER_PRIVATE_ADDRESS="ru-private",
         SSH_USER="user",
         SSH_KEY_PATH=Path("key"),
@@ -288,7 +287,7 @@ class TestClientAgentTests(unittest.TestCase):
         self.assertEqual(runner.calls, [])
 
     def test_cli_does_not_direct_test_client_tunnel_to_eu(self) -> None:
-        settings = make_settings(EU_SERVER_PRIVATE_ADDRESS="eu-private")
+        settings = make_settings(EU_SERVER_ADDRESS="192.0.2.10")
         with (
             patch("fck_rkn.agents.test_client.load_agent_settings", return_value=settings),
             patch("fck_rkn.agents.test_client.test_client_runner"),
@@ -301,10 +300,10 @@ class TestClientAgentTests(unittest.TestCase):
             self.assertEqual(main(["connect-squid"]), 0)
         self.assertEqual(deploy.call_args.args[1:], ("ss://key\n",))
 
-    def test_cli_uses_configured_private_addresses_for_firewall_paths(self) -> None:
+    def test_cli_uses_configured_addresses_for_firewall_paths(self) -> None:
         settings = make_settings(
             RU_SERVER_PRIVATE_ADDRESS="10.0.0.1",
-            EU_SERVER_PRIVATE_ADDRESS="10.0.0.2",
+            EU_SERVER_ADDRESS="10.0.0.2",
         )
         with (
             patch("fck_rkn.agents.test_client.load_agent_settings", return_value=settings),

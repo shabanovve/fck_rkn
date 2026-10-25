@@ -25,9 +25,8 @@ class AgentSettings(BaseSettings):
         case_sensitive=True,
     )
 
-    EU_SERVER_HOST: str = Field(min_length=1)
+    EU_SERVER_ADDRESS: str = Field(min_length=1)
     RU_SERVER_HOST: str = Field(min_length=1)
-    EU_SERVER_PRIVATE_ADDRESS: str = Field(min_length=1)
     RU_SERVER_PRIVATE_ADDRESS: str = Field(min_length=1)
     TEST_CLIENT_HOST: str = ""
     SSH_USER: str = Field(min_length=1)
@@ -42,7 +41,7 @@ def load_agent_settings(path: Path | None = None) -> AgentSettings:
 
 
 def eu_server_runner(settings: AgentSettings) -> RemoteRunner:
-    return _ssh_runner(settings, settings.EU_SERVER_HOST)
+    return _ssh_runner(settings, settings.EU_SERVER_ADDRESS)
 
 
 def ru_server_runner(settings: AgentSettings) -> RemoteRunner:

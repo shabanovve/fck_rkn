@@ -323,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
         return check_restricted_service_paths(
             runner,
             settings.RU_SERVER_PRIVATE_ADDRESS,
-            settings.EU_SERVER_PRIVATE_ADDRESS,
+            settings.EU_SERVER_ADDRESS,
         )
     if args.action == "request-youtube":
         return request_youtube(runner)

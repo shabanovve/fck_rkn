@@ -227,7 +227,7 @@ class EuServerAgentTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         deploy.assert_called_once_with(
-            make_runner.return_value, load.return_value.EU_SERVER_PRIVATE_ADDRESS
+            make_runner.return_value, load.return_value.EU_SERVER_ADDRESS
         )
 
     def test_creates_or_reuses_named_outline_user_and_returns_key_safely(self) -> None:

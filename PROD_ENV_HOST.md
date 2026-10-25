@@ -45,8 +45,7 @@ Required EU-stage settings:
 
 | Variable | Value |
 | --- | --- |
-| `EU_SERVER_HOST` | IP address or DNS name used by the controller to connect to `eu-server` over SSH. |
-| `EU_SERVER_ADDRESS` | IPv4 or IPv6 address of `eu-server`, used as a service address. |
+| `EU_SERVER_ADDRESS` | IPv4 or IPv6 address of `eu-server`, used by the controller for SSH and by the service configuration. |
 | `RU_SERVER_ADDRESS` | IPv4 or IPv6 peer address for a future EU firewall rule. This value does not authorize the command to connect to RU. |
 | `SSH_USER` | SSH account on `eu-server`. |
 | `SSH_KEY_PATH` | Absolute path on the controller to the SSH key; do not put the key itself in `prod.env`. |
@@ -55,9 +54,10 @@ Required EU-stage settings:
 | `EU_DNS_ADDRESSES`, `EU_NTP_ADDRESSES` | Non-empty JSON arrays of IPv4/IPv6 addresses for EU DNS and NTP services. |
 | `EU_LOCAL_NETWORKS` | Non-empty JSON array of EU networks in strict CIDR notation. |
 
-Server addresses are validated as IP addresses; `EU_SERVER_HOST` also accepts
-a DNS name. The `EU_SERVER_ADDRESS` and `RU_SERVER_ADDRESS` names do not
-themselves restrict the address range.
+Server addresses are validated as IP addresses. `EU_SERVER_ADDRESS` must be
+the SSH-reachable address assigned to `eu-server`; DNS names are not accepted.
+The `EU_SERVER_ADDRESS` and `RU_SERVER_ADDRESS` names do not themselves
+restrict the address range.
 
 Lists must be written as JSON directly in the dotenv file, for example:
 
@@ -74,7 +74,7 @@ values. Settings are loaded from `config/prod.env`, not from the process
 environment.
 
 The schema currently requires all the settings listed above, although
-`deploy-eu-squid` directly uses only `EU_SERVER_HOST` and the SSH settings.
+`deploy-eu-squid` directly uses only `EU_SERVER_ADDRESS` and the SSH settings.
 The addresses, DNS/DHCP/NTP settings, and local networks are needed by later
 production stages and are only validated at this point.
 
@@ -111,7 +111,7 @@ current access policy.
 
 - **Configuration error:** Check that `config/prod.env` is complete and that
   address values, CIDRs, and JSON arrays are valid.
-- **SSH or transport failure:** Check `EU_SERVER_HOST`, the port, username,
+- **SSH or transport failure:** Check `EU_SERVER_ADDRESS`, the port, username,
   key permissions, network reachability, and `sudo` permissions.
 - **Squid deployment failure:** Check Docker and the server's network access
   for downloading the image.

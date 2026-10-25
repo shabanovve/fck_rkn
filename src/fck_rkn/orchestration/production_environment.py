@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 def create_eu_runner(settings: EuProductionSettings) -> RemoteRunner:
     return SshRunner(
-        host=settings.EU_SERVER_HOST,
+        host=settings.EU_SERVER_ADDRESS,
         user=settings.SSH_USER,
         key_path=settings.SSH_KEY_PATH,
         port=settings.SSH_PORT,

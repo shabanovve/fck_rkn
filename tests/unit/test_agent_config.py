@@ -24,8 +24,8 @@ def write_env(text: str) -> Path:
 
 
 VALID = (
-    "EU_SERVER_HOST=eu.example\nRU_SERVER_HOST=ru.example\n"
-    "EU_SERVER_PRIVATE_ADDRESS=eu.internal\nRU_SERVER_PRIVATE_ADDRESS=ru.internal\n"
+    "EU_SERVER_ADDRESS=192.0.2.10\nRU_SERVER_HOST=ru.example\n"
+    "RU_SERVER_PRIVATE_ADDRESS=ru.internal\n"
     "SSH_USER=deploy\nSSH_KEY_PATH=/keys/id\n"
 )
 
@@ -41,7 +41,7 @@ class AgentConfigTests(unittest.TestCase):
         eu = eu_server_runner(settings)
         ru = ru_server_runner(settings)
         self.assertIsInstance(eu, SshRunner)
-        self.assertEqual((eu.host, ru.host), ("eu.example", "ru.example"))
+        self.assertEqual((eu.host, ru.host), ("192.0.2.10", "ru.example"))
         self.assertEqual(eu.port, 2222)
         self.assertEqual(ru.user, "deploy")
 
