@@ -7,10 +7,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from test_production_eu_checks import ScriptedRunner, run_stage
+from test_production_eu_checks import ACCESS_URL, ScriptedRunner, run_stage
 
-from fck_rkn.agents import eu_server_test
-from fck_rkn.orchestration import production_environment
+from fck_rkn import last_run
+from fck_rkn.agents import eu_server_test, test_client
+from fck_rkn.gcp import compute
+from fck_rkn.orchestration import production_environment, test_environment
 
 PRODUCTION_SOURCES = (
     Path(production_environment.__file__),
@@ -36,6 +38,18 @@ class StageRun:
 
     def run(self) -> int:
         return run_stage(self.runner, self.archive)
+
+
+def trap_attributes(test: unittest.TestCase, module, names: tuple[str, ...]) -> list:
+    """Replace each named module attribute with a mock that fails when called."""
+    traps = []
+    for name in names:
+        trap = patch.object(
+            module, name, side_effect=AssertionError(f"{name} must not run")
+        )
+        traps.append(trap.start())
+        test.addCleanup(trap.stop)
+    return traps
 
 
 class RollbackSimulationExclusionTests(unittest.TestCase):
@@ -66,6 +80,25 @@ class RollbackSimulationExclusionTests(unittest.TestCase):
     def test_production_sources_do_not_reference_the_rollback_check(self) -> None:
         self.assertNotIn("check_eu_firewall_rollback", production_source())
         self.assertNotIn("firewall-rollback", production_source())
+
+
+class RepeatedFinalFirewallCheckExclusionTests(unittest.TestCase):
+    """Task 230."""
+
+    def test_invasive_firewall_check_never_runs_and_the_eu_policy_is_inspected_once(self) -> None:
+        stage = StageRun(self)
+        (check,) = trap_attributes(self, eu_server_test, ("check_eu_firewall",))
+
+        self.assertEqual(stage.run(), 0)
+
+        check.assert_not_called()
+        inspections = [c for c in stage.runner.commands if "nft list table inet" in c]
+        self.assertEqual(len(inspections), 1)
+        self.assertNotIn("netns", "\n".join(stage.runner.commands))
+
+    def test_stage_does_not_defer_success_to_ru_actions(self) -> None:
+        self.assertNotIn("ru_runner", production_source())
+        self.assertNotIn("check_ru_firewall", production_source())
 
 
 if __name__ == "__main__":

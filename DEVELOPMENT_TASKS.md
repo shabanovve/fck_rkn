@@ -1626,7 +1626,7 @@ runner, "ru-server-feasibility-probe")`), matching
   and timeout without leaking remote output.
 - **Result:** The stage runs check_rkn_blacklist_updater(runner, 'eu') after the apply and read-only verification. Tests cover an active/inactive timer, a failed update, empty sets, failure and timeout without leaked output, and that the check never changes the updater or firewall.
 
-### 230. Excluding the repeated final EU firewall check
+### 230. [x] Excluding the repeated final EU firewall check
 
 - **Source step:** The final `check_eu_firewall` call after RU firewall and
   rollback checks in the test workflow.
@@ -1636,6 +1636,7 @@ runner, "ru-server-feasibility-probe")`), matching
   applying the EU rules.
 - **Verify:** EU-only orchestration does not defer its success or require RU
   actions to repeat the already completed EU policy inspection.
+- **Result:** Added exclusion tests: check_eu_firewall (the invasive probe check) never runs, the EU policy is inspected once by the read-only check, and no RU action is required.
 
 ### 231. Excluding persistence of test-run inputs
 
