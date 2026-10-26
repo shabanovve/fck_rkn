@@ -1695,12 +1695,13 @@ runner, "ru-server-feasibility-probe")`), matching
 - **Verify:** EU-stage orchestration never invokes the test-client check.
 - **Result:** Added exclusion tests: check_outline_connection is never invoked.
 
-### 237. Excluding test-client Squid tunnel deployment
+### 237. [x] Excluding test-client Squid tunnel deployment
 
 - **Source step:** `deploy_squid_tunnel(client_runner, client_access_url)`.
 - **Production disposition:** Do not deploy a test-client Squid tunnel in the
   EU production stage.
 - **Verify:** No test-client container or tunnel action is started.
+- **Result:** Added exclusion tests: deploy_squid_tunnel is never invoked.
 
 ### 238. Excluding the test-client Squid tunnel check
 
