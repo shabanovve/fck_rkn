@@ -1701,6 +1701,30 @@ runner, "ru-server-feasibility-probe")`), matching
   prints these diagnostics and exits before creating a runner; syntax errors
   identify the config file and line without exposing its contents.
 
+### 244. Generating the production configuration interactively
+
+- **Source step:** `ensure_prod_config` copies the template, and the operator
+  fills it in by hand (task 203). The template stays as the reference for
+  variable meanings.
+- **Change:** Replace manual editing with an interactive configuration step.
+  It prompts for the `eu-server` address and the SSH settings (`SSH_USER`,
+  `SSH_KEY_PATH`, `SSH_PORT`), establishes the SSH connection, and then
+  automatically discovers every other setting readable from `eu-server`
+  (`EU_LOCAL_NETWORKS`, `EU_DNS_ADDRESSES`, `EU_DHCP_SERVER_ADDRESS`,
+  `EU_NTP_ADDRESSES`, and `EU_METADATA_ADDRESS` by probing) using
+  read-only commands. Settings that cannot be discovered (such as
+  `RU_SERVER_ADDRESS`) or whose discovery fails, is ambiguous or finds nothing (for example, no
+  metadata endpoint) must be
+  requested explicitly, with the allowed form shown. Validate all values with
+  the existing loader rules, show them for confirmation, and write
+  `config/prod.env` atomically with mode `0600`; never overwrite an existing
+  file without explicit confirmation. Discovery must not modify the server or
+  print secrets.
+- **Verify:** Fake-runner tests for successful discovery, partial or failed
+  discovery falling back to prompts, invalid input re-prompting, SSH failure
+  writing no file, declined confirmation writing no file, and existing-file
+  protection. Assert no value or secret leaks into logs.
+
 ## Decisions that block dependent tasks
 
 - GCP project ID, billing/account, region/zone, Ubuntu image, VM size/cost,
