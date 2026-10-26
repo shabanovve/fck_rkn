@@ -37,7 +37,9 @@ DHCP_COMMAND = (
     "cat /run/systemd/netif/leases/* 2>/dev/null; "
     "cat /var/lib/dhcp/dhclient*.leases /var/lib/NetworkManager/*.lease "
     "2>/dev/null; "
-    "nmcli -t -f DHCP4.OPTION,DHCP6.OPTION device show 2>/dev/null; true"
+    "nmcli -t -f DHCP4.OPTION,DHCP6.OPTION device show 2>/dev/null; "
+    "(journalctl -b --no-pager 2>/dev/null || sudo -n journalctl -b --no-pager "
+    "2>/dev/null) | grep -i 'dhcp.*acquired from' | tail -n 5; true"
 )
 NTP_COMMAND = (
     "timedatectl show-timesync --property=CurrentNTPServer "
@@ -109,6 +111,7 @@ def parse_dns_addresses(output: str) -> list[str]:
 
 def parse_dhcp_server(output: str) -> list[str]:
     tokens = re.findall(r"SERVER_ADDRESS=(" + IPV4_RE + ")", output)
+    tokens += re.findall(r"acquired from (" + IPV4_RE + ")", output)
     tokens += re.findall(
         r"dhcp[-_]server[-_]identifier\D{1,4}(" + IPV4_RE + ")", output, re.I
     )

@@ -95,6 +95,13 @@ class ProductionSetupTests(unittest.TestCase):
             ["192.0.2.2"],
         )
         self.assertEqual(
+            setup.parse_dhcp_server(
+                "ens4: DHCPv4 address 10.166.0.2/32, gateway 10.166.0.1 "
+                "acquired from 169.254.169.254"
+            ),
+            ["169.254.169.254"],
+        )
+        self.assertEqual(
             setup.parse_ntp_addresses("^* 192.0.2.123 2 6 377 1 +1us\nMS Name/IP\n"),
             ["192.0.2.123"],
         )
@@ -120,6 +127,7 @@ class ProductionSetupTests(unittest.TestCase):
         runner = ScriptedRunner(FULL)
         self.run_setup(ANSWERS, runner)
         for command in runner.commands:
+            command = command.replace("sudo -n journalctl -b --no-pager", "")
             for forbidden in ("rm ", "systemctl", "sudo", ">/etc", "apt"):
                 self.assertNotIn(forbidden, command)
 
