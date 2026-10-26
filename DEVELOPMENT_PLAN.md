@@ -242,7 +242,10 @@ defined and tested.
   production installation is considered complete.
 - The production Outline image must be supplied as a reviewed artifact.
   The test-only controller build/export/load workflow is not a production
-  artifact distribution or upgrade policy.
+  artifact distribution or upgrade policy. Decision (task 217): a locally
+  built archive identified by its SHA-256 digest, pinned in the tracked
+  `artifacts/outline-image.sha256` and verified before transfer; no registry.
+  See `PROD_ENV_HOST.md`, "Outline image artifact".
 - The actual production provider, network addresses/ranges, SSH account and
   approved key source must be supplied by the operator before populating
   `config/prod.env`; do not substitute test/GCP values.

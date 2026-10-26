@@ -1423,7 +1423,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `.venv/bin/eu-server-test-agent squid-block`.
 - **Result:** The blocking check runs last in the Squid stage. Tests cover its fail-fast behavior (non-denial and timeout), the denied ru-domain and IP-literal cases (including CONNECT and IPv6), and that the command is read-only and carries no credentials or keys. The next production action, Outline deployment (task 220), is blocked by tasks 217-219.
 
-### 217. Selecting the production Outline image artifact
+### 217. [x] Selecting the production Outline image artifact
 
 - **Source step:** `build_outline_image` builds the patched image locally
   after the Squid checks.
@@ -1435,6 +1435,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Verify:** The approved artifact can be identified reproducibly and its
   provenance/integrity verification method is documented. Do not choose a
   registry or publishing service without approval.
+- **Result:** Approved by the operator: a locally built archive from the pinned Dockerfile, identified by its SHA-256 digest recorded in the tracked `artifacts/outline-image.sha256` and verified before transfer; no registry. Source, identity, provenance, verification and update policy are documented in `PROD_ENV_HOST.md` ("Outline image artifact") and `DEVELOPMENT_PLAN.md`.
 
 ### 218. Retrieving and verifying the EU Outline image artifact
 

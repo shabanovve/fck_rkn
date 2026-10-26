@@ -178,6 +178,30 @@ configuration before running. If an existing Squid container is running with
 a different configuration, the deployment script replaces it to apply the
 current access policy.
 
+## Outline image artifact
+
+Production never builds or pulls the patched Outline Server image as a side
+effect of a deployment. It consumes a reviewed artifact:
+
+- **Source:** an archive built locally by the operator from the pinned
+  `outline_shadowbox.Dockerfile` (`outline-ss-server` tag `v1.7.3` on the
+  `shadowbox:stable` base). No registry or publishing service is used.
+- **Identity:** the SHA-256 digest of the gzip archive. The approved digest
+  is the single lowercase hex line in the tracked file
+  `artifacts/outline-image.sha256`. The archive itself lives untracked at
+  `config/artifacts/outline-image.tar.gz`. A tag name alone is never trusted.
+- **Provenance:** the reviewed change that updates the digest file records
+  the Dockerfile revision, `outline-ss-server` version and base image used.
+  The base image tag is mutable, so a rebuild may produce a different digest;
+  the approved archive, not a rebuild, is what gets deployed.
+- **Verification:** before any transfer, the archive digest is computed and
+  compared with the approved digest. A missing, empty or malformed digest
+  file, a missing archive, or a mismatch stops the deployment.
+- **Update policy:** build a new archive with
+  `prod-env-host build-outline-artifact`, review it, and commit its digest in
+  `artifacts/outline-image.sha256` through a normal reviewed change. Until a
+  digest is committed, production Outline deployment fails closed.
+
 ## Troubleshooting
 
 - **Configuration error:** Use the field-specific validation reason and line
