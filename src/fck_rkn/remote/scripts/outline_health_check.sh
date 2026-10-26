@@ -12,7 +12,13 @@ if [ -z "$api_url" ]; then
   echo "Outline Server API configuration is unavailable" >&2
   exit 1
 fi
-if ! curl --insecure --fail --silent "$api_url/access-keys" 2>/dev/null \
+# The configured address may be a NAT address that is unreachable from the host itself.
+loopback_url="$(printf '%s' "$api_url" | sed -E 's#^(https?://)\[?[^/]+\]?:([0-9]+)/#\1127.0.0.1:\2/#')"
+fetch_keys() {
+  curl --insecure --fail --silent --max-time 5 "$api_url/access-keys" 2>/dev/null ||
+    curl --insecure --fail --silent --max-time 10 "$loopback_url/access-keys" 2>/dev/null
+}
+if ! fetch_keys \
   | python3 -c 'import json,sys; data=json.load(sys.stdin); keys=data.get("accessKeys"); sys.exit(0 if isinstance(keys,list) and keys else 1)'; then
   echo "Outline Server authorized management endpoint is unhealthy" >&2
   exit 1

@@ -453,3 +453,18 @@ class FirewallReadonlyCheckTests(unittest.TestCase):
             self.assertEqual(main(["firewall-readonly"]), 0)
 
         self.assertEqual(check.call_args.args[1], READONLY_INPUT)
+
+
+class OutlineApiLoopbackFallbackTests(unittest.TestCase):
+    def test_scripts_fall_back_to_loopback_when_the_configured_address_hangs(self) -> None:
+        health = render("outline_health_check.sh", container_name="c", image="i",
+                        state_directory="/s", keys_port=10001)
+        user_script = (
+            Path(__file__).parents[2]
+            / "src/fck_rkn/remote/scripts/create_outline_user.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("--max-time 5", health)
+        self.assertIn("127.0.0.1", health)
+        self.assertIn("127.0.0.1", user_script)
+        self.assertNotIn("--max-time", health.replace("--max-time 5", "").replace("--max-time 10", ""))

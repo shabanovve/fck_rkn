@@ -1,4 +1,5 @@
 import json
+import re
 import ssl
 import sys
 import urllib.request
@@ -13,9 +14,16 @@ with open(f'{state_directory}/access.txt', encoding='utf-8') as state:
 if not api_url:
     raise RuntimeError('Outline management endpoint is unavailable')
 context = ssl._create_unverified_context()
+loopback_url = re.sub(r'^(https?://)\[?[^/]+\]?:(\d+)/', r'\g<1>127.0.0.1:\2/', api_url)
 keys_endpoint = f'{api_url}/access-keys'
-with urllib.request.urlopen(keys_endpoint, context=context, timeout=30) as response:
-    keys = json.load(response).get('accessKeys')
+try:
+    with urllib.request.urlopen(keys_endpoint, context=context, timeout=5) as response:
+        keys = json.load(response).get('accessKeys')
+except OSError:
+    # The configured address may be a NAT address that is unreachable from the host.
+    keys_endpoint = f'{loopback_url}/access-keys'
+    with urllib.request.urlopen(keys_endpoint, context=context, timeout=30) as response:
+        keys = json.load(response).get('accessKeys')
 if not isinstance(keys, list):
     raise RuntimeError('Outline returned an invalid access-key list')
 matching_keys = [key for key in keys if key.get('name') == user_name]
