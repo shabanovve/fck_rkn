@@ -2053,7 +2053,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Result:** `ru_mtproxy_forward_steps` runs `check_ru_mtproxy_forward`
   after deployment. Unit tests verify step ordering and failure propagation.
 
-### 314. Preparing production RU firewall input
+### 314. [x] Preparing production RU firewall input
 
 - **Depends on:** Tasks 303, 306, 309, 311 and 313.
 - **Source step:** `fetch_rkn_blacklist`, `fetch_github_networks`,
@@ -2068,6 +2068,9 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Verify:** Test malformed/empty inputs, provider/crawler overlap, IP/CIDR
   family constraints and rejection of test-only fields. Preparation failure
   must occur before any firewall command.
+- **Result:** `prepare_ru_firewall_input` correctly parses RU settings,
+  access URL, and upstream ranges. Unit tests enforce required settings and
+  test-only exclusion.
 
 ### 315. Applying the RU production firewall after EU firewall
 

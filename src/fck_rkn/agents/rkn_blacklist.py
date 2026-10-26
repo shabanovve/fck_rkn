@@ -22,6 +22,9 @@ BLACKLIST_URL = (
     "blacklists_nftables/blacklist.nft"
 )
 GITHUB_META_URL = "https://api.github.com/meta"
+CANONICAL_RANGES_URL = (
+    "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS41231"
+)
 FETCH_TIMEOUT_SECONDS = 30
 MAX_RESPONSE_BYTES = 20 * 1024 * 1024
 USER_AGENT = "fck-rkn-blacklist-updater"
@@ -163,6 +166,42 @@ def fetch_blacklist() -> tuple[list[str], list[str]]:
 def fetch_github_networks() -> list[str]:
     """Fetch and validate published GitHub API and web networks."""
     return parse_github_networks(_fetch(GITHUB_META_URL))
+
+
+def parse_snapd_networks(content: bytes) -> list[str]:
+    """Parse Canonical prefixes for snapd announced by AS41231."""
+    try:
+        document = json.loads(content.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("Could not fetch the Canonical ranges") from error
+    try:
+        entries = document["data"]["prefixes"]
+        prefixes = [e["prefix"] for e in entries]
+    except (KeyError, TypeError) as error:
+        raise ValueError("The Canonical ranges document is malformed") from error
+    values: set[str] = set()
+    for item in prefixes:
+        if not isinstance(item, str):
+            raise ValueError("Canonical ranges contains a non-string prefix")
+        try:
+            values.add(ipaddress.ip_network(item, strict=True).with_prefixlen)
+        except ValueError as error:
+            raise ValueError("Canonical ranges contains an invalid prefix") from error
+    if not values:
+        raise ValueError("Canonical ranges contains no prefixes")
+    return sorted(
+        values,
+        key=lambda value: (
+            ipaddress.ip_network(value).version,
+            int(ipaddress.ip_network(value).network_address),
+            ipaddress.ip_network(value).prefixlen,
+        ),
+    )
+
+
+def fetch_snapd_networks() -> list[str]:
+    """Fetch and validate Canonical snapd networks."""
+    return parse_snapd_networks(_fetch(CANONICAL_RANGES_URL))
 
 
 def _reject_overlap(
