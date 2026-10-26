@@ -2072,7 +2072,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   access URL, and upstream ranges. Unit tests enforce required settings and
   test-only exclusion.
 
-### 315. Applying the RU production firewall after EU firewall
+### 315. [x] Applying the RU production firewall after EU firewall
 
 - **Depends on:** Task 226 and task 314.
 - **Source step:** `apply_ru_firewall(ru_runner, firewall_config)`.
@@ -2083,8 +2083,11 @@ production settings and `SshRunner`, never the standalone CLIs that read
   pass.
 - **Verify:** Test successful apply, rejected input, remote failure and
   updater-install failure; never report success or continue after a failure.
+- **Result:** `ru_firewall_steps` runs input preparation and applies the RU
+  guest firewall (with the updater). Tests ensure the sequence aborts on early
+  input validation errors or remote apply errors.
 
-### 316. Verifying the RU production firewall policy
+### 316. [x] Verifying the RU production firewall policy
 
 - **Depends on:** Tasks 226 and 315.
 - **Source step:** `check_firewall_policy(ru_runner, firewall_config)`.
@@ -2094,6 +2097,8 @@ production settings and `SshRunner`, never the standalone CLIs that read
   invoke checks that mutate firewall state.
 - **Verify:** Check allowed/denied policy expectations using only approved
   production inputs, prove no rules are changed, and stop on any mismatch.
+- **Result:** `ru_firewall_steps` runs `check_ru_firewall_policy_rules` after
+  applying the firewall. Unit tests check ordering and failure propagation.
 
 ### 317. Checking the RU blacklist updater
 

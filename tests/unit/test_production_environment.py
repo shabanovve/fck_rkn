@@ -391,6 +391,66 @@ class ProductionEnvironmentTests(unittest.TestCase):
             )
             self.assertEqual(steps[1][1](), 39)
 
+
+    def test_ru_firewall_steps_prepares_input_and_applies_firewall_in_order(self) -> None:
+        runner = object()
+        secret_url = "ss://Y2hhY2hhOnBhc3M@192.0.2.10:10001"
+        with (
+            patch(
+                "fck_rkn.production_firewall.prepare_ru_firewall_input",
+                return_value="prepared-ru-config",
+            ) as prepare,
+            patch.object(
+                production_environment, "apply_ru_firewall", return_value=0
+            ) as apply,
+        ):
+            steps = production_environment.ru_firewall_steps(
+                runner, settings(), secret_url
+            )
+            self.assertEqual(len(steps), 2)
+            self.assertEqual(steps[0][0], "RU firewall input preparation")
+            self.assertEqual(steps[1][0], "RU firewall application")
+            self.assertEqual(steps[0][1](), 0)
+            self.assertEqual(steps[1][1](), 0)
+
+        prepare.assert_called_once_with(settings(), secret_url)
+        apply.assert_called_once_with(runner, "prepared-ru-config")
+
+    def test_ru_firewall_steps_prepare_failure_stops_sequence(self) -> None:
+        runner = object()
+        error = production_environment.FirewallInputError("invalid ru input")
+        with (
+            patch(
+                "fck_rkn.production_firewall.prepare_ru_firewall_input", side_effect=error
+            ) as prepare,
+            patch.object(production_environment, "apply_ru_firewall") as apply,
+            self.assertLogs(production_environment.logger, level="ERROR"),
+        ):
+            steps = production_environment.ru_firewall_steps(
+                runner, settings(), "ss://key"
+            )
+            self.assertEqual(steps[0][1](), 1)
+            
+        prepare.assert_called_once()
+        apply.assert_not_called()
+
+    def test_ru_firewall_steps_apply_reports_failure(self) -> None:
+        runner = object()
+        with (
+            patch(
+                "fck_rkn.production_firewall.prepare_ru_firewall_input",
+                return_value="prepared-ru-config",
+            ),
+            patch.object(
+                production_environment, "apply_ru_firewall", return_value=42
+            ) as apply,
+        ):
+            steps = production_environment.ru_firewall_steps(
+                runner, settings(), "ss://key"
+            )
+            steps[0][1]()
+            self.assertEqual(steps[1][1](), 42)
+
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()
         with (

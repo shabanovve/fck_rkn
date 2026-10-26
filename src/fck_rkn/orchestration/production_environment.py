@@ -16,6 +16,7 @@ from fck_rkn.agents.eu_server import (
     deploy_squid,
 )
 from fck_rkn.agents.ru_server import (
+    apply_ru_firewall,
     deploy_mtproxy_forward,
     deploy_outline_client,
     deploy_outline_server,
@@ -344,6 +345,29 @@ def firewall_steps(
         (
             "EU RKN blacklist updater check",
             lambda: check_rkn_blacklist_updater(runner, "eu"),
+        ),
+    ]
+
+
+def ru_firewall_steps(
+    runner: RemoteRunner, settings: EuProductionSettings, access_url: str
+) -> list[Step]:
+    from fck_rkn.production_firewall import prepare_ru_firewall_input
+    prepared: dict[str, str] = {}
+
+    def prepare() -> int:
+        try:
+            prepared["config"] = prepare_ru_firewall_input(settings, access_url)
+        except FirewallInputError as error:
+            logger.error("Preparing the RU firewall input failed: %s", error)
+            return 1
+        return 0
+
+    return [
+        ("RU firewall input preparation", prepare),
+        (
+            "RU firewall application",
+            lambda: apply_ru_firewall(runner, prepared["config"]),
         ),
     ]
 
