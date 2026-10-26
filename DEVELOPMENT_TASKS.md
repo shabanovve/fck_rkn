@@ -1978,7 +1978,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   `LocalSecretStore` in memory. Missing or unsafe files fail closed. The secret
   is never logged, placed in argv or written to git-tracked files.
 
-### 308. Deploying the RU Outline client
+### 308. [x] Deploying the RU Outline client
 
 - **Depends on:** Tasks 306–307.
 - **Source step:** `deploy_outline_client(ru_runner, access_url)`.
@@ -1987,6 +1987,9 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Verify:** Test that the correct in-memory key reaches the agent through
   its protected input channel, successful deployment is required before the
   client check, and failures stop the sequence without exposing the key.
+- **Result:** `ru_outline_client_deploy_steps` invokes `deploy_outline_client`
+  using the in-memory access URL. Unit tests verify that the key is passed,
+  failures propagate, and no secrets are logged.
 
 ### 309. Checking the RU Outline client
 

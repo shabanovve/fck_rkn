@@ -15,7 +15,10 @@ from fck_rkn.agents.eu_server import (
     create_outline_user,
     deploy_squid,
 )
-from fck_rkn.agents.ru_server import deploy_outline_server
+from fck_rkn.agents.ru_server import (
+    deploy_outline_client,
+    deploy_outline_server,
+)
 from fck_rkn.agents.ru_server_test import (
     check_outline_health as check_ru_outline_health,
 )
@@ -178,6 +181,17 @@ def ru_outline_steps(runner: RemoteRunner, ru_address: str) -> list[Step]:
     return [
         ("RU Outline deployment", lambda: deploy_outline_server(runner, ru_address)),
         ("RU Outline health check", lambda: check_ru_outline_health(runner)),
+    ]
+
+
+def ru_outline_client_deploy_steps(
+    runner: RemoteRunner, access_url: str
+) -> list[Step]:
+    return [
+        (
+            "RU Outline client deployment",
+            lambda: deploy_outline_client(runner, access_url),
+        )
     ]
 
 
