@@ -208,6 +208,18 @@ effect of a deployment. It consumes a reviewed artifact:
   `artifacts/outline-image.sha256` through a normal reviewed change. Until a
   digest is committed, production Outline deployment fails closed.
 
+## Secret storage for the RU stage
+
+The dedicated EU Outline key for the later RU stage
+(`ru-server-feasibility-probe`) is created or reused on `eu-server` and kept
+only in the operator-local store: a `0600` file inside a `0700` directory,
+`$XDG_CONFIG_HOME/fck_rkn/secrets/` (default `~/.config/fck_rkn/secrets/`),
+outside the repository. It never appears in `prod.env`, logs, argv or test
+run state. A run reuses the key on the server and refreshes the local copy
+atomically; the server is authoritative. Reading a copy with permissions
+broader than `0600` is refused. Access is limited to the operator account;
+delete the file to revoke the local copy.
+
 ## Troubleshooting
 
 - **Configuration error:** Use the field-specific validation reason and line

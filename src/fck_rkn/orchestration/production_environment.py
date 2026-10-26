@@ -11,6 +11,7 @@ from pathlib import Path
 from fck_rkn.agents.eu_server import (
     deploy_mtproxy,
     deploy_outline,
+    create_outline_user,
     deploy_squid,
 )
 from fck_rkn.agents.outline import load_outline_image
@@ -32,12 +33,15 @@ from fck_rkn.production_config import (
     ensure_prod_config,
     load_eu_production_settings,
 )
+from fck_rkn.production_secrets import LocalSecretStore, SecretStoreError
 from fck_rkn.production_setup import ProductionSetupError, configure_interactively
 from fck_rkn.remote.runner import RemoteRunner
 from fck_rkn.remote.ssh import SshRunner
 
 
 logger = logging.getLogger(__name__)
+RU_PROBE_OUTLINE_USER = "ru-server-feasibility-probe"
+RU_PROBE_KEY_SECRET = "ru-outline-access-url"
 
 
 def create_eu_runner(settings: EuProductionSettings) -> RemoteRunner:
@@ -128,12 +132,33 @@ def mtproxy_steps(runner: RemoteRunner) -> list[Step]:
     ]
 
 
+def provision_ru_outline_key(
+    runner: RemoteRunner, store: LocalSecretStore | None = None
+) -> int:
+    """Create or reuse the EU key for the RU stage and keep it in the local store."""
+    access_url = create_outline_user(runner, RU_PROBE_OUTLINE_USER)
+    if access_url is None:
+        return 1
+    try:
+        (store or LocalSecretStore()).write(RU_PROBE_KEY_SECRET, access_url)
+    except SecretStoreError as error:
+        logger.error("Could not store the RU-stage Outline key: %s", error)
+        return 1
+    logger.info("The RU-stage Outline key is stored in the protected local store")
+    return 0
+
+
+def ru_key_steps(runner: RemoteRunner) -> list[Step]:
+    return [("RU-stage Outline key", lambda: provision_ru_outline_key(runner))]
+
+
 def eu_stage_steps(runner: RemoteRunner, settings: EuProductionSettings) -> list[Step]:
     return (
         squid_steps(runner)
         + outline_image_steps(runner)
         + outline_steps(runner, settings.EU_SERVER_ADDRESS)
         + mtproxy_steps(runner)
+        + ru_key_steps(runner)
     )
 
 

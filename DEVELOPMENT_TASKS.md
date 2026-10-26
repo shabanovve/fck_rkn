@@ -1522,7 +1522,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `.venv/bin/eu-server-test-agent mtproxy`.
 - **Result:** The EU stage runs `check_mtproxy` right after the MTProxy deployment. Tests (`MtproxyCheckTests`) cover ordering, failure and timeout stopping the stage, and the read-only check that never prints the secret. The next EU action, the key for the RU stage (task 224), awaits an approved secret backend.
 
-### 224. Provisioning the EU Outline key for the later RU stage
+### 224. [x] Provisioning the EU Outline key for the later RU stage
 
 - **Source step:** `create_outline_user(eu_runner, RU_PROBE_OUTLINE_USER)`,
   currently called during the RU portion of the test run.
@@ -1542,6 +1542,7 @@ runner, "ru-server-feasibility-probe")`), matching
   is therefore not the production orchestration mechanism; the orchestrator
   must capture the function return value in memory and send it directly to
   the approved secret-store client without printing it.
+- **Result:** Approved backend: an operator-local `0600` file in a `0700` directory outside the repository (`production_secrets.LocalSecretStore`, documented in `PROD_ENV_HOST.md`). The stage captures `create_outline_user` output in memory, writes it atomically to the store, and never prints it. Reuse refreshes the local copy; failures store nothing and log no secret. Tests: `test_production_secrets.py` and `RuStageOutlineKeyTests`.
 
 ### 225. Preparing production EU firewall inputs
 

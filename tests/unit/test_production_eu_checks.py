@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import tempfile
 import unittest
@@ -24,6 +25,7 @@ from fck_rkn.agents.eu_server_test import (
 )
 from fck_rkn.orchestration import production_environment
 from fck_rkn.production_config import EuProductionSettings
+from fck_rkn.production_secrets import LocalSecretStore, SecretStoreError
 from fck_rkn.remote.runner import RemoteResult, RemoteTimeoutError
 
 MUTATING_COMMANDS = re.compile(
@@ -31,6 +33,9 @@ MUTATING_COMMANDS = re.compile(
     r"|\b(systemctl|iptables|ip6tables|nft|ipset|apt-get|apt|rm|mv|tee)\b"
     r"|>\s*/(etc|opt|var|usr)"
 )
+
+
+ACCESS_URL = "ss://Y2hhY2hhOnNlY3JldA@192.0.2.10:10001/?outline=1\n"
 
 
 class ScriptedRunner:
@@ -44,7 +49,12 @@ class ScriptedRunner:
     def run(self, command, stdin, timeout, stream_output=False):
         self.commands.append(command)
         self.stdins.append(stdin)
-        outcome = self.results.pop(0) if self.results else RemoteResult(0)
+        if self.results:
+            outcome = self.results.pop(0)
+        elif "ru-server-feasibility-probe" in command:
+            outcome = RemoteResult(0, ACCESS_URL)
+        else:
+            outcome = RemoteResult(0)
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
@@ -65,7 +75,10 @@ def stage_settings() -> EuProductionSettings:
 
 
 def run_stage(runner: ScriptedRunner, archive: Path | None) -> int:
+    config_home = tempfile.TemporaryDirectory()
     with (
+        config_home,
+        patch.dict(os.environ, {"XDG_CONFIG_HOME": config_home.name}),
         patch.object(
             production_environment, "retrieve_outline_artifact", return_value=archive
         ),
@@ -451,6 +464,94 @@ class MtproxyCheckTests(unittest.TestCase):
         self.assertIsNone(MUTATING_COMMANDS.search(MTPROXY_CHECK_COMMAND))
         self.assertIn("grep -qE", MTPROXY_CHECK_COMMAND)
         self.assertNotRegex(MTPROXY_CHECK_COMMAND, r"cat\s+\"?\$secret_file")
+
+
+class RuStageOutlineKeyTests(unittest.TestCase):
+    """Task 224."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.directory = Path(directory.name)
+        self.archive = self.directory / "outline-image.tar.gz"
+        self.archive.write_bytes(b"verified archive")
+        self.store = LocalSecretStore(self.directory / "secrets")
+
+    def provision(self, runner: ScriptedRunner) -> tuple[int, str]:
+        with self.assertLogs(production_environment.logger, level="INFO") as logs:
+            result = production_environment.provision_ru_outline_key(runner, self.store)
+        return result, "\n".join(logs.output)
+
+    def test_creates_the_dedicated_key_and_stores_it_locally(self) -> None:
+        runner = ScriptedRunner()
+
+        result, logs = self.provision(runner)
+
+        self.assertEqual(result, 0)
+        self.assertIn("ru-server-feasibility-probe", runner.commands[0])
+        self.assertEqual(self.store.read("ru-outline-access-url"), ACCESS_URL.strip())
+        self.assertNotIn("ss://", logs)
+
+    def test_repeated_run_reuses_the_key_and_refreshes_the_local_copy(self) -> None:
+        self.provision(ScriptedRunner())
+        result, _ = self.provision(ScriptedRunner())
+
+        self.assertEqual(result, 0)
+        self.assertEqual(self.store.read("ru-outline-access-url"), ACCESS_URL.strip())
+
+    def test_key_creation_failure_stores_nothing(self) -> None:
+        for label, outcome in (
+            ("failure", RemoteResult(1, "ss://leak", "ss://leak")),
+            ("timeout", RemoteTimeoutError()),
+            ("not a key", RemoteResult(0, "garbage")),
+        ):
+            with self.subTest(case=label):
+                with self.assertLogs(production_environment.logger, level="INFO"):
+                    production_environment.logger.info("start")
+                    result = production_environment.provision_ru_outline_key(
+                        ScriptedRunner([outcome]), self.store
+                    )
+
+                self.assertEqual(result, 1)
+                self.assertIsNone(self.store.read("ru-outline-access-url"))
+
+    def test_store_failure_fails_without_leaking_the_key(self) -> None:
+        class BrokenStore:
+            def write(self, name: str, value: str) -> None:
+                raise SecretStoreError("Could not store the secret: denied")
+
+        with self.assertLogs(production_environment.logger, level="ERROR") as logs:
+            result = production_environment.provision_ru_outline_key(
+                ScriptedRunner(), BrokenStore()
+            )
+
+        self.assertEqual(result, 1)
+        self.assertNotIn("ss://", "\n".join(logs.output))
+
+    def test_stage_runs_the_key_step_last_and_keeps_the_key_out_of_output(self) -> None:
+        runner = ScriptedRunner()
+        stdout, stderr = StringIO(), StringIO()
+        with (
+            patch.object(
+                production_environment, "retrieve_outline_artifact", return_value=self.archive
+            ),
+            patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.directory)}),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+            self.assertLogs(production_environment.logger, level="INFO") as logs,
+        ):
+            result = production_environment.run_eu_stage(runner, stage_settings())
+
+        self.assertEqual(result, 0)
+        self.assertIn("ru-server-feasibility-probe", runner.commands[-1])
+        self.assertNotIn("ss://", stdout.getvalue() + stderr.getvalue() + "\n".join(logs.output))
+        self.assertTrue(all(ACCESS_URL.strip() not in command for command in runner.commands))
+        self.assertTrue((self.directory / "fck_rkn" / "secrets").is_dir())
+
+    def test_key_is_never_written_to_prod_env_or_test_run_state(self) -> None:
+        source = Path(production_environment.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("last_run", source)
+        self.assertNotIn("prod.env", source.replace("config/prod.env", ""))
 
 
 if __name__ == "__main__":
