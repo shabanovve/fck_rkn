@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from pathlib import Path
+from unittest.mock import patch
 
 from fck_rkn.agents.eu_server_test import (
     SQUID_BLOCK_CHECK_COMMAND,
@@ -28,13 +31,26 @@ class ScriptedRunner:
     def __init__(self, results: list[RemoteResult | Exception] | None = None) -> None:
         self.results = list(results or [])
         self.commands: list[str] = []
+        self.stdins: list[object] = []
 
     def run(self, command, stdin, timeout, stream_output=False):
         self.commands.append(command)
+        self.stdins.append(stdin)
         outcome = self.results.pop(0) if self.results else RemoteResult(0)
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
+
+
+def run_stage(runner: ScriptedRunner, archive: Path | None) -> int:
+    with (
+        patch.object(
+            production_environment, "retrieve_outline_artifact", return_value=archive
+        ),
+        redirect_stdout(StringIO()),
+        redirect_stderr(StringIO()),
+    ):
+        return production_environment.run_eu_stage(runner)
 
 
 def run_deployment(runner: ScriptedRunner) -> int:
@@ -165,6 +181,66 @@ class SquidBlockingCheckTests(unittest.TestCase):
             SQUID_BLOCK_CHECK_COMMAND,
             r"(?i)authorization|password|secret|token|ss://|accessurl",
         )
+
+
+class OutlineImageLoadTests(unittest.TestCase):
+    """Task 219."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.archive = Path(directory.name) / "outline-image.tar.gz"
+        self.archive.write_bytes(b"verified archive")
+
+    def test_verified_archive_is_streamed_through_stdin_after_the_squid_checks(
+        self,
+    ) -> None:
+        runner = ScriptedRunner()
+
+        self.assertEqual(run_stage(runner, self.archive), 0)
+
+        self.assertEqual(len(runner.commands), 5)
+        self.assertEqual(runner.commands[3], SQUID_BLOCK_CHECK_COMMAND)
+        self.assertEqual(runner.stdins[4], self.archive)
+        self.assertIn(str(self.archive.stat().st_size), runner.commands[4])
+        self.assertNotIn(str(self.archive), runner.commands[4])
+
+    def test_load_command_skips_an_image_that_is_already_present(self) -> None:
+        runner = ScriptedRunner()
+        run_stage(runner, self.archive)
+
+        load_command = runner.commands[4]
+        self.assertIn("docker image inspect", load_command)
+        self.assertLess(
+            load_command.index("already present"), load_command.index("docker load")
+        )
+
+    def test_failed_or_timed_out_load_fails_the_stage_and_names_the_step(self) -> None:
+        for label, outcome in (
+            ("failure", RemoteResult(7)),
+            ("timeout", RemoteTimeoutError()),
+        ):
+            with self.subTest(case=label):
+                runner = ScriptedRunner([RemoteResult(0)] * 4 + [outcome])
+                with self.assertLogs(production_environment.logger, level="ERROR") as logs:
+                    self.assertNotEqual(run_stage(runner, self.archive), 0)
+
+                self.assertIn("Outline image load", logs.output[-1])
+
+    def test_unverified_artifact_never_reaches_the_server(self) -> None:
+        runner = ScriptedRunner()
+        with self.assertLogs(production_environment.logger, level="ERROR") as logs:
+            self.assertEqual(run_stage(runner, None), 1)
+
+        self.assertEqual(len(runner.commands), 4)
+        self.assertIn("Outline image load", logs.output[-1])
+
+    def test_squid_failure_prevents_the_image_load(self) -> None:
+        runner = ScriptedRunner([RemoteResult(0), RemoteResult(0), RemoteResult(1)])
+
+        self.assertNotEqual(run_stage(runner, self.archive), 0)
+
+        self.assertEqual(len(runner.commands), 3)
 
 
 if __name__ == "__main__":

@@ -97,7 +97,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
         self.assertIsInstance(deploy.call_args.args[0], SshRunner)
         self.assertEqual(deploy.call_args.args[0].host, "192.0.2.10")
 
-    def test_main_without_arguments_deploys_eu_squid_with_the_eu_runner(self) -> None:
+    def test_main_without_arguments_runs_the_eu_stage_with_the_eu_runner(self) -> None:
         with (
             patch.object(production_environment.sys.stdin, "isatty", return_value=False),
             patch.object(production_environment, "ensure_prod_config"),
@@ -107,7 +107,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
                 return_value=settings(),
             ),
             patch.object(production_environment, "configure_interactively") as setup,
-            patch.object(production_environment, "deploy_eu_squid", return_value=0) as deploy,
+            patch.object(production_environment, "run_eu_stage", return_value=0) as deploy,
         ):
             self.assertEqual(production_environment.main([]), 0)
 
@@ -133,7 +133,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
             ),
             patch.object(
                 production_environment,
-                "deploy_eu_squid",
+                "run_eu_stage",
                 side_effect=lambda r: calls.append("deploy") or 0,
             ),
         ):
@@ -152,7 +152,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
                 side_effect=[error, settings()],
             ),
             patch.object(production_environment, "configure_interactively") as setup,
-            patch.object(production_environment, "deploy_eu_squid", return_value=0) as deploy,
+            patch.object(production_environment, "run_eu_stage", return_value=0) as deploy,
             self.assertLogs(production_environment.logger, level="ERROR"),
         ):
             self.assertEqual(production_environment.main([]), 0)
@@ -169,7 +169,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
                 production_environment, "load_eu_production_settings", side_effect=error
             ),
             patch.object(production_environment, "configure_interactively") as setup,
-            patch.object(production_environment, "deploy_eu_squid") as deploy,
+            patch.object(production_environment, "run_eu_stage") as deploy,
             self.assertLogs(production_environment.logger, level="ERROR"),
         ):
             self.assertEqual(production_environment.main([]), 2)

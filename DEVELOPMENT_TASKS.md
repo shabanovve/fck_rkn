@@ -1448,7 +1448,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   artifact and integrity mismatch; invalid artifacts never reach the server.
 - **Result:** `fck_rkn/orchestration/outline_artifact.py` reads the approved digest from `artifacts/outline-image.sha256` and releases `config/artifacts/outline-image.tar.gz` only if its SHA-256 matches; a missing, empty or malformed digest, a missing archive, or a mismatch returns no archive, so nothing reaches the server. `prod-env-host build-outline-artifact` builds the archive locally for review and prints its digest without approving it. Tests: `test_outline_artifact.py`.
 
-### 219. Loading the Outline image on EU
+### 219. [x] Loading the Outline image on EU
 
 - **Source step:** `load_outline_image(eu_runner, image_archive)`.
 - **Change:** Load the verified artifact on `eu-server` only when the expected
@@ -1458,6 +1458,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Depends on:** Task 218.
 - **Verify:** Fake-runner tests cover skip-if-present, successful load and
   failed load; assert the archive is streamed through stdin.
+- **Result:** The EU stage retrieves the verified archive (task 218) and calls `load_outline_image` on the EU runner after the Squid blocking check; the existing script skips the load when the image is present and receives the archive through stdin. An unverified archive stops the stage before any transfer. Tests: `OutlineImageLoadTests` in `test_production_eu_checks.py`.
 
 ### 220. Deploying EU Outline Server
 

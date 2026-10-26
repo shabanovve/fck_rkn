@@ -150,9 +150,14 @@ operator commands:
 
 ### Current behavior
 
+The EU stage currently runs the Squid deployment and checks, then loads the
+verified Outline image (task 219). The load step fails closed until an
+approved digest is committed (see "Outline image artifact"); use
+`deploy-eu-squid` to run the Squid steps alone.
+
 Until the full sequence above is implemented (task 245), a run without
 arguments ensures a valid configuration (interactively on a terminal) and then
-performs the EU stage, which currently deploys Squid and runs its checks:
+performs the EU stage described above:
 
 ```sh
 .venv/bin/prod-env-host
@@ -165,7 +170,7 @@ explicitly:
 .venv/bin/prod-env-host deploy-eu-squid
 ```
 
-The command runs these steps in order and stops at the first failure:
+`deploy-eu-squid` runs these steps in order and stops at the first failure:
 
 1. Deploys Squid on `eu-server`.
 2. Checks the running container and its local TCP listener.

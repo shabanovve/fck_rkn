@@ -5,15 +5,20 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from fck_rkn.agents.eu_server import deploy_squid
+from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.eu_server_test import (
     check_squid_blocking,
     check_squid_http,
     check_squid_startup,
 )
-from fck_rkn.orchestration.outline_artifact import build_outline_artifact
+from fck_rkn.orchestration.outline_artifact import (
+    build_outline_artifact,
+    retrieve_outline_artifact,
+)
 from fck_rkn.production_config import (
     PROD_CONFIG_FILE,
     ProductionConfigError,
@@ -63,17 +68,14 @@ def run_configuration() -> int:
     return 0
 
 
-def deploy_eu_squid(runner: RemoteRunner) -> int:
-    """Deploy EU Squid and stop if any of its read-only checks fails."""
-    steps = (
-        ("Squid deployment", deploy_squid),
-        ("Squid startup check", check_squid_startup),
-        ("Squid HTTP check", check_squid_http),
-        ("Squid blocking check", check_squid_blocking),
-    )
+Step = tuple[str, Callable[[], int]]
+
+
+def run_steps(steps: Sequence[Step], completion: str) -> int:
+    """Run steps in order and stop at the first failure, naming it."""
     for description, action in steps:
         logger.info("Starting EU production step: %s", description)
-        exit_code = action(runner)
+        exit_code = action()
         if exit_code != 0:
             logger.error(
                 "EU production step %s failed with exit status %d",
@@ -81,8 +83,42 @@ def deploy_eu_squid(runner: RemoteRunner) -> int:
                 exit_code,
             )
             return exit_code
-    logger.info("EU Squid deployment and checks completed")
+    logger.info(completion)
     return 0
+
+
+def squid_steps(runner: RemoteRunner) -> list[Step]:
+    return [
+        ("Squid deployment", lambda: deploy_squid(runner)),
+        ("Squid startup check", lambda: check_squid_startup(runner)),
+        ("Squid HTTP check", lambda: check_squid_http(runner)),
+        ("Squid blocking check", lambda: check_squid_blocking(runner)),
+    ]
+
+
+def load_eu_outline_image(runner: RemoteRunner) -> int:
+    """Load the verified Outline artifact on EU; unverified archives never leave."""
+    archive = retrieve_outline_artifact()
+    if archive is None:
+        return 1
+    return load_outline_image(runner, archive)
+
+
+def outline_image_steps(runner: RemoteRunner) -> list[Step]:
+    return [("Outline image load", lambda: load_eu_outline_image(runner))]
+
+
+def eu_stage_steps(runner: RemoteRunner) -> list[Step]:
+    return squid_steps(runner) + outline_image_steps(runner)
+
+
+def deploy_eu_squid(runner: RemoteRunner) -> int:
+    """Deploy EU Squid and stop if any of its read-only checks fails."""
+    return run_steps(squid_steps(runner), "EU Squid deployment and checks completed")
+
+
+def run_eu_stage(runner: RemoteRunner) -> int:
+    return run_steps(eu_stage_steps(runner), "EU production stage completed")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -135,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.operation is None:
         logger.info("Running the EU production stage; the RU stage is not implemented")
     runner = create_eu_runner(settings)
+    if args.operation is None:
+        return run_eu_stage(runner)
     return deploy_eu_squid(runner)
 
 
