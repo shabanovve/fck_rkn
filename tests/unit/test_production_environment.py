@@ -506,6 +506,113 @@ class ProductionEnvironmentTests(unittest.TestCase):
             steps[0][1]()
             self.assertEqual(steps[3][1](), 44)
 
+
+class ProductionDeployRuStageTests(unittest.TestCase):
+    def test_deploy_ru_stage_runs_all_checks_in_order(self) -> None:
+        eu_runner = object()
+        ru_runner = object()
+        calls = []
+
+        def track(name):
+            return lambda *a, **k: calls.append(name) or 0
+
+        with (
+            patch.object(production_environment, "retrieve_ru_outline_key", return_value="ss://key"),
+            patch.object(production_environment, "create_ru_runner", return_value=ru_runner),
+            patch.object(production_environment, "ru_outline_image_steps", return_value=[("ru_img", track("ru_img"))]),
+            patch.object(production_environment, "ru_outline_steps", return_value=[("ru_out", track("ru_out_1")), ("ru_out_chk", track("ru_out_chk"))]),
+            patch.object(production_environment, "ru_outline_client_steps", return_value=[("ru_cl", track("ru_cl_1")), ("ru_cl_chk", track("ru_cl_chk"))]),
+            patch.object(production_environment, "ru_squid_forward_steps", return_value=[("ru_sq", track("ru_sq_1")), ("ru_sq_chk", track("ru_sq_chk"))]),
+            patch.object(production_environment, "ru_mtproxy_forward_steps", return_value=[("ru_mt", track("ru_mt_1")), ("ru_mt_chk", track("ru_mt_chk"))]),
+            patch.object(production_environment, "firewall_steps", return_value=[("eu_fw", track("eu_fw"))]),
+            patch.object(production_environment, "ru_firewall_steps", return_value=[("ru_fw", track("ru_fw"))]),
+            patch.object(production_environment, "squid_steps", return_value=[("dummy", track("dummy")), ("eu_sq_chk2", track("eu_sq_chk2"))]),
+            patch.object(production_environment, "outline_steps", return_value=[("dummy", track("dummy")), ("eu_out_chk2", track("eu_out_chk2"))]),
+            patch.object(production_environment, "mtproxy_steps", return_value=[("dummy", track("dummy")), ("eu_mt_chk2", track("eu_mt_chk2"))]),
+        ):
+            status = production_environment.deploy_ru_stage(eu_runner, ru_settings())
+            
+        self.assertEqual(status, 0)
+        self.assertEqual(
+            calls,
+            [
+                "ru_img",
+                "ru_out_1",
+                "ru_out_chk",
+                "ru_cl_1",
+                "ru_cl_chk",
+                "ru_sq_1",
+                "ru_sq_chk",
+                "ru_mt_1",
+                "ru_mt_chk",
+                "eu_fw",
+                "ru_fw",
+                "eu_sq_chk2",
+                "eu_out_chk2",
+                "eu_mt_chk2",
+                "ru_out_chk",
+                "ru_cl_chk",
+                "ru_sq_chk",
+                "ru_mt_chk",
+            ],
+        )
+
+    def test_deploy_ru_stage_stops_if_key_missing(self) -> None:
+        with patch.object(production_environment, "retrieve_ru_outline_key", return_value=None):
+            self.assertEqual(production_environment.deploy_ru_stage(object(), ru_settings()), 1)
+
+    def test_deploy_ru_stage_stops_if_config_incomplete(self) -> None:
+        with (
+            patch.object(production_environment, "retrieve_ru_outline_key", return_value="ss://key"),
+            patch.object(production_environment, "create_ru_runner", side_effect=ProductionConfigError("incomplete")),
+            self.assertLogs(production_environment.logger, level="ERROR") as logs,
+        ):
+            self.assertEqual(production_environment.deploy_ru_stage(object(), settings()), 2)
+            self.assertIn("incomplete", logs.output[0])
+
+    def test_deploy_ru_stage_stops_if_ru_services_fail(self) -> None:
+        with (
+            patch.object(production_environment, "retrieve_ru_outline_key", return_value="ss://key"),
+            patch.object(production_environment, "create_ru_runner", return_value=object()),
+            patch.object(production_environment, "ru_outline_image_steps", return_value=[("fail", lambda: 42)]),
+            patch.object(production_environment, "firewall_steps") as fw,
+        ):
+            self.assertEqual(production_environment.deploy_ru_stage(object(), ru_settings()), 42)
+            fw.assert_not_called()
+
+    def test_deploy_ru_stage_stops_if_firewall_fails(self) -> None:
+        with (
+            patch.object(production_environment, "retrieve_ru_outline_key", return_value="ss://key"),
+            patch.object(production_environment, "create_ru_runner", return_value=object()),
+            patch.object(production_environment, "ru_outline_image_steps", return_value=[]),
+            patch.object(production_environment, "ru_outline_steps", return_value=[]),
+            patch.object(production_environment, "ru_outline_client_steps", return_value=[]),
+            patch.object(production_environment, "ru_squid_forward_steps", return_value=[]),
+            patch.object(production_environment, "ru_mtproxy_forward_steps", return_value=[]),
+            patch.object(production_environment, "firewall_steps", return_value=[("fw", lambda: 43)]),
+            patch.object(production_environment, "ru_firewall_steps", return_value=[]),
+            patch.object(production_environment, "squid_steps") as sq,
+        ):
+            self.assertEqual(production_environment.deploy_ru_stage(object(), ru_settings()), 43)
+            sq.assert_not_called()
+
+    def test_deploy_ru_stage_stops_if_post_firewall_check_fails(self) -> None:
+        with (
+            patch.object(production_environment, "retrieve_ru_outline_key", return_value="ss://key"),
+            patch.object(production_environment, "create_ru_runner", return_value=object()),
+            patch.object(production_environment, "ru_outline_image_steps", return_value=[]),
+            patch.object(production_environment, "ru_outline_steps", return_value=[("dummy", lambda: 0), ("dummy", lambda: 0)]),
+            patch.object(production_environment, "ru_outline_client_steps", return_value=[("dummy", lambda: 0), ("dummy", lambda: 0)]),
+            patch.object(production_environment, "ru_squid_forward_steps", return_value=[("dummy", lambda: 0), ("dummy", lambda: 0)]),
+            patch.object(production_environment, "ru_mtproxy_forward_steps", return_value=[("dummy", lambda: 0), ("chk_fail", lambda: 44)]),
+            patch.object(production_environment, "firewall_steps", return_value=[]),
+            patch.object(production_environment, "ru_firewall_steps", return_value=[]),
+            patch.object(production_environment, "squid_steps", return_value=[("dummy", lambda: 0), ("dummy", lambda: 0)]),
+            patch.object(production_environment, "outline_steps", return_value=[("dummy", lambda: 0), ("dummy", lambda: 0)]),
+            patch.object(production_environment, "mtproxy_steps", return_value=[("dummy", lambda: 0), ("dummy", lambda: 0)]),
+        ):
+            self.assertEqual(production_environment.deploy_ru_stage(object(), ru_settings()), 44)
+
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()
         with (
