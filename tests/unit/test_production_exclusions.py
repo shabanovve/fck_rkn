@@ -146,5 +146,25 @@ class TestClientProvisioningExclusionTests(unittest.TestCase):
         self.assertNotIn("ensure_test_client", production_source())
 
 
+class TestClientKeyExclusionTests(unittest.TestCase):
+    """Task 234."""
+
+    def test_no_test_client_key_is_created(self) -> None:
+        stage = StageRun(self)
+        with patch.object(
+            production_environment, "create_outline_user", wraps=None
+        ) as create:
+            create.return_value = ACCESS_URL
+            self.assertEqual(stage.run(), 0)
+
+        users = [call.args[1] for call in create.call_args_list]
+        self.assertNotIn(test_environment.TEST_CLIENT_OUTLINE_USER, users)
+        self.assertEqual(len(users), 1)
+
+    def test_stage_runs_no_ru_action(self) -> None:
+        self.assertNotIn("TEST_CLIENT_OUTLINE_USER", production_source())
+        self.assertNotIn("ru_server_runner", production_source())
+
+
 if __name__ == "__main__":
     unittest.main()

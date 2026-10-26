@@ -1670,13 +1670,14 @@ runner, "ru-server-feasibility-probe")`), matching
   or GCP compute APIs.
 - **Result:** Added exclusion tests: ensure_test_client is never called or referenced.
 
-### 234. Excluding creation of a test-client Outline key
+### 234. [x] Excluding creation of a test-client Outline key
 
 - **Source step:** `create_outline_user(ru_runner, TEST_CLIENT_OUTLINE_USER)`.
 - **Production disposition:** Do not create a non-production Outline key on
   RU for a test-client. The dedicated EU key for the later RU tunnel is a
   separate operation in task 224.
 - **Verify:** The EU stage does not invoke RU actions or create this key.
+- **Result:** Added exclusion tests: the only key created is the production RU-stage key, never TEST_CLIENT_OUTLINE_USER, and there is no RU runner.
 
 ### 235. Excluding test-client Outline connection deployment
 
