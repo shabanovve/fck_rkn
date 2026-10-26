@@ -10,6 +10,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from fck_rkn.agents.eu_server import MTPROXY_CONTAINER_NAME
 from fck_rkn.agents.outline import (
     OUTLINE_CONTAINER_NAME,
     OUTLINE_HEALTH_CHECK_COMMAND,
@@ -219,7 +220,6 @@ class OutlineImageLoadTests(unittest.TestCase):
 
         self.assertEqual(run_stage(runner, self.archive), 0)
 
-        self.assertEqual(len(runner.commands), 7)
         self.assertEqual(runner.commands[3], SQUID_BLOCK_CHECK_COMMAND)
         self.assertEqual(runner.stdins[4], self.archive)
         self.assertIn(str(self.archive.stat().st_size), runner.commands[4])
@@ -334,7 +334,6 @@ class OutlineHealthCheckTests(unittest.TestCase):
         self.assertEqual(run_stage(runner, self.archive), 0)
 
         self.assertEqual(runner.commands[6], OUTLINE_HEALTH_CHECK_COMMAND)
-        self.assertEqual(len(runner.commands), 7)
 
     def test_unhealthy_and_timed_out_checks_stop_the_stage(self) -> None:
         for label, outcome in (
@@ -362,6 +361,60 @@ class OutlineHealthCheckTests(unittest.TestCase):
             run_stage(runner, self.archive)
 
         self.assertNotIn("ss://", "\n".join(logs.output))
+
+
+class MtproxyDeploymentTests(unittest.TestCase):
+    """Task 222."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.archive = Path(directory.name) / "outline-image.tar.gz"
+        self.archive.write_bytes(b"verified archive")
+
+    def test_mtproxy_is_deployed_after_the_outline_health_check(self) -> None:
+        runner = ScriptedRunner()
+
+        self.assertEqual(run_stage(runner, self.archive), 0)
+
+        self.assertEqual(runner.commands[6], OUTLINE_HEALTH_CHECK_COMMAND)
+        self.assertIn(MTPROXY_CONTAINER_NAME, runner.commands[7])
+        self.assertIn("docker run", runner.commands[7])
+
+    def test_unhealthy_outline_prevents_the_mtproxy_deployment(self) -> None:
+        runner = ScriptedRunner([RemoteResult(0)] * 6 + [RemoteResult(1)])
+
+        self.assertNotEqual(run_stage(runner, self.archive), 0)
+
+        self.assertEqual(len(runner.commands), 7)
+
+    def test_failure_and_timeout_stop_the_stage_and_name_the_step(self) -> None:
+        for label, outcome in (
+            ("failure", RemoteResult(4)),
+            ("timeout", RemoteTimeoutError()),
+        ):
+            with self.subTest(case=label):
+                runner = ScriptedRunner([RemoteResult(0)] * 7 + [outcome])
+                with self.assertLogs(production_environment.logger, level="ERROR") as logs:
+                    self.assertNotEqual(run_stage(runner, self.archive), 0)
+
+                self.assertIn("MTProxy deployment", logs.output[-1])
+                self.assertEqual(len(runner.commands), 8)
+
+    def test_secret_is_generated_on_the_host_and_never_returned_or_logged(self) -> None:
+        deploy_runner = ScriptedRunner()
+        run_stage(deploy_runner, self.archive)
+        command = deploy_runner.commands[7]
+        self.assertIn("/dev/urandom", command)
+        self.assertIn("umask 077", command)
+        self.assertNotRegex(command, r"echo[^\n]*\$\(?cat[^\n]*secret")
+
+        secret = "0123456789abcdef0123456789abcdef"
+        runner = ScriptedRunner([RemoteResult(0)] * 7 + [RemoteResult(1, secret, secret)])
+        with self.assertLogs(production_environment.logger, level="ERROR") as logs:
+            run_stage(runner, self.archive)
+
+        self.assertNotIn(secret, "\n".join(logs.output))
 
 
 if __name__ == "__main__":

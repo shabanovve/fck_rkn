@@ -1494,7 +1494,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `.venv/bin/eu-server-test-agent outline`.
 - **Result:** The EU stage runs `check_outline_health` right after the Outline deployment. Tests (`OutlineHealthCheckTests`) cover healthy, unhealthy and timeout outcomes stopping the stage, the read-only check script that never prints the management URL, and failure logs that omit remote key-like output.
 
-### 222. Deploying EU MTProxy
+### 222. [x] Deploying EU MTProxy
 
 - **Source step:** `deploy_mtproxy`.
 - **Deploy action:** `eu-server-agent deploy-mtproxy`
@@ -1507,6 +1507,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Verify:** Test ordering, nonzero/timeout handling and secret-free logs.
   Standalone CLI equivalent:
   `.venv/bin/eu-server-agent deploy-mtproxy`.
+- **Result:** The EU stage runs `deploy_mtproxy` after the Outline health check. The script generates the secret on the host with a root-only file and never returns it. Tests (`MtproxyDeploymentTests`) cover ordering, failure and timeout handling, and secret-free logs.
 
 ### 223. Checking EU MTProxy health
 

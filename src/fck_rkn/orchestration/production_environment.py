@@ -8,7 +8,11 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from fck_rkn.agents.eu_server import deploy_outline, deploy_squid
+from fck_rkn.agents.eu_server import (
+    deploy_mtproxy,
+    deploy_outline,
+    deploy_squid,
+)
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.eu_server_test import (
     check_outline_health,
@@ -116,11 +120,16 @@ def outline_steps(runner: RemoteRunner, private_address: str) -> list[Step]:
     ]
 
 
+def mtproxy_steps(runner: RemoteRunner) -> list[Step]:
+    return [("MTProxy deployment", lambda: deploy_mtproxy(runner))]
+
+
 def eu_stage_steps(runner: RemoteRunner, settings: EuProductionSettings) -> list[Step]:
     return (
         squid_steps(runner)
         + outline_image_steps(runner)
         + outline_steps(runner, settings.EU_SERVER_ADDRESS)
+        + mtproxy_steps(runner)
     )
 
 
