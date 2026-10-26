@@ -1711,12 +1711,13 @@ runner, "ru-server-feasibility-probe")`), matching
 - **Verify:** EU-stage orchestration never invokes the check.
 - **Result:** Added exclusion tests: check_squid_tunnel is never invoked.
 
-### 239. Excluding test-client MTProxy tunnel deployment
+### 239. [x] Excluding test-client MTProxy tunnel deployment
 
 - **Source step:** `deploy_mtproxy_tunnel(client_runner, client_access_url)`.
 - **Production disposition:** Do not deploy a test-client MTProxy tunnel in
   the EU production stage.
 - **Verify:** No test-client MTProxy container or tunnel action is started.
+- **Result:** Added exclusion tests: deploy_mtproxy_tunnel is never invoked.
 
 ### 240. Excluding the test-client MTProxy tunnel check
 
