@@ -331,12 +331,11 @@ behavior that requires them.
   used only by `test_env_host` and `fck_rkn/gcp/`. Add platform-neutral agent
   settings (target host and runner selection). Agents must not import
   `fck_rkn.gcp` or `TestEnvironmentSettings`.
-- **Done:** `fck_rkn/agent_config.py` (`AgentSettings` from `config/agents.env`:
-  `EU_SERVER_ADDRESS`, `RU_SERVER_HOST`, `SSH_USER`, `SSH_KEY_PATH`, `SSH_PORT`)
-  with `eu_server_runner` / `ru_server_runner` building `SshRunner`. Production
-  agents run remotely over SSH from a controller. `TestEnvironmentSettings`
-  stays in `config.py` for `test_env_host` and `fck_rkn/gcp/`; agents still
-  import it until 49d and 49e.
+- **Done:** `fck_rkn/agent_config.py` (`AgentSettings` from
+  `config/agents.env`) with `eu_server_runner` / `ru_server_runner` building
+  `SshRunner`. Production agents run remotely over SSH from a controller.
+  `TestEnvironmentSettings` stays in `config.py` for `test_env_host` and
+  `fck_rkn/gcp/`; agents still import it until 49d and 49e.
 
 ### 49d. [x] Make `ru-server-agent` and `ru-server-test-agent` use `RemoteRunner`
 
@@ -1129,7 +1128,7 @@ behavior that requires them.
   numbered from 202, with dependencies and verification criteria. No
   production behavior was implemented by task 200.
 
-### 201. Decomposing RU production deployment into small tasks
+### 201. [x] Decomposing RU production deployment into small tasks
 
 - **Depends on:** Task 200 completed and its EU task breakdown reviewed.
 - **Change:** Trace the RU portion of `test_env_host` and its dependencies in
@@ -1147,6 +1146,10 @@ behavior that requires them.
   this file. Every new task related to `ru-server` must be numbered above 300
   (start at 301); numbers 246–300 are not used for RU work. Do not implement
   the RU production deployment as part of task 201.
+- **Done:** Traced the RU portion of `test_env_host` and recorded the Phase 2B
+  tasks below, starting at 301. The test-only exclusions and the already
+  implemented protected EU Outline key provisioning are identified
+  explicitly; no production behavior was implemented by task 201.
 
 ## EU production implementation tasks created by task 200
 
@@ -1823,6 +1826,269 @@ runner, "ru-server-feasibility-probe")`), matching
   interactive setup on a terminal and exit code 2 without one, and that no
   excluded test-only action is called.
 - **Result:** The no-argument run executes the full EU stage (Squid, Outline image, Outline, MTProxy, RU-stage key, firewall apply, read-only verification, blacklist updater check) and stops at the first failure, naming the step. Tests assert the exact order, that each deploy precedes its check, that every failure stops later steps, config/TTY behavior and that no test-only action is used. PROD_ENV_HOST.md is updated. The RU stage remains not implemented until task 201, so the full test_env_host parity is reached only for the EU side.
+
+## RU production implementation tasks created by task 201
+
+These tasks follow the RU sequence in `src/fck_rkn/orchestration/test_environment.py`.
+Phase 2A must complete and pass review before any RU deployment action runs.
+The RU stage uses the existing protected EU Outline access key provisioned by
+task 224; it does not create a test-client key or repeat or reset successful EU
+deployment work. Production calls the Python agent functions with the validated
+production settings and `SshRunner`, never the standalone CLIs that read
+`config/agents.env`.
+
+### 301. Adding RU production settings
+
+- **Depends on:** Tasks 202–204; retain the EU-only behavior they provide.
+- **Source step:** The RU host and service values currently come from
+  `AgentSettings` and `TestEnvironmentSettings`, and the RU firewall input is
+  assembled in `build_ru_firewall_configuration`.
+- **Change:** Extend the production configuration schema and
+  `config/prod.env.example` for Phase 2B. Use the existing `RU_SERVER_ADDRESS`
+  as the single RU server address for both controller SSH and server-side
+  service/firewall configuration; do not add any separate RU SSH-host or
+  private-address setting.
+  Add `RU_METADATA_ADDRESS`, `RU_DNS_ADDRESSES`, `RU_DHCP_SERVER_ADDRESS`,
+  `RU_NTP_ADDRESSES`, `RU_LOCAL_NETWORKS`, and `RU_PROVIDER_NETWORKS`. Reuse
+  the existing shared SSH user, key path and port unless an approved access
+  design requires otherwise. Keep every RU-only field optional for the
+  EU-only stage.
+- **Verify:** Cover valid/missing/placeholder/malformed values, strict IP,
+  CIDR and JSON-list validation, and provider CIDR validation. Prove EU-only
+  configuration and operation remain usable without RU-only fields, and the
+  template contains no real production values or credentials.
+
+### 302. Configuring RU production settings interactively
+
+- **Depends on:** Tasks 244 and 301.
+- **Source step:** `configure_missing_test_env` and the RU-specific settings
+  used after `ensure_ru_server`.
+- **Change:** Extend `prod-env-host configure` to collect and validate RU
+  settings for Phase 2B. Use read-only discovery on `ru-server` where
+  appropriate, prompt for values that cannot be discovered (including
+  provider egress ranges), show the validated settings for confirmation, and
+  write atomically without exposing secrets or overwriting existing operator
+  values without consent. Keep RU settings collection out of the EU-only
+  execution path.
+- **Verify:** Test complete and partial discovery, explicit prompts,
+  validation/re-prompting, cancellation, SSH failure, existing-file
+  protection and atomic writes. Confirm an RU configuration failure does not
+  prevent an otherwise valid EU-only run.
+
+### 303. Creating the RU production runner
+
+- **Depends on:** Tasks 301–302 and completion/review of Phase 2A.
+- **Source step:** RU `_provision_server`, `private_address_of` and
+  `GcloudIapRunner` construction in `test_environment.py`.
+- **Production adaptation:** Do not provision, inspect or reset a VM. Validate
+  the RU settings, then construct an `SshRunner` for `RU_SERVER_ADDRESS` using
+  the production SSH credentials. Use that same setting for RU service
+  binding and peer policy; do not introduce a second RU address setting.
+- **Verify:** Fake-runner tests prove invalid RU settings fail before remote
+  work, the correct SSH endpoint/settings are used, and no GCP, IAP or
+  provisioning code is imported or called.
+
+### 304. Loading the approved Outline image on RU
+
+- **Depends on:** Task 303 and the approved artifact workflow from tasks
+  221–222.
+- **Source step:** `load_outline_image(ru_runner, image_archive)`.
+- **Production adaptation:** Load only the digest-verified production
+  artifact already used for EU. Do not build, pull, or replace the artifact as
+  a deployment side effect.
+- **Verify:** Assert RU receives the approved archive only after digest
+  validation; missing, malformed or mismatched artifacts stop the RU stage
+  before Outline deployment.
+
+### 305. Deploying RU Outline Server
+
+- **Depends on:** Task 304.
+- **Source step:** `deploy_outline_server(ru_runner, ru_private_address)`.
+- **Production adaptation:** Call the existing RU agent function with
+  `RU_SERVER_ADDRESS`. Preserve the agent's refusal to replace an existing
+  Outline container with unexpected configuration.
+- **Verify:** Fake-runner tests check the address passed to the agent,
+  unchanged-container behavior and fail-fast handling; no EU action or state
+  is changed.
+
+### 306. Checking RU Outline Server health
+
+- **Depends on:** Task 305.
+- **Source step:** `check_ru_outline_health(ru_runner)`.
+- **Production adaptation:** Run the reviewed RU Outline health check only
+  after deployment succeeds. It must verify the expected container,
+  authorized health API response and access-key listener without printing
+  access URLs or key material.
+- **Verify:** Test success, unhealthy service, transport failure and that no
+  subsequent RU action runs after a failed check.
+
+### 307. Retrieving the protected EU Outline key for RU
+
+- **Depends on:** Task 224 and successful completion of task 306.
+- **Source step:** `create_outline_user(eu_runner, RU_PROBE_OUTLINE_USER)` and
+  the in-memory `access_url` handoff to RU actions.
+- **Production adaptation:** Task 224 already creates/reuses this dedicated
+  EU Outline key and stores it in `LocalSecretStore` outside the repository.
+  Read that same secret for Phase 2B; do not create a second key, place it in
+  `prod.env`, argv, logs, environment variables, `config/last_run/` or another
+  unprotected file. Pass it directly in memory to the RU agent functions,
+  which deliver remote credentials through stdin.
+- **Verify:** Missing or over-permissive secret files fail closed; tests assert
+  the key is never logged, persisted again, placed in argv or passed to a
+  shell command.
+
+### 308. Deploying the RU Outline client
+
+- **Depends on:** Tasks 306–307.
+- **Source step:** `deploy_outline_client(ru_runner, access_url)`.
+- **Production adaptation:** Start the RU Outline client using the protected
+  EU key. Do not create an RU Outline key for a test client.
+- **Verify:** Test that the correct in-memory key reaches the agent through
+  its protected input channel, successful deployment is required before the
+  client check, and failures stop the sequence without exposing the key.
+
+### 309. Checking the RU Outline client
+
+- **Depends on:** Task 308.
+- **Source step:** `check_outline_client(ru_runner, access_url)`.
+- **Production adaptation:** Use only the reviewed RU-side client/forwarding
+  check; do not provision a separate client VM. Review its bounded network
+  request before production use and keep key material out of output.
+- **Verify:** Check the expected client configuration and bounded request
+  result, failure propagation and secret redaction.
+
+### 310. Deploying the RU-to-EU Squid forward
+
+- **Depends on:** Task 309.
+- **Source step:** `deploy_squid_forward(ru_runner, access_url)`.
+- **Production adaptation:** Deploy the RU localhost Squid forward through
+  the dedicated EU Outline endpoint. No direct route to the EU Squid may be
+  introduced as a fallback.
+- **Verify:** Assert correct destination/port and protected key delivery;
+  deployment failure prevents the corresponding check and all later steps.
+
+### 311. Checking the RU-to-EU Squid forward
+
+- **Depends on:** Task 310.
+- **Source step:** `check_squid_forward(ru_runner)`.
+- **Production adaptation:** Run the reviewed bounded forwarding check after
+  deployment succeeds. Keep this check read-only with respect to server
+  configuration.
+- **Verify:** Cover successful and failed reachability/HTTP results and
+  fail-fast sequencing.
+
+### 312. Deploying the RU-to-EU MTProxy forward
+
+- **Depends on:** Task 311.
+- **Source step:** `deploy_mtproxy_forward(ru_runner, access_url)`.
+- **Production adaptation:** Deploy the RU localhost MTProxy forward over
+  the dedicated EU Outline endpoint; do not create a direct-route fallback.
+- **Verify:** Assert correct destination/port, protected key delivery and
+  failure handling before the check.
+
+### 313. Checking the RU-to-EU MTProxy forward
+
+- **Depends on:** Task 312.
+- **Source step:** `check_mtproxy_forward(ru_runner)`.
+- **Production adaptation:** Run the reviewed bounded MTProxy forwarding
+  check after deployment succeeds, without changing server configuration.
+- **Verify:** Cover expected listener/forward behavior, check failure and
+  fail-fast sequencing.
+
+### 314. Preparing production RU firewall input
+
+- **Depends on:** Tasks 303, 306, 309, 311 and 313.
+- **Source step:** `fetch_rkn_blacklist`, `fetch_github_networks`,
+  `fetch_snapd_networks` and `build_ru_firewall_configuration`.
+- **Production adaptation:** Build a validated RU firewall input only after
+  RU services and forwarding checks pass. Use `RU_SERVER_ADDRESS`, the
+  protected EU key's endpoint/port, RU service settings and
+  `RU_PROVIDER_NETWORKS`; obtain and validate the live RKN, GitHub and
+  Canonical ranges through provider-independent shared helpers. Do not use
+  GCP VM service values, Google test ranges, `OTHER_HOST_TEST_ADDRESS`,
+  crawler-probe addresses, `config/last_run/` or test-client keys.
+- **Verify:** Test malformed/empty inputs, provider/crawler overlap, IP/CIDR
+  family constraints and rejection of test-only fields. Preparation failure
+  must occur before any firewall command.
+
+### 315. Applying the RU production firewall
+
+- **Depends on:** Task 314.
+- **Source step:** `apply_ru_firewall(ru_runner, firewall_config)`.
+- **Production adaptation:** Apply the validated guest policy transactionally
+  without first removing or resetting existing rules. The existing agent also
+  installs the daily blacklist updater; no RU firewall action runs before all
+  RU service checks pass.
+- **Verify:** Test successful apply, rejected input, remote failure and
+  updater-install failure; never report success or continue after a failure.
+
+### 316. Verifying the RU production firewall policy
+
+- **Depends on:** Task 315.
+- **Source step:** `check_firewall_policy(ru_runner, firewall_config)`.
+- **Production adaptation:** Add/use a production-safe, read-only policy
+  verification path for the RU firewall and its approved service flows.
+  Reuse the shared policy logic but do not pass test-only probe addresses or
+  invoke checks that mutate firewall state.
+- **Verify:** Check allowed/denied policy expectations using only approved
+  production inputs, prove no rules are changed, and stop on any mismatch.
+
+### 317. Checking the RU blacklist updater
+
+- **Depends on:** Task 315; run after firewall application, with task 316
+  also required before RU-stage completion.
+- **Source step:** `check_rkn_blacklist_updater(ru_runner, "ru")`.
+- **Production adaptation:** Reuse the reviewed read-only updater check for
+  timer state and populated active crawler sets. Do not fetch or display
+  secrets or change firewall policy during the check.
+- **Verify:** Test active/inactive timer, missing/empty sets and transport
+  failure; any failure makes the RU stage fail.
+
+### 318. Integrating the RU production stage
+
+- **Depends on:** Tasks 301–317, task 245 and successful review of Phase 2A.
+- **Source step:** The RU sequence in `_run` and the full-run behavior of
+  `prod-env-host`.
+- **Change:** Add an explicit `deploy-eu` operation for the complete,
+  independently invokable Phase 2A and a `deploy-ru` operation that runs only
+  Phase 2B. Before `deploy-ru`, verify Phase 2A readiness with reviewed,
+  read-only checks and require the protected RU-stage key; never redeploy or
+  reset EU from this operation. In the no-argument run, skip Phase 2A only
+  when its read-only readiness checks all pass; otherwise run Phase 2A and
+  stop on failure before starting RU. Then run Phase 2B in dependency order.
+  Keep `deploy-eu-squid` and existing single-step operations available.
+- **Verify:** Assert exact stage/agent ordering, RU-only mode does not invoke
+  EU deployment or firewall-apply actions, RU cannot start before EU
+  readiness, every failure stops later steps, and summaries contain no
+  production addresses or secrets. Update `PROD_ENV_HOST.md`.
+
+### RU test-environment exclusions
+
+The following `test_env_host` steps have no production equivalent and must
+remain absent from RU deployment:
+
+- `_provision_server`, `ensure_ru_server`, GCP project validation,
+  `GcloudIapRunner`, Compute Engine, IAP, VM/network/firewall provisioning,
+  and RU firewall reset/removal (`remove_ru_firewall` and
+  `check_firewall_removed`): production hosts are operator-managed, reached
+  over SSH, and must not have their existing policy cleared.
+- `stop_tunnel`, `check_tunnel_blocked`, `recover_tunnel`,
+  `stop_mtproxy_forward`, `check_mtproxy_forward_blocked`, and
+  `recover_mtproxy_forward`: these intentionally stop production forwarding
+  and simulate outages; they are destructive test-only checks.
+- `ensure_test_client`, `create_outline_user(ru_runner, TEST_CLIENT_OUTLINE_USER)`,
+  `connect_to_outline`, `check_outline_connection`, `deploy_squid_tunnel`,
+  `check_squid_tunnel`, `deploy_mtproxy_tunnel`, `check_mtproxy_tunnel`, and
+  `request_youtube`: these provision and exercise an isolated test client,
+  not a production service.
+- `check_firewall_rollback`, `check_firewall_crawler_source` and
+  `check_firewall_vpn_client`: these simulate rejected updates, require an
+  isolated crawler probe or create a temporary Outline client and perform
+  active network probes. They are not approved production health checks.
+- The final cross-environment firewall/VPN-client matrix after rollback
+  checks: it depends on the excluded test-only scenarios and adds no
+  production operation beyond the reviewed RU policy and updater checks in
+  tasks 316–317.
 
 ## Decisions that block dependent tasks
 

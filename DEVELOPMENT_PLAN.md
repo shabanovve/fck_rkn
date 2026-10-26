@@ -171,10 +171,11 @@ The full planned schema, split by rollout stage, is:
 | Variable | Requirement and value source |
 | --- | --- |
 | Phase 2A: `EU_SERVER_ADDRESS` | Required IPv4 or IPv6 address for the existing EU server, used for SSH from the controller and EU service binding. Obtain it from production network configuration and validate it as an IP address. |
-| Phase 2A: `RU_SERVER_ADDRESS` | Required server IP address used only for the RU peer rule; obtain from production network configuration and validate as an IP address. This value is only peer input in Phase 2A, not permission to deploy RU. |
+| Phase 2A: `RU_SERVER_ADDRESS` | Required RU server IP address used as the SSH endpoint and, in Phase 2A, only as peer input to the EU firewall. Obtain it from production network configuration and validate it as an IP address. This value is not permission to deploy RU. |
 | `SSH_USER`, `SSH_KEY_PATH`, `SSH_PORT` | Required SSH account, controller-side protected key path, and TCP port (1–65535; default 22). The account must have the permissions the deployment scripts require, including approved privilege escalation. The key material is never stored in the env file. |
 | Phase 2A: `EU_METADATA_ADDRESS`, `EU_DNS_ADDRESSES`, `EU_DHCP_SERVER_ADDRESS`, `EU_NTP_ADDRESSES`, `EU_LOCAL_NETWORKS` | Required per-EU-host values for the metadata endpoint, resolver addresses, DHCP server, time servers, and local IPv4/IPv6 networks needed by the minimal-services firewall rules. Values come from the selected production provider/network. |
-| Phase 2B: `RU_SERVER_HOST`, `RU_METADATA_ADDRESS`, `RU_DNS_ADDRESSES`, `RU_DHCP_SERVER_ADDRESS`, `RU_NTP_ADDRESSES`, `RU_LOCAL_NETWORKS` | Required RU SSH endpoint and equivalent RU host service values; keep them separate from EU values because the hosts may use different networks. |
+| Phase 2B: `RU_SERVER_ADDRESS` | Reuse the Phase 2A address as the single RU server address for SSH, Outline service binding, and RU firewall policy. Do not introduce a separate RU host or private-address setting. |
+| Phase 2B: `RU_METADATA_ADDRESS`, `RU_DNS_ADDRESSES`, `RU_DHCP_SERVER_ADDRESS`, `RU_NTP_ADDRESSES`, `RU_LOCAL_NETWORKS` | Required RU host service values; keep them separate from EU values because the hosts may use different networks. |
 | Phase 2B: `RU_PROVIDER_NETWORKS` | Required IPv4/IPv6 CIDR list for the production provider services that `ru-server` must reach on TCP/80 and TCP/443. Source it from the selected provider's published ranges and validate it against the crawler blacklist. |
 
 Address-list and network-list values must have a documented, unambiguous

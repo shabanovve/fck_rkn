@@ -151,9 +151,9 @@
 - Agents run commands through the `RemoteRunner` protocol
   (`fck_rkn/remote/`). The test environment selects `GcloudIapRunner`
   (`fck_rkn/gcp/runner.py`). Direct agent CLI invocations load `SshRunner`
-  settings from `config/agents.env` (`EU_SERVER_ADDRESS`, `RU_SERVER_HOST`,
-  `SSH_USER`, `SSH_KEY_PATH`, `SSH_PORT`, `RU_SERVER_PRIVATE_ADDRESS`). The
-  EU address is used for both SSH and EU service configuration. Copy
+  settings from `config/agents.env` (the server addresses, SSH user, key path
+  and SSH port). The EU address is used for both SSH and EU service
+  configuration. Copy
   `config/agents.env.example` to the ignored `config/agents.env` and fill it
   in locally. The planned
   `prod_env_host` instead loads production-only settings from
