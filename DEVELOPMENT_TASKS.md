@@ -1373,7 +1373,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   the EU `SshRunner`, configures first when the file is missing or invalid on
   a terminal, and exits with code 2 without a terminal.
 
-### 214. Checking EU Squid startup
+### 214. [x] Checking EU Squid startup
 
 - **Source step:** `check_squid_startup`.
 - **Check action:** `eu-server-test-agent startup`
@@ -1387,6 +1387,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Verify:** Test success/failure ordering and prove later EU actions do not
   run when the check fails. Standalone CLI equivalent:
   `.venv/bin/eu-server-test-agent startup`.
+- **Result:** The production EU stage runs the startup check immediately after the Squid deployment with the same runner. Tests (`test_production_eu_checks.py`) cover ordering, failure and timeout stopping later actions, a failed deployment never reaching the check, and the check command being read-only (no service or firewall mutation).
 
 ### 215. Checking an HTTP request through EU Squid
 
