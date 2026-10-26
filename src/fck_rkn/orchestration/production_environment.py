@@ -57,6 +57,42 @@ def create_eu_runner(settings: EuProductionSettings) -> RemoteRunner:
     )
 
 
+def validate_ru_settings(settings: EuProductionSettings) -> None:
+    """Validate that all required Phase 2B settings are present."""
+    missing = [
+        field
+        for field in (
+            "RU_SERVER_ADDRESS",
+            "RU_METADATA_ADDRESS",
+            "RU_DHCP_SERVER_ADDRESS",
+            "RU_DNS_ADDRESSES",
+            "RU_NTP_ADDRESSES",
+            "RU_LOCAL_NETWORKS",
+            "RU_PROVIDER_NETWORKS",
+        )
+        if getattr(settings, field) is None
+    ]
+    if missing:
+        details = "\n".join(
+            f"- {field}: is required for Phase 2B" for field in sorted(missing)
+        )
+        raise ProductionConfigError(
+            f"Missing required RU production settings:\n{details}"
+        )
+
+
+def create_ru_runner(settings: EuProductionSettings) -> RemoteRunner:
+    """Construct an SshRunner for ru-server after validating RU settings."""
+    validate_ru_settings(settings)
+    assert settings.RU_SERVER_ADDRESS is not None
+    return SshRunner(
+        host=settings.RU_SERVER_ADDRESS,
+        user=settings.SSH_USER,
+        key_path=settings.SSH_KEY_PATH,
+        port=settings.SSH_PORT,
+    )
+
+
 def create_runner(host: str, user: str, key_path: Path, port: int) -> RemoteRunner:
     return SshRunner(host=host, user=user, key_path=key_path, port=port)
 

@@ -32,6 +32,26 @@ def settings() -> EuProductionSettings:
     )
 
 
+def ru_settings() -> EuProductionSettings:
+    return EuProductionSettings(
+        EU_SERVER_ADDRESS="192.0.2.10",
+        RU_SERVER_ADDRESS="192.0.2.20",
+        SSH_USER="deploy",
+        SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
+        EU_METADATA_ADDRESS="192.0.2.1",
+        EU_DNS_ADDRESSES=["192.0.2.53"],
+        EU_DHCP_SERVER_ADDRESS="192.0.2.2",
+        EU_NTP_ADDRESSES=["192.0.2.123"],
+        EU_LOCAL_NETWORKS=["192.0.2.0/24"],
+        RU_METADATA_ADDRESS="192.0.2.1",
+        RU_DNS_ADDRESSES=["192.0.2.54"],
+        RU_DHCP_SERVER_ADDRESS="192.0.2.3",
+        RU_NTP_ADDRESSES=["192.0.2.124"],
+        RU_LOCAL_NETWORKS=["192.0.3.0/24"],
+        RU_PROVIDER_NETWORKS=["198.51.100.0/24"],
+    )
+
+
 class ProductionEnvironmentTests(unittest.TestCase):
     def test_creates_runner_only_for_eu_server(self) -> None:
         runner = production_environment.create_eu_runner(settings())
@@ -45,6 +65,27 @@ class ProductionEnvironmentTests(unittest.TestCase):
                 port=22,
             ),
         )
+
+    def test_creates_runner_for_ru_server(self) -> None:
+        runner = production_environment.create_ru_runner(ru_settings())
+
+        self.assertEqual(
+            runner,
+            SshRunner(
+                host="192.0.2.20",
+                user="deploy",
+                key_path=Path("/run/secrets/deploy_key"),
+                port=22,
+            ),
+        )
+
+    def test_create_ru_runner_fails_before_remote_work_when_settings_missing(
+        self,
+    ) -> None:
+        with self.assertRaises(ProductionConfigError) as ctx:
+            production_environment.create_ru_runner(settings())
+        self.assertIn("RU_PROVIDER_NETWORKS", str(ctx.exception))
+        self.assertIn("RU_DNS_ADDRESSES", str(ctx.exception))
 
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()

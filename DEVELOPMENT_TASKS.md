@@ -1897,7 +1897,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   with mode 0600. Tests cover discovery, fallback prompts, input validation,
   declined/canceled runs, SSH failure, and existing valid EU configurations.
 
-### 303. Creating the RU production runner
+### 303. [x] Creating the RU production runner
 
 - **Depends on:** Tasks 301–302 and completion/review of Phase 2A.
 - **Source step:** RU `_provision_server`, `private_address_of` and
@@ -1909,6 +1909,11 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Verify:** Fake-runner tests prove invalid RU settings fail before remote
   work, the correct SSH endpoint/settings are used, and no GCP, IAP or
   provisioning code is imported or called.
+- **Result:** `fck_rkn.orchestration.production_environment` validates all
+  required Phase 2B settings before creating an `SshRunner` targeted at
+  `RU_SERVER_ADDRESS` with the shared SSH credentials. No GCP or IAP code is
+  used. Unit tests verify failure when RU settings are incomplete, runner
+  construction, and exclusion of test/GCP tooling.
 
 ### 304. Loading the approved Outline image on RU
 
