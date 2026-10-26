@@ -193,7 +193,6 @@ def eu_stage_steps(runner: RemoteRunner, settings: EuProductionSettings) -> list
         + outline_steps(runner, settings.EU_SERVER_ADDRESS)
         + mtproxy_steps(runner)
         + ru_key_steps(runner)
-        + firewall_steps(runner, settings)
     )
 
 
@@ -206,8 +205,8 @@ def run_eu_stage(runner: RemoteRunner, settings: EuProductionSettings) -> int:
     steps = eu_stage_steps(runner, settings)
     return run_steps(
         steps,
-        f"EU production stage completed on eu-server: all {len(steps)} steps "
-        "and checks passed (RU stage not implemented)",
+        f"EU Phase 2A service checks completed on eu-server: "
+        f"all {len(steps)} steps and checks passed",
     )
 
 

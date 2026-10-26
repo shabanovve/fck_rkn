@@ -7,7 +7,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from test_production_eu_checks import ACCESS_URL, ScriptedRunner, run_stage
+from test_production_eu_checks import (
+    ACCESS_URL,
+    ScriptedRunner,
+    run_stage,
+    stage_settings,
+)
 
 from fck_rkn import last_run
 from fck_rkn.agents import eu_server_test, test_client
@@ -74,8 +79,7 @@ class RollbackSimulationExclusionTests(unittest.TestCase):
             stdin for stdin in stage.runner.stdins
             if isinstance(stdin, str) and "table inet fck_rkn_eu" in stdin
         ]
-        self.assertEqual(len(candidates), 1)
-        self.assertNotIn("invalid", candidates[0].lower())
+        self.assertEqual(candidates, [])
 
     def test_production_sources_do_not_reference_the_rollback_check(self) -> None:
         self.assertNotIn("check_eu_firewall_rollback", production_source())
@@ -85,20 +89,29 @@ class RollbackSimulationExclusionTests(unittest.TestCase):
 class RepeatedFinalFirewallCheckExclusionTests(unittest.TestCase):
     """Task 230."""
 
-    def test_invasive_firewall_check_never_runs_and_the_eu_policy_is_inspected_once(self) -> None:
+    def test_phase_2a_does_not_run_or_verify_any_firewall_check(self) -> None:
         stage = StageRun(self)
         (check,) = trap_attributes(self, eu_server_test, ("check_eu_firewall",))
+        (readonly,) = trap_attributes(
+            self, eu_server_test, ("check_eu_firewall_readonly",)
+        )
 
         self.assertEqual(stage.run(), 0)
 
         check.assert_not_called()
+        readonly.assert_not_called()
         inspections = [c for c in stage.runner.commands if "nft list table inet" in c]
-        self.assertEqual(len(inspections), 1)
+        self.assertEqual(inspections, [])
         self.assertNotIn("netns", "\n".join(stage.runner.commands))
 
-    def test_stage_does_not_defer_success_to_ru_actions(self) -> None:
-        self.assertNotIn("ru_runner", production_source())
-        self.assertNotIn("check_ru_firewall", production_source())
+    def test_firewall_checks_are_not_part_of_phase_2a(self) -> None:
+        names = [
+            name
+            for name, _ in production_environment.eu_stage_steps(
+                ScriptedRunner(), stage_settings()
+            )
+        ]
+        self.assertFalse(any("firewall" in name.lower() for name in names))
 
 
 class TestRunStateExclusionTests(unittest.TestCase):

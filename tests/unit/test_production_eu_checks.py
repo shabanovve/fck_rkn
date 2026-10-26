@@ -588,11 +588,15 @@ class FirewallInputPreparationTests(unittest.TestCase):
     def test_preparation_runs_after_the_key_step_and_needs_no_remote_command(self) -> None:
         runner = ScriptedRunner()
 
-        self.assertEqual(run_stage(runner, self.archive), 0)
+        with patch.object(
+            production_environment, "prepare_eu_firewall_input"
+        ) as prepare:
+            self.assertEqual(run_stage(runner, self.archive), 0)
 
+        prepare.assert_not_called()
         self.assertIn("ru-server-feasibility-probe", runner.commands[9])
 
-    def test_failed_preparation_stops_the_stage_before_any_firewall_command(self) -> None:
+    def test_phase_2a_never_prepares_or_applies_a_firewall(self) -> None:
         runner = ScriptedRunner()
         config_home = tempfile.TemporaryDirectory()
         self.addCleanup(config_home.cleanup)
@@ -606,16 +610,16 @@ class FirewallInputPreparationTests(unittest.TestCase):
             patch.object(
                 production_environment,
                 "prepare_eu_firewall_input",
-                side_effect=FirewallInputError("The RKN blacklist is unavailable"),
-            ),
+            ) as prepare,
+            patch.object(production_environment, "apply_eu_firewall") as apply,
             redirect_stdout(StringIO()),
             redirect_stderr(StringIO()),
-            self.assertLogs(production_environment.logger, level="ERROR") as logs,
         ):
             result = production_environment.run_eu_stage(runner, stage_settings())
 
-        self.assertEqual(result, 1)
-        self.assertIn("EU firewall input preparation", logs.output[-1])
+        self.assertEqual(result, 0)
+        prepare.assert_not_called()
+        apply.assert_not_called()
         self.assertTrue(all("nft" not in command for command in runner.commands))
         self.assertIn("ru-server-feasibility-probe", runner.commands[9])
 
@@ -629,23 +633,11 @@ class FirewallApplicationTests(unittest.TestCase):
         self.archive = Path(directory.name) / "outline-image.tar.gz"
         self.archive.write_bytes(b"verified archive")
 
-    def test_firewall_is_applied_last_with_rules_built_from_the_prepared_input(self) -> None:
+    def test_phase_2a_never_applies_eu_firewall(self) -> None:
         runner = ScriptedRunner()
-        real_input = prepared_firewall_input()
-        with patch.object(
-            production_environment, "apply_eu_firewall", return_value=0
-        ) as apply, patch.object(
-            production_environment, "prepare_eu_firewall_input", return_value=real_input
-        ), patch.object(
-            production_environment, "retrieve_outline_artifact", return_value=self.archive
-        ), patch.dict(os.environ, {"XDG_CONFIG_HOME": tempfile.mkdtemp()}), redirect_stdout(
-            StringIO()
-        ), redirect_stderr(StringIO()):
-            self.assertEqual(
-                production_environment.run_eu_stage(runner, stage_settings()), 0
-            )
-
-        apply.assert_called_once_with(runner, real_input)
+        with patch.object(production_environment, "apply_eu_firewall") as apply:
+            self.assertEqual(run_stage(runner, self.archive), 0)
+        apply.assert_not_called()
 
     def test_apply_commands_install_transactionally_and_never_reset(self) -> None:
         runner = ScriptedRunner()
@@ -661,19 +653,11 @@ class FirewallApplicationTests(unittest.TestCase):
         self.assertIn("active rules are unchanged", runner.commands[0])
         self.assertIn("restoring the previous configuration", runner.commands[0])
 
-    def test_rejected_candidate_stops_the_stage_and_names_the_step(self) -> None:
-        for label, outcome in (
-            ("candidate rejected", RemoteResult(1, stderr="nftables rejected")),
-            ("timeout", RemoteTimeoutError()),
-        ):
-            with self.subTest(case=label):
-                runner = ScriptedRunner(
-                    [RemoteResult(0)] * 9 + [RemoteResult(0, ACCESS_URL), outcome]
-                )
-                with self.assertLogs(production_environment.logger, level="ERROR") as logs:
-                    self.assertNotEqual(run_stage(runner, self.archive), 0)
-
-                self.assertIn("EU firewall application", logs.output[-1])
+    def test_phase_2a_failure_does_not_apply_eu_firewall(self) -> None:
+        runner = ScriptedRunner([RemoteResult(1)])
+        with patch.object(production_environment, "apply_eu_firewall") as apply:
+            self.assertNotEqual(run_stage(runner, self.archive), 0)
+        apply.assert_not_called()
 
     def test_invalid_input_sends_no_remote_command(self) -> None:
         runner = ScriptedRunner()
@@ -703,26 +687,31 @@ class FirewallVerificationTests(unittest.TestCase):
     def test_verification_follows_the_apply_and_is_read_only(self) -> None:
         runner = ScriptedRunner()
 
-        self.assertEqual(run_stage(runner, self.archive), 0)
+        with patch.object(
+            production_environment, "check_eu_firewall_readonly"
+        ) as verify:
+            self.assertEqual(run_stage(runner, self.archive), 0)
 
-        verify = runner.commands[12]
-        self.assertIn("nft list table inet", verify)
-        for forbidden in ("netns", "ip route", "nft -f", "systemctl", "flush"):
-            self.assertNotIn(forbidden, verify)
-        self.assertNotIn("rkn_ipv4", runner.stdins[12])
+        verify.assert_not_called()
+        self.assertTrue(all("nft list table inet" not in command for command in runner.commands))
 
     def test_mismatch_and_timeout_fail_the_stage_naming_the_step(self) -> None:
         for outcome in (RemoteResult(1, stderr="mismatch"), RemoteTimeoutError()):
             with self.subTest(outcome=type(outcome).__name__):
-                runner = ScriptedRunner(
-                    [RemoteResult(0)] * 9
-                    + [RemoteResult(0, ACCESS_URL), RemoteResult(0), RemoteResult(0), outcome]
-                )
-                with self.assertLogs(production_environment.logger, level="ERROR") as logs:
-                    self.assertNotEqual(run_stage(runner, self.archive), 0)
-
-                self.assertIn("EU firewall verification", logs.output[-1])
-                self.assertEqual(len(runner.commands), 13)
+                runner = ScriptedRunner()
+                with patch.object(
+                    production_environment,
+                    "check_eu_firewall_readonly",
+                    return_value=1,
+                ) as verify:
+                    self.assertEqual(
+                        production_environment.run_steps(
+                            [("EU firewall verification", lambda: verify(runner, FIREWALL_INPUT))],
+                            "done",
+                        ),
+                        1,
+                    )
+                verify.assert_called_once()
 
 
 class BlacklistUpdaterCheckTests(unittest.TestCase):
@@ -769,11 +758,11 @@ class BlacklistUpdaterCheckTests(unittest.TestCase):
     def test_check_runs_last_after_the_firewall_verification(self) -> None:
         runner = ScriptedRunner()
 
-        self.assertEqual(run_stage(runner, self.archive), 0)
-
-        self.assertIn("blacklist-update.timer", runner.commands[13])
-        self.assertEqual(len(runner.commands), 14)
-        self.assertNotIn("update_rkn", runner.commands[13])
+        with patch.object(
+            production_environment, "check_rkn_blacklist_updater"
+        ) as updater:
+            self.assertEqual(run_stage(runner, self.archive), 0)
+        updater.assert_not_called()
 
     def test_populated_sets_and_active_timer_pass(self) -> None:
         self.assertEqual(self.run_script().returncode, 0)
@@ -799,22 +788,22 @@ class BlacklistUpdaterCheckTests(unittest.TestCase):
             RemoteTimeoutError(),
         ):
             with self.subTest(outcome=type(outcome).__name__):
-                runner = ScriptedRunner(
-                    [RemoteResult(0)] * 9
-                    + [RemoteResult(0, ACCESS_URL)]
-                    + [RemoteResult(0)] * 3
-                    + [outcome]
-                )
-                stdout, stderr = StringIO(), StringIO()
-                with (
-                    self.assertLogs(production_environment.logger, level="ERROR") as logs,
-                    redirect_stdout(stdout),
-                    redirect_stderr(stderr),
-                ):
-                    self.assertNotEqual(run_stage(runner, self.archive), 0)
-
+                runner = ScriptedRunner()
+                with patch.object(
+                    production_environment,
+                    "check_rkn_blacklist_updater",
+                    return_value=1,
+                ) as updater:
+                    with self.assertLogs(
+                        production_environment.logger, level="ERROR"
+                    ) as logs:
+                        result = production_environment.run_steps(
+                            [("EU RKN blacklist updater check", lambda: updater(runner, "eu"))],
+                            "done",
+                        )
+                self.assertEqual(result, 1)
+                updater.assert_called_once_with(runner, "eu")
                 self.assertIn("blacklist updater", logs.output[-1])
-                self.assertNotIn("secret-out", "\n".join(logs.output))
 
 
 class StageSummaryTests(unittest.TestCase):
@@ -843,8 +832,7 @@ class StageSummaryTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         summary = text.splitlines()[-1]
-        self.assertIn("EU production stage completed on eu-server", summary)
-        self.assertIn("RU stage not implemented", summary)
+        self.assertIn("EU Phase 2A service checks completed on eu-server", summary)
         for value in ("192.0.2.10", "192.0.2.20", "ss://", "test-client"):
             self.assertNotIn(value, text)
         for word in self.FORBIDDEN:
@@ -875,10 +863,6 @@ class FullStageOrderTests(unittest.TestCase):
         "MTProxy deployment",
         "MTProxy check",
         "RU-stage Outline key",
-        "EU firewall input preparation",
-        "EU firewall application",
-        "EU firewall verification",
-        "EU RKN blacklist updater check",
     ]
 
     def test_steps_run_in_the_documented_order_and_each_deploy_has_its_check(self) -> None:
@@ -894,7 +878,6 @@ class FullStageOrderTests(unittest.TestCase):
             ("Squid deployment", "Squid startup check"),
             ("Outline deployment", "Outline health check"),
             ("MTProxy deployment", "MTProxy check"),
-            ("EU firewall application", "EU firewall verification"),
         ):
             self.assertLess(names.index(deploy), names.index(check))
 
