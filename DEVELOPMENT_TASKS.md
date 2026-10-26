@@ -2113,7 +2113,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Result:** `ru_firewall_steps` runs `check_rkn_blacklist_updater(..., "ru")`
   after the policy check. Unit tests check ordering and failure handling.
 
-### 328. Integrating the complete production rollout
+### 328. [x] Integrating the complete production rollout
 
 - **Depends on:** Tasks 226–229, 301–327 and task 245.
 - **Source step:** The RU sequence in `_run` and the full-run behavior of
@@ -2133,8 +2133,12 @@ production settings and `SshRunner`, never the standalone CLIs that read
   pre-firewall service checks, all approved checks repeat after both applies,
   every failure stops later steps, and summaries contain no production
   addresses or secrets. Update `PROD_ENV_HOST.md`.
+- **Result:** `production_environment.main` sequences EU setup, RU setup,
+  firewall application, and final checks. `deploy_ru_stage` collects all RU
+  and final actions. No firewall is applied if early checks fail. Unit tests
+  assert execution order and fallback behavior.
 
-### 319. Rechecking EU Squid after firewall installation
+### 319. [x] Rechecking EU Squid after firewall installation
 
 - **Depends on:** Tasks 226 and 315.
 - **Source step:** The EU Squid startup check after both firewall applications.
@@ -2142,38 +2146,43 @@ production settings and `SshRunner`, never the standalone CLIs that read
   firewalls are installed.
 - **Verify:** Assert the check occurs after both apply actions and performs no
   remote mutation.
+- **Result:** Done in task 328 via `post_firewall_checks`.
 
-### 320. Rechecking EU Squid HTTP after firewall installation
+### 320. [x] Rechecking EU Squid HTTP after firewall installation
 
 - **Depends on:** Tasks 226 and 315.
 - **Source step:** The EU Squid HTTP check after both firewall applications.
 - **Change:** Rerun the bounded HTTP-through-Squid check after both guest
   firewalls are installed.
 - **Verify:** Assert ordering, expected status handling and fail-fast behavior.
+- **Result:** Done in task 328 via `post_firewall_checks`.
 
-### 321. Rechecking EU Squid blocking after firewall installation
+### 321. [x] Rechecking EU Squid blocking after firewall installation
 
 - **Depends on:** Tasks 226 and 315.
 - **Source step:** The EU Squid blocking check after both firewall applications.
 - **Change:** Rerun the read-only denied-destination check after both guest
   firewalls are installed.
 - **Verify:** Assert ordering and that disallowed destinations remain denied.
+- **Result:** Done in task 328 via `post_firewall_checks`.
 
-### 322. Rechecking EU Outline health after firewall installation
+### 322. [x] Rechecking EU Outline health after firewall installation
 
 - **Depends on:** Tasks 226 and 315.
 - **Source step:** The EU Outline health check after both firewall applications.
 - **Change:** Rerun the read-only Outline container/API/listener health check.
 - **Verify:** Assert it runs after both applies and reveals no key material.
+- **Result:** Done in task 328 via `post_firewall_checks`.
 
-### 323. Rechecking EU MTProxy health after firewall installation
+### 323. [x] Rechecking EU MTProxy health after firewall installation
 
 - **Depends on:** Tasks 226 and 315.
 - **Source step:** The EU MTProxy check after both firewall applications.
 - **Change:** Rerun the read-only MTProxy health check.
 - **Verify:** Assert ordering, failure propagation and secret-free output.
+- **Result:** Done in task 328 via `post_firewall_checks`.
 
-### 324. Rechecking RU Outline Server health after firewall installation
+### 324. [x] Rechecking RU Outline Server health after firewall installation
 
 - **Depends on:** Tasks 226 and 315.
 - **Source step:** The RU Outline health check after both firewall applications.
@@ -2181,8 +2190,9 @@ production settings and `SshRunner`, never the standalone CLIs that read
   check.
 - **Verify:** Assert ordering and that access URLs/key material are not
   exposed.
+- **Result:** Done in task 328 via `post_firewall_checks`.
 
-### 325. Rechecking the RU Outline client after firewall installation
+### 325. [x] Rechecking the RU Outline client after firewall installation
 
 - **Depends on:** Tasks 226 and 315.
 - **Source step:** The RU Outline client check after both firewall
@@ -2190,16 +2200,18 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Change:** Rerun the reviewed RU-side client check using the protected
   EU key through the existing secure input path.
 - **Verify:** Assert ordering, bounded checks and secret-free output.
+- **Result:** Done in task 328 via `post_firewall_checks`.
 
-### 326. Rechecking the RU Squid forward after firewall installation
+### 326. [x] Rechecking the RU Squid forward after firewall installation
 
 - **Depends on:** Tasks 226 and 315.
 - **Source step:** The RU-to-EU Squid forwarding check after both firewall
   applications.
 - **Change:** Rerun the bounded RU-to-EU Squid forwarding check.
 - **Verify:** Assert ordering and that no direct-route fallback is used.
+- **Result:** Done in task 328 via `post_firewall_checks`.
 
-### 327. Rechecking the RU MTProxy forward after firewall installation
+### 327. [x] Rechecking the RU MTProxy forward after firewall installation
 
 - **Depends on:** Tasks 226 and 315.
 - **Source step:** The RU-to-EU MTProxy forwarding check after both firewall
@@ -2207,6 +2219,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Change:** Rerun the bounded RU-to-EU MTProxy forwarding check.
 - **Verify:** Assert ordering, failure propagation and no direct-route
   fallback.
+- **Result:** Done in task 328 via `post_firewall_checks`.
 
 ### RU test-environment exclusions
 
