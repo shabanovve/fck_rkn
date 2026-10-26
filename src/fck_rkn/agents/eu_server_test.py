@@ -163,6 +163,32 @@ def check_eu_firewall(runner: RemoteRunner, config_json: str) -> int:
     )
 
 
+def check_eu_firewall_readonly(runner: RemoteRunner, config_json: str) -> int:
+    """Inspect the active EU firewall without probes or any change."""
+    try:
+        config = load_config(config_json)
+        ipaddress.ip_address(config.get("ru_server_address"))
+        ssh_port = config.get("ssh_port", 22)
+        if isinstance(ssh_port, bool) or not isinstance(ssh_port, int):
+            raise ValueError("ssh_port must be an integer")
+    except (TypeError, ValueError) as error:
+        logger.error("Invalid EU firewall verification input: %s", error)
+        return 1
+    check_input = json.dumps(
+        {"ru_server_address": config["ru_server_address"], "ssh_port": ssh_port}
+    )
+    logger.info("Verifying the active EU firewall policy on eu-server (read-only)")
+    return execute(
+        runner,
+        render("eu_firewall_readonly_check.sh", vpn_port=OUTLINE_ACCESS_KEY_PORT),
+        "EU firewall read-only verification",
+        SSH_COMMAND_TIMEOUT_SECONDS,
+        stdin=check_input,
+        print_output=True,
+        print_stderr=True,
+    )
+
+
 def check_eu_firewall_rollback(runner: RemoteRunner) -> int:
     """Verify a rejected update preserves saved and active EU firewall rules."""
     logger.info("Checking EU firewall update rollback on eu-server")
@@ -218,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
             "outline",
             "mtproxy",
             "firewall",
+            "firewall-readonly",
             "firewall-rollback",
             "firewall-blacklist",
         ),
@@ -251,6 +278,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             config_json = sys.stdin.read()
         return check_eu_firewall(runner, config_json)
+    if args.action == "firewall-readonly":
+        return check_eu_firewall_readonly(runner, sys.stdin.read())
     if args.action == "firewall-rollback":
         return check_eu_firewall_rollback(runner)
     if args.action == "firewall-blacklist":

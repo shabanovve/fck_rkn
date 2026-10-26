@@ -17,6 +17,7 @@ from fck_rkn.agents.eu_server import (
 )
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.eu_server_test import (
+    check_eu_firewall_readonly,
     check_mtproxy,
     check_outline_health,
     check_squid_blocking,
@@ -172,6 +173,10 @@ def firewall_steps(
         (
             "EU firewall application",
             lambda: apply_eu_firewall(runner, prepared["config"]),
+        ),
+        (
+            "EU firewall verification",
+            lambda: check_eu_firewall_readonly(runner, prepared["config"]),
         ),
     ]
 

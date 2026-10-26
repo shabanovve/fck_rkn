@@ -1578,7 +1578,7 @@ runner, "ru-server-feasibility-probe")`), matching
   no reset action occurs and a failed apply stops the stage.
 - **Result:** The stage now applies the prepared EU firewall through apply_eu_firewall after the key and preparation steps. The apply is transactional and has no reset; a rejected candidate or timeout stops the stage.
 
-### 227. Verifying the EU firewall policy safely after application
+### 227. [x] Verifying the EU firewall policy safely after application
 
 - **Source step:** The first `check_eu_firewall` call after applying EU rules.
 - **Check action:** The existing CLI spelling is
@@ -1599,6 +1599,7 @@ runner, "ru-server-feasibility-probe")`), matching
   simulation steps that depend on rollback testing.
 - **Verify:** Test inspection against expected/missing/mismatched policy
   output and assert it performs no remote mutation.
+- **Result:** Added check_eu_firewall_readonly, CLI action firewall-readonly and a read-only remote script that only lists the active table. It verifies the default-deny policy, SSH and RU VPN allowances, crawler sets, rule order and the direct-service drop. The stage runs it after the apply step.
 
 ### 228. Excluding the EU firewall rollback simulation
 

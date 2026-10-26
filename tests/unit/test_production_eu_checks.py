@@ -689,5 +689,39 @@ class FirewallApplicationTests(unittest.TestCase):
         self.assertEqual(len(runner.commands), 9)
 
 
+class FirewallVerificationTests(unittest.TestCase):
+    """Task 227."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.archive = Path(directory.name) / "outline-image.tar.gz"
+        self.archive.write_bytes(b"verified archive")
+
+    def test_verification_follows_the_apply_and_is_read_only(self) -> None:
+        runner = ScriptedRunner()
+
+        self.assertEqual(run_stage(runner, self.archive), 0)
+
+        verify = runner.commands[12]
+        self.assertIn("nft list table inet", verify)
+        for forbidden in ("netns", "ip route", "nft -f", "systemctl", "flush"):
+            self.assertNotIn(forbidden, verify)
+        self.assertNotIn("rkn_ipv4", runner.stdins[12])
+
+    def test_mismatch_and_timeout_fail_the_stage_naming_the_step(self) -> None:
+        for outcome in (RemoteResult(1, stderr="mismatch"), RemoteTimeoutError()):
+            with self.subTest(outcome=type(outcome).__name__):
+                runner = ScriptedRunner(
+                    [RemoteResult(0)] * 9
+                    + [RemoteResult(0, ACCESS_URL), RemoteResult(0), RemoteResult(0), outcome]
+                )
+                with self.assertLogs(production_environment.logger, level="ERROR") as logs:
+                    self.assertNotEqual(run_stage(runner, self.archive), 0)
+
+                self.assertIn("EU firewall verification", logs.output[-1])
+                self.assertEqual(len(runner.commands), 13)
+
+
 if __name__ == "__main__":
     unittest.main()
