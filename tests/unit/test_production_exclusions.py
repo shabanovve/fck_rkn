@@ -119,5 +119,19 @@ class TestRunStateExclusionTests(unittest.TestCase):
         self.assertNotIn("last_run", production_source())
 
 
+class TestClientLookupExclusionTests(unittest.TestCase):
+    """Task 232."""
+
+    def test_stage_never_looks_up_a_test_client_or_queries_gcp(self) -> None:
+        stage = StageRun(self)
+        (lookup,) = trap_attributes(self, compute, ("lookup_test_client",))
+
+        self.assertEqual(stage.run(), 0)
+
+        lookup.assert_not_called()
+        self.assertNotIn("fck_rkn.gcp", production_source())
+        self.assertNotIn("gcloud", "\n".join(stage.runner.commands))
+
+
 if __name__ == "__main__":
     unittest.main()

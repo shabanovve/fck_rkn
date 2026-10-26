@@ -1650,7 +1650,7 @@ runner, "ru-server-feasibility-probe")`), matching
   test run state.
 - **Result:** Added exclusion tests: last_run.save is never called, config/last_run is unchanged, and the production sources do not reference run state.
 
-### 232. Excluding test-client lookup
+### 232. [x] Excluding test-client lookup
 
 - **Source step:** `lookup_test_client(settings)` checks whether the GCP
   test-client VM already exists.
@@ -1658,6 +1658,7 @@ runner, "ru-server-feasibility-probe")`), matching
   the EU production stage.
 - **Verify:** EU-stage tests assert there are no test-client lookup or GCP
   compute calls.
+- **Result:** Added exclusion tests: lookup_test_client is never called and the production sources and remote commands contain no GCP access.
 
 ### 233. Excluding test-client provisioning
 
