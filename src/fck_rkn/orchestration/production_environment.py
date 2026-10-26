@@ -23,6 +23,7 @@ from fck_rkn.agents.ru_server import (
 from fck_rkn.agents.ru_server_test import (
     check_outline_client as check_ru_outline_client,
     check_outline_health as check_ru_outline_health,
+    check_squid_forward as check_ru_squid_forward,
 )
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.eu_server_test import (
@@ -220,6 +221,21 @@ def ru_squid_forward_deploy_steps(
             "RU Squid forward deployment",
             lambda: deploy_squid_forward(runner, access_url),
         )
+    ]
+
+
+def ru_squid_forward_steps(
+    runner: RemoteRunner, access_url: str
+) -> list[Step]:
+    return [
+        (
+            "RU Squid forward deployment",
+            lambda: deploy_squid_forward(runner, access_url),
+        ),
+        (
+            "RU Squid forward check",
+            lambda: check_ru_squid_forward(runner),
+        ),
     ]
 
 

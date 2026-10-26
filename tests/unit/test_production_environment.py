@@ -302,6 +302,35 @@ class ProductionEnvironmentTests(unittest.TestCase):
             _, action = steps[0]
             self.assertEqual(action(), 18)
 
+    def test_ru_squid_forward_steps_runs_deploy_and_check_in_order(self) -> None:
+        runner = object()
+        secret_url = "ss://Y2hhY2hhOnBhc3M@192.0.2.10:10001"
+        with (
+            patch.object(
+                production_environment, "deploy_squid_forward", return_value=0
+            ) as deploy,
+            patch.object(
+                production_environment, "check_ru_squid_forward", return_value=0
+            ) as check,
+        ):
+            steps = production_environment.ru_squid_forward_steps(runner, secret_url)
+            self.assertEqual(len(steps), 2)
+            self.assertEqual(steps[0][0], "RU Squid forward deployment")
+            self.assertEqual(steps[1][0], "RU Squid forward check")
+            self.assertEqual(steps[0][1](), 0)
+            self.assertEqual(steps[1][1](), 0)
+
+        deploy.assert_called_once_with(runner, secret_url)
+        check.assert_called_once_with(runner)
+
+    def test_ru_squid_forward_steps_check_reports_failure(self) -> None:
+        runner = object()
+        with patch.object(
+            production_environment, "check_ru_squid_forward", return_value=19
+        ) as check:
+            steps = production_environment.ru_squid_forward_steps(runner, "ss://key")
+            self.assertEqual(steps[1][1](), 19)
+
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()
         with (

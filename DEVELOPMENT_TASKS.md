@@ -2017,7 +2017,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   the EU Outline endpoint using the in-memory access URL. Unit tests verify
   parameter delivery and error propagation without direct fallbacks.
 
-### 311. Checking the RU-to-EU Squid forward
+### 311. [x] Checking the RU-to-EU Squid forward
 
 - **Depends on:** Task 310.
 - **Source step:** `check_squid_forward(ru_runner)`.
@@ -2026,6 +2026,9 @@ production settings and `SshRunner`, never the standalone CLIs that read
   configuration.
 - **Verify:** Cover successful and failed reachability/HTTP results and
   fail-fast sequencing.
+- **Result:** `ru_squid_forward_steps` runs `check_ru_squid_forward` after
+  successful forward deployment. Unit tests verify step ordering, reachability
+  result handling, and fail-fast termination on check failure.
 
 ### 312. Deploying the RU-to-EU MTProxy forward
 
