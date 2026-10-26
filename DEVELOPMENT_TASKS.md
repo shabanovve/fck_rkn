@@ -372,9 +372,12 @@ behavior that requires them.
   a cloud provider.
 - **Done:** `deploy_outline.sh` takes `@PRIVATE_ADDRESS@` (shell-quoted);
   `deploy_outline_on`, `deploy_outline` and `deploy_outline_server` take
-  `private_address`. Production reads `EU_SERVER_ADDRESS` and
-  `RU_SERVER_PRIVATE_ADDRESS` from `config/agents.env`; the orchestrator uses
-  `gcp.compute.private_address_of(instance)` (exit code 5 if missing).
+  `private_address`. At the time this task was completed, direct-agent
+  configuration used `EU_SERVER_ADDRESS` and `RU_SERVER_PRIVATE_ADDRESS`.
+  The production configuration decision now uses `RU_SERVER_ADDRESS` as the
+  single RU address for both SSH and service configuration. The test
+  orchestrator uses `gcp.compute.private_address_of(instance)` (exit code 5
+  if missing).
 
 ### 49g. [x] Document the platform boundary
 
@@ -1523,7 +1526,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Verify:** Test health-check success/failure and ensure a failure stops the
   EU stage. Standalone CLI equivalent:
   `.venv/bin/eu-server-test-agent mtproxy`.
-- **Result:** The EU stage runs `check_mtproxy` right after the MTProxy deployment. Tests (`MtproxyCheckTests`) cover ordering, failure and timeout stopping the stage, and the read-only check that never prints the secret. The next EU action, the key for the RU stage (task 224), awaits an approved secret backend.
+- **Result:** The EU stage runs `check_mtproxy` right after the MTProxy deployment. Tests (`MtproxyCheckTests`) cover ordering, failure and timeout stopping the stage, and the read-only check that never prints the secret. The next EU action provisions the RU-stage key through the approved `LocalSecretStore` in task 224.
 
 ### 224. [x] Provisioning the EU Outline key for the later RU stage
 
@@ -1534,17 +1537,15 @@ checks restricted to the reviewed read-only behavior specified by each task.
 runner, "ru-server-feasibility-probe")`), matching
 `RU_PROBE_OUTLINE_USER` in the test orchestrator.
 - **Change:** Create or reuse the dedicated EU Outline key needed by the later
-  RU stage and store/retrieve it using an explicitly approved protected
-  secret mechanism. Never place it in `prod.env`, logs, argv, test run state,
+  RU stage and store/retrieve it through the approved operator-local
+  `LocalSecretStore`. Never place it in `prod.env`, logs, argv, test run state,
   or an unprotected file. This EU-side credential operation does not authorize
   any RU deployment during Phase 2A.
-- **Prerequisite:** Approve the secret backend and its access/retention policy.
-- **Verify:** Test secure write/read, no-overwrite or rotation behavior as
-  approved, and redaction on success/failure. Do not implement against an
-  unapproved backend. The standalone CLI prints the access URL to stdout and
-  is therefore not the production orchestration mechanism; the orchestrator
-  must capture the function return value in memory and send it directly to
-  the approved secret-store client without printing it.
+- **Verify:** Test secure write/read, the documented overwrite/refresh
+  behavior, and redaction on success/failure. The standalone CLI prints the
+  access URL to stdout and is therefore not the production orchestration
+  mechanism; the orchestrator captures the function return value in memory
+  and writes it directly to `LocalSecretStore` without printing it.
 - **Result:** Approved backend: an operator-local `0600` file in a `0700` directory outside the repository (`production_secrets.LocalSecretStore`, documented in `PROD_ENV_HOST.md`). The stage captures `create_outline_user` output in memory, writes it atomically to the store, and never prints it. Reuse refreshes the local copy; failures store nothing and log no secret. Tests: `test_production_secrets.py` and `RuStageOutlineKeyTests`.
 
 ### 225. [x] Preparing production EU firewall inputs
@@ -1815,8 +1816,9 @@ runner, "ru-server-feasibility-probe")`), matching
   firewall action followed by its matching check. Omit the steps excluded by
   task 200 (GCP, IAP, test client, destructive checks, cleanup). Stop at the
   first failure with a nonzero exit code naming the step. Implement it in
-  stages: EU steps are added as their tasks complete, RU steps after task
-  201; until then the RU stage is reported as not implemented. Keep
+  stages: EU steps are added as their tasks complete, RU steps after
+  decomposition task 201 and implementation tasks 301–318; until Phase 2B is
+  implemented, the RU stage is reported as not implemented. Keep
   `configure` and `deploy-eu-squid` as explicit single-step operations. This
   completes the no-argument behavior started in task 213 for the EU Squid
   steps.
@@ -1825,7 +1827,7 @@ runner, "ru-server-feasibility-probe")`), matching
   a failure stops later steps, that a missing or invalid config triggers the
   interactive setup on a terminal and exit code 2 without one, and that no
   excluded test-only action is called.
-- **Result:** The no-argument run executes the full EU stage (Squid, Outline image, Outline, MTProxy, RU-stage key, firewall apply, read-only verification, blacklist updater check) and stops at the first failure, naming the step. Tests assert the exact order, that each deploy precedes its check, that every failure stops later steps, config/TTY behavior and that no test-only action is used. PROD_ENV_HOST.md is updated. The RU stage remains not implemented until task 201, so the full test_env_host parity is reached only for the EU side.
+- **Result:** The no-argument run executes the full EU stage (Squid, Outline image, Outline, MTProxy, RU-stage key, firewall apply, read-only verification, blacklist updater check) and stops at the first failure, naming the step. Tests assert the exact order, that each deploy precedes its check, that every failure stops later steps, config/TTY behavior and that no test-only action is used. `PROD_ENV_HOST.md` is updated. RU decomposition is complete in task 201; RU implementation remains pending tasks 301–318, so the no-argument run currently executes only the EU stage.
 
 ## RU production implementation tasks created by task 201
 

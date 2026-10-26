@@ -73,8 +73,8 @@
   verify `ru-server`. The EU-only stage must not run RU deployment actions or
   modify RU state. Keep any cross-server inputs needed by EU (such as the RU
   peer address for its firewall policy) separate from permission to deploy
-  RU. If an EU-generated Outline access URL is needed by the later RU stage,
-  transfer or retrieve it through an approved protected secret mechanism;
+  RU. The EU-generated Outline access URL needed by the later RU stage is
+  stored and retrieved through the approved operator-local `LocalSecretStore`;
   never place it in `prod.env`, command arguments, logs, or an unprotected
   file.
 - Every GCP test VM must have outbound Internet access through Cloud NAT and

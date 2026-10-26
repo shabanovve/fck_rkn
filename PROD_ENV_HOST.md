@@ -1,13 +1,15 @@
 # `prod-env-host` Guide
 
-`prod-env-host` is the production deployment controller. Its only implemented
-operation is currently `deploy-eu-squid`: it connects to the existing
-`eu-server`, deploys Squid, and sequentially checks that it starts, serves HTTP
-requests through the proxy, and blocks prohibited destinations.
+`prod-env-host` is the production deployment controller. With no operation
+specified, it runs the complete implemented EU stage: Squid, the approved
+Outline image and server, MTProxy, the protected Outline key for the future RU
+stage, and the EU firewall with its read-only checks. The RU production stage
+is planned in tasks 301–318 and is not implemented yet.
 
-This command does **not** deploy Outline or MTProxy, apply or reset the
-firewall, connect to `ru-server`, or create test infrastructure. The complete
-production rollout has not been implemented yet.
+The explicit `deploy-eu-squid` operation connects to the existing `eu-server`,
+deploys Squid, and checks that it starts, serves HTTP requests through the
+proxy, and blocks prohibited destinations. Production does not reset the
+firewall, connect to `ru-server`, or create test infrastructure.
 
 ## Requirements
 
@@ -50,7 +52,7 @@ Required EU-stage settings:
 | Variable | Value |
 | --- | --- |
 | `EU_SERVER_ADDRESS` | IPv4 or IPv6 address of `eu-server`, used by the controller for SSH and by the service configuration. |
-| `RU_SERVER_ADDRESS` | IPv4 or IPv6 peer address for a future EU firewall rule. This value does not authorize the command to connect to RU. |
+| `RU_SERVER_ADDRESS` | IPv4 or IPv6 address of `ru-server`, used only as the peer address for the EU firewall in Phase 2A. It does not authorize Phase 2A to connect to or modify RU. The same setting is the RU SSH and service address in the planned Phase 2B. |
 | `SSH_USER` | SSH account on `eu-server`. |
 | `SSH_KEY_PATH` | Absolute path on the controller to the SSH key; do not put the key itself in `prod.env`. |
 | `SSH_PORT` | SSH TCP port; defaults to `22`. |
@@ -60,8 +62,10 @@ Required EU-stage settings:
 
 Server addresses are validated as IP addresses. `EU_SERVER_ADDRESS` must be
 the SSH-reachable address assigned to `eu-server`; DNS names are not accepted.
-The `EU_SERVER_ADDRESS` and `RU_SERVER_ADDRESS` names do not themselves
-restrict the address range.
+`RU_SERVER_ADDRESS` is collected for the EU firewall peer rule and is not used
+as an RU SSH target in Phase 2A. The
+`EU_SERVER_ADDRESS` and `RU_SERVER_ADDRESS` names do not themselves restrict
+the address range.
 
 Lists must be written as JSON directly in the dotenv file, for example:
 
@@ -103,9 +107,9 @@ the loader checks the final file either way:
    endpoint, probed where the provider offers one).
 3. Settings that cannot be determined automatically, such as
    `RU_SERVER_ADDRESS`, or whose discovery failed, is ambiguous or found
-   nothing (for example, no metadata endpoint), are
-   requested from the operator explicitly, one by one, with the allowed form
-   described in the prompt.
+   nothing (for example, no metadata endpoint), are requested from the
+   operator explicitly, one by one, with the allowed form described in the
+   prompt.
 4. Discovered and entered values are validated with the same rules as the
    loader, shown to the operator for confirmation, and only then written to
    `config/prod.env` (mode `0600`, atomically). An existing file is never
@@ -133,17 +137,17 @@ operator commands:
 1. If `config/prod.env` is missing or invalid and a terminal is available, it
    first runs the [interactive configuration](#interactive-configuration-required-behavior).
    Without a terminal it exits with code `2` and the validation diagnostics.
-2. It then invokes the existing `eu-server-agent`, `eu-server-test-agent`,
-   `ru-server-agent` and `ru-server-test-agent` functions in the same order
-   as `test_env_host`. Each deployment or firewall action is followed by its
-   matching test-agent check, and the run stops at the first failure with a
-   nonzero exit code that identifies the failed step. Only the steps with a
-   production equivalent run (see the exclusions in task 200: no GCP
-   provisioning, IAP, test client, destructive checks or cleanup).
-3. The sequence is implemented in stages: the EU stage first (tasks 213–242),
-   then the RU stage after the RU decomposition (task 201). Until the RU stage
-   exists, a run without arguments performs the EU stage only and reports
-   that the RU stage is not implemented.
+2. It invokes the implemented deployment and test-agent functions in the
+   `test_env_host` dependency order. Each deployment or firewall action is
+   followed by its matching check, and the run stops at the first failure
+   with a nonzero exit code that identifies the failed step. Only steps with
+   a production equivalent run (see task 200 exclusions: no GCP provisioning,
+   IAP, test client, destructive checks or cleanup).
+3. The sequence is implemented in stages: the EU stage (tasks 213–242) is
+   implemented. RU decomposition is complete (task 201); RU production
+   implementation is planned in tasks 301–318. Until those tasks are
+   implemented, a run without arguments performs only the EU stage and
+   reports that the RU stage is not implemented.
 4. Single steps stay available as explicit operations (`configure`,
    `deploy-eu-squid`, `build-outline-artifact`) for repeating or debugging
    one step.
@@ -164,18 +168,11 @@ failure, naming the step. Steps, in order:
 Not run, by design: the firewall rollback simulation, the invasive probe-based
 firewall check, test-run state, and every GCP or test-client operation. On
 success the log ends with "EU production stage completed on eu-server"; the RU
-stage is reported as not implemented (task 201). The Outline load step fails
-closed until an approved digest is committed (see "Outline image artifact");
-use `deploy-eu-squid` to run the Squid steps alone. The read-only firewall
-check is also available as `eu-server-test-agent firewall-readonly` (config on
-stdin).
-
-A run without arguments ensures a valid configuration (interactively on a terminal) and then
-performs the EU stage described above:
-
-```sh
-.venv/bin/prod-env-host
-```
+stage is reported as not implemented pending tasks 301–318. The Outline load
+step fails closed until an approved digest is committed (see "Outline image
+artifact"); use `deploy-eu-squid` to run the Squid steps alone. The read-only
+firewall check is also available as `eu-server-test-agent firewall-readonly`
+(config on stdin).
 
 Run `configure` or the Squid deployment alone by selecting the operation
 explicitly:
