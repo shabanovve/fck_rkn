@@ -405,19 +405,78 @@ def run_eu_stage(runner: RemoteRunner, settings: EuProductionSettings) -> int:
     )
 
 
+def deploy_ru_stage(eu_runner: RemoteRunner, settings: EuProductionSettings) -> int:
+    """Deploy and check RU services, then apply and check both firewalls."""
+    access_url = retrieve_ru_outline_key()
+    if access_url is None:
+        return 1
+
+    try:
+        ru_runner = create_ru_runner(settings)
+    except ProductionConfigError as error:
+        logger.error("RU production configuration is incomplete:\n%s", error)
+        return 2
+
+    assert settings.RU_SERVER_ADDRESS is not None
+    ru_services = (
+        ru_outline_image_steps(ru_runner)
+        + ru_outline_steps(ru_runner, settings.RU_SERVER_ADDRESS)
+        + ru_outline_client_steps(ru_runner, access_url)
+        + ru_squid_forward_steps(ru_runner, access_url)
+        + ru_mtproxy_forward_steps(ru_runner, access_url)
+    )
+
+    exit_code = run_steps(
+        ru_services,
+        f"RU Phase 2B service checks completed on ru-server: "
+        f"all {len(ru_services)} steps and checks passed",
+    )
+    if exit_code != 0:
+        return exit_code
+
+    firewalls = (
+        firewall_steps(eu_runner, settings)
+        + ru_firewall_steps(ru_runner, settings, access_url)
+    )
+    
+    exit_code = run_steps(
+        firewalls,
+        "Production firewalls applied and verified on both servers",
+    )
+    if exit_code != 0:
+        return exit_code
+
+    post_firewall_checks = (
+        squid_steps(eu_runner)[1:]
+        + [outline_steps(eu_runner, settings.EU_SERVER_ADDRESS)[1]]
+        + [mtproxy_steps(eu_runner)[1]]
+        + [ru_outline_steps(ru_runner, settings.RU_SERVER_ADDRESS)[1]]
+        + [ru_outline_client_steps(ru_runner, access_url)[1]]
+        + [ru_squid_forward_steps(ru_runner, access_url)[1]]
+        + [ru_mtproxy_forward_steps(ru_runner, access_url)[1]]
+    )
+
+    return run_steps(
+        post_firewall_checks,
+        f"Post-firewall service checks completed on both servers: "
+        f"all {len(post_firewall_checks)} steps and checks passed. "
+        f"Production deployment is complete.",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run an EU-only production deployment operation."
+        description="Run an EU or complete production deployment operation."
     )
     parser.add_argument(
         "operation",
         nargs="?",
         default=None,
-        choices=("deploy-eu-squid", "configure", "build-outline-artifact"),
+        choices=("deploy-eu-squid", "configure", "build-outline-artifact", "deploy-ru"),
         help=(
             "Single operation to run. Without it, the configuration is "
             "ensured (interactively on a terminal if missing or invalid) and "
-            "the EU deployment with its checks runs."
+            "the full deployment with its checks runs (Phase 2A then 2B)."
         ),
     )
     args = parser.parse_args(argv)
@@ -453,11 +512,18 @@ def main(argv: list[str] | None = None) -> int:
                 return status
 
     if args.operation is None:
-        logger.info("Running the EU production stage; the RU stage is not implemented")
+        logger.info("Running the full production deployment (Phase 2A followed by Phase 2B)")
     runner = create_eu_runner(settings)
-    if args.operation is None:
-        return run_eu_stage(runner, settings)
-    return deploy_eu_squid(runner)
+    if args.operation == "deploy-eu-squid":
+        return deploy_eu_squid(runner)
+    
+    eu_status = run_eu_stage(runner, settings)
+    if eu_status != 0:
+        return eu_status
+        
+    if args.operation == "deploy-ru" or args.operation is None:
+        return deploy_ru_stage(runner, settings)
+    return 0
 
 
 if __name__ == "__main__":

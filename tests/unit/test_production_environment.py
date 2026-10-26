@@ -564,16 +564,19 @@ class ProductionEnvironmentTests(unittest.TestCase):
             patch.object(
                 production_environment,
                 "load_eu_production_settings",
-                return_value=settings(),
+                return_value=ru_settings(),
             ),
             patch.object(production_environment, "configure_interactively") as setup,
-            patch.object(production_environment, "run_eu_stage", return_value=0) as deploy,
+            patch.object(production_environment, "run_eu_stage", return_value=0) as eu_deploy,
+            patch.object(production_environment, "deploy_ru_stage", return_value=0) as ru_deploy,
         ):
             self.assertEqual(production_environment.main([]), 0)
 
         setup.assert_not_called()
-        self.assertIsInstance(deploy.call_args.args[0], SshRunner)
-        self.assertEqual(deploy.call_args.args[0].host, "192.0.2.10")
+        self.assertIsInstance(eu_deploy.call_args.args[0], SshRunner)
+        self.assertEqual(eu_deploy.call_args.args[0].host, "192.0.2.10")
+        self.assertIsInstance(ru_deploy.call_args.args[0], SshRunner)
+        self.assertEqual(ru_deploy.call_args.args[0].host, "192.0.2.10")
 
     def test_main_without_arguments_configures_first_when_file_is_missing(self) -> None:
         calls: list[str] = []
@@ -589,17 +592,22 @@ class ProductionEnvironmentTests(unittest.TestCase):
             patch.object(
                 production_environment,
                 "load_eu_production_settings",
-                return_value=settings(),
+                return_value=ru_settings(),
             ),
             patch.object(
                 production_environment,
                 "run_eu_stage",
-                side_effect=lambda *a: calls.append("deploy") or 0,
+                side_effect=lambda *a: calls.append("eu_deploy") and 0 or 0,
+            ),
+            patch.object(
+                production_environment,
+                "deploy_ru_stage",
+                side_effect=lambda *a: calls.append("ru_deploy") and 0 or 0,
             ),
         ):
             self.assertEqual(production_environment.main([]), 0)
 
-        self.assertEqual(calls, ["configure", "deploy"])
+        self.assertEqual(calls, ["configure", "eu_deploy", "ru_deploy"])
 
     def test_main_without_arguments_configures_when_file_is_invalid(self) -> None:
         error = ProductionConfigError("Invalid production configuration")
@@ -609,16 +617,18 @@ class ProductionEnvironmentTests(unittest.TestCase):
             patch.object(
                 production_environment,
                 "load_eu_production_settings",
-                side_effect=[error, settings()],
+                side_effect=[error, ru_settings()],
             ),
             patch.object(production_environment, "configure_interactively") as setup,
-            patch.object(production_environment, "run_eu_stage", return_value=0) as deploy,
+            patch.object(production_environment, "run_eu_stage", return_value=0) as eu_deploy,
+            patch.object(production_environment, "deploy_ru_stage", return_value=0) as ru_deploy,
             self.assertLogs(production_environment.logger, level="ERROR"),
         ):
             self.assertEqual(production_environment.main([]), 0)
 
         setup.assert_called_once()
-        deploy.assert_called_once()
+        eu_deploy.assert_called_once()
+        ru_deploy.assert_called_once()
 
     def test_main_without_terminal_and_invalid_config_exits_with_2(self) -> None:
         error = ProductionConfigError("Invalid production configuration")
