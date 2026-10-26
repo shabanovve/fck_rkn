@@ -1601,7 +1601,7 @@ runner, "ru-server-feasibility-probe")`), matching
   output and assert it performs no remote mutation.
 - **Result:** Added check_eu_firewall_readonly, CLI action firewall-readonly and a read-only remote script that only lists the active table. It verifies the default-deny policy, SSH and RU VPN allowances, crawler sets, rule order and the direct-service drop. The stage runs it after the apply step.
 
-### 228. Excluding the EU firewall rollback simulation
+### 228. [x] Excluding the EU firewall rollback simulation
 
 - **Source step:** `check_eu_firewall_rollback` submits an intentionally
   invalid replacement and checks rollback.
@@ -1611,6 +1611,7 @@ runner, "ru-server-feasibility-probe")`), matching
   verification from task 227.
 - **Verify:** Assert the production EU operation never invokes
   `check_eu_firewall_rollback`.
+- **Result:** Added test_production_exclusions.py: the stage never calls check_eu_firewall_rollback, only the validated candidate is sent to the apply, and the production sources do not reference the rollback check.
 
 ### 229. Checking the EU RKN blacklist updater
 
