@@ -40,9 +40,18 @@ def create_runner(host: str, user: str, key_path: Path, port: int) -> RemoteRunn
     return SshRunner(host=host, user=user, key_path=key_path, port=port)
 
 
+def read_input(prompt: str) -> str:
+    """Read a line, asking again if the terminal sent invalid UTF-8."""
+    while True:
+        try:
+            return input(prompt)
+        except UnicodeDecodeError:
+            print("Input was not valid UTF-8; please type it again.")
+
+
 def run_configuration() -> int:
     try:
-        configure_interactively(create_runner)
+        configure_interactively(create_runner, prompt=read_input)
     except ProductionSetupError as error:
         logger.error("Interactive configuration stopped: %s", error)
         return 2

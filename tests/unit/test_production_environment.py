@@ -95,7 +95,10 @@ class ProductionEnvironmentTests(unittest.TestCase):
         ):
             self.assertEqual(production_environment.main([]), 0)
 
-        setup.assert_called_once_with(production_environment.create_runner)
+        setup.assert_called_once_with(
+            production_environment.create_runner,
+            prompt=production_environment.read_input,
+        )
         deploy.assert_not_called()
 
     def test_main_returns_nonzero_if_configuration_is_invalid(self) -> None:
@@ -129,8 +132,16 @@ class ProductionEnvironmentTests(unittest.TestCase):
         ):
             self.assertEqual(production_environment.main(["configure"]), 0)
 
-        setup.assert_called_once_with(production_environment.create_runner)
+        setup.assert_called_once_with(
+            production_environment.create_runner,
+            prompt=production_environment.read_input,
+        )
         deploy.assert_not_called()
+
+    def test_read_input_retries_after_invalid_utf8(self) -> None:
+        bad = UnicodeDecodeError("utf-8", b"\xd0", 0, 1, "bad")
+        with patch("builtins.input", side_effect=[bad, "n"]):
+            self.assertEqual(production_environment.read_input("? "), "n")
 
     def test_configure_failure_returns_nonzero(self) -> None:
         error = production_environment.ProductionSetupError("declined")
