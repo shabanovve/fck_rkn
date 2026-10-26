@@ -1247,7 +1247,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   default when `prod-env-host` was invoked without arguments; task 244 changes
   the default to `configure`.
 
-### 206. Excluding GCP project-access validation
+### 206. [x] Excluding GCP project-access validation
 
 - **Source step:** `validate_project_access(settings)` verifies Google Cloud
   credentials, APIs and access to the isolated test project.
@@ -1257,8 +1257,11 @@ checks restricted to the reviewed read-only behavior specified by each task.
   report access failures.
 - **Verify:** EU-stage tests do not call GCP client libraries or request cloud
   credentials.
+- **Result:** `test_entry_point_loads_no_gcp_code_or_credentials` imports the
+  entry point in a clean interpreter and fails if any `google*`,
+  `fck_rkn.gcp` or test-environment module is loaded.
 
-### 207. Excluding test VM and network provisioning
+### 207. [x] Excluding test VM and network provisioning
 
 - **Source step:** `_provision_server(... ensure_eu_server ...)` creates or
   reuses the test VM and prepares its test network, Cloud NAT and scoped SSH
@@ -1268,6 +1271,10 @@ checks restricted to the reviewed read-only behavior specified by each task.
   production network policy is managed outside this installer.
 - **Verify:** EU-stage orchestration does not call `ensure_eu_server`,
   Compute Engine, Cloud NAT, or cloud firewall operations.
+- **Result:** `test_entry_point_has_no_test_vm_or_network_provisioning` scans
+  the entry point and the interactive setup for provisioning, Compute, NAT and
+  cloud-firewall references; the import test from task 206 covers loaded
+  modules.
 
 ### 208. Resolving the production EU address
 

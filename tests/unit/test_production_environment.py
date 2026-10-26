@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import call, patch
 
+from fck_rkn import production_setup
 from fck_rkn.orchestration import production_environment
 from fck_rkn.production_config import EuProductionSettings, ProductionConfigError
 from fck_rkn.remote.ssh import SshRunner
@@ -152,6 +156,30 @@ class ProductionEnvironmentTests(unittest.TestCase):
             self.assertLogs(production_environment.logger, level="ERROR"),
         ):
             self.assertEqual(production_environment.main(["configure"]), 2)
+
+    def test_entry_point_loads_no_gcp_code_or_credentials(self) -> None:
+        code = (
+            "import sys\n"
+            "import fck_rkn.orchestration.production_environment\n"
+            "bad = [m for m in sys.modules if m.split('.')[0] == 'google' "
+            "or m.startswith(('fck_rkn.gcp', 'fck_rkn.orchestration.test_env'))]\n"
+            "print(bad)\n"
+            "raise SystemExit(1 if bad else 0)\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_entry_point_has_no_test_vm_or_network_provisioning(self) -> None:
+        pattern = re.compile(
+            r"ensure_eu_server|_provision_server|compute_v1|\bCloud NAT\b|"
+            r"cloud_nat|ensure_.*firewall",
+            re.IGNORECASE,
+        )
+        for module in (production_environment, production_setup):
+            source = Path(module.__file__).read_text(encoding="utf-8")
+            self.assertIsNone(pattern.search(source), module.__name__)
 
 
 if __name__ == "__main__":
