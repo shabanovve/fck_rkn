@@ -125,6 +125,31 @@ class ProductionEnvironmentTests(unittest.TestCase):
         retrieve.assert_called_once_with()
         load.assert_not_called()
 
+    def test_ru_outline_deploy_steps_passes_ru_server_address(self) -> None:
+        runner = object()
+        settings = ru_settings()
+        with patch.object(
+            production_environment, "deploy_outline_server", return_value=0
+        ) as deploy:
+            steps = production_environment.ru_outline_deploy_steps(
+                runner, settings.RU_SERVER_ADDRESS
+            )
+            self.assertEqual(len(steps), 1)
+            name, action = steps[0]
+            self.assertEqual(name, "RU Outline deployment")
+            self.assertEqual(action(), 0)
+
+        deploy.assert_called_once_with(runner, "192.0.2.20")
+
+    def test_ru_outline_deploy_steps_reports_failure(self) -> None:
+        runner = object()
+        with patch.object(
+            production_environment, "deploy_outline_server", return_value=24
+        ) as deploy:
+            steps = production_environment.ru_outline_deploy_steps(runner, "192.0.2.20")
+            _, action = steps[0]
+            self.assertEqual(action(), 24)
+
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()
         with (

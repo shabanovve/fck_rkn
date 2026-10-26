@@ -15,6 +15,7 @@ from fck_rkn.agents.eu_server import (
     create_outline_user,
     deploy_squid,
 )
+from fck_rkn.agents.ru_server import deploy_outline_server
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.eu_server_test import (
     check_eu_firewall_readonly,
@@ -164,6 +165,10 @@ def load_ru_outline_image(runner: RemoteRunner) -> int:
 
 def ru_outline_image_steps(runner: RemoteRunner) -> list[Step]:
     return [("RU Outline image load", lambda: load_ru_outline_image(runner))]
+
+
+def ru_outline_deploy_steps(runner: RemoteRunner, ru_address: str) -> list[Step]:
+    return [("RU Outline deployment", lambda: deploy_outline_server(runner, ru_address))]
 
 
 def outline_image_steps(runner: RemoteRunner) -> list[Step]:

@@ -1931,7 +1931,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   Unit tests assert that unverified or mismatched artifacts fail before any
   remote transfer.
 
-### 305. Deploying RU Outline Server
+### 305. [x] Deploying RU Outline Server
 
 - **Depends on:** Task 304.
 - **Source step:** `deploy_outline_server(ru_runner, ru_private_address)`.
@@ -1941,6 +1941,9 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Verify:** Fake-runner tests check the address passed to the agent,
   unchanged-container behavior and fail-fast handling; no EU action or state
   is changed.
+- **Result:** `ru_outline_deploy_steps` invokes `deploy_outline_server` with
+  `RU_SERVER_ADDRESS`. Unit tests verify that the address is passed, failures
+  propagate, and no EU state or actions are affected.
 
 ### 306. Checking RU Outline Server health
 
