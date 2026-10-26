@@ -87,6 +87,44 @@ class ProductionEnvironmentTests(unittest.TestCase):
         self.assertIn("RU_PROVIDER_NETWORKS", str(ctx.exception))
         self.assertIn("RU_DNS_ADDRESSES", str(ctx.exception))
 
+    def test_load_ru_outline_image_loads_verified_artifact(self) -> None:
+        runner = object()
+        archive = Path("/tmp/verified.tar.gz")
+        with (
+            patch.object(
+                production_environment,
+                "retrieve_outline_artifact",
+                return_value=archive,
+            ) as retrieve,
+            patch.object(
+                production_environment,
+                "load_outline_image",
+                return_value=0,
+            ) as load,
+        ):
+            self.assertEqual(production_environment.load_ru_outline_image(runner), 0)
+
+        retrieve.assert_called_once_with()
+        load.assert_called_once_with(runner, archive)
+
+    def test_load_ru_outline_image_fails_when_artifact_unverified(self) -> None:
+        runner = object()
+        with (
+            patch.object(
+                production_environment,
+                "retrieve_outline_artifact",
+                return_value=None,
+            ) as retrieve,
+            patch.object(
+                production_environment,
+                "load_outline_image",
+            ) as load,
+        ):
+            self.assertEqual(production_environment.load_ru_outline_image(runner), 1)
+
+        retrieve.assert_called_once_with()
+        load.assert_not_called()
+
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()
         with (

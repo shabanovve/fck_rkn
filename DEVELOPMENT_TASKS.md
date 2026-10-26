@@ -1915,7 +1915,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   used. Unit tests verify failure when RU settings are incomplete, runner
   construction, and exclusion of test/GCP tooling.
 
-### 304. Loading the approved Outline image on RU
+### 304. [x] Loading the approved Outline image on RU
 
 - **Depends on:** Task 303 and the approved artifact workflow from tasks
   221–222.
@@ -1926,6 +1926,10 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Verify:** Assert RU receives the approved archive only after digest
   validation; missing, malformed or mismatched artifacts stop the RU stage
   before Outline deployment.
+- **Result:** `load_ru_outline_image` and `ru_outline_image_steps` verify the
+  Outline artifact digest before streaming the image archive to ru-server.
+  Unit tests assert that unverified or mismatched artifacts fail before any
+  remote transfer.
 
 ### 305. Deploying RU Outline Server
 

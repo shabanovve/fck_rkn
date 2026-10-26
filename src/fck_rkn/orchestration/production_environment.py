@@ -154,6 +154,18 @@ def load_eu_outline_image(runner: RemoteRunner) -> int:
     return load_outline_image(runner, archive)
 
 
+def load_ru_outline_image(runner: RemoteRunner) -> int:
+    """Load the verified Outline artifact on RU; unverified archives never leave."""
+    archive = retrieve_outline_artifact()
+    if archive is None:
+        return 1
+    return load_outline_image(runner, archive)
+
+
+def ru_outline_image_steps(runner: RemoteRunner) -> list[Step]:
+    return [("RU Outline image load", lambda: load_ru_outline_image(runner))]
+
+
 def outline_image_steps(runner: RemoteRunner) -> list[Step]:
     return [("Outline image load", lambda: load_eu_outline_image(runner))]
 
