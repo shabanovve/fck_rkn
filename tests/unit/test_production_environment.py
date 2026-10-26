@@ -242,6 +242,36 @@ class ProductionEnvironmentTests(unittest.TestCase):
             source = Path(module.__file__).read_text(encoding="utf-8")
             self.assertNotIn("run_youtube_ping", source, module.__name__)
 
+    def test_deployment_failure_stops_before_any_check_and_names_the_step(self) -> None:
+        for label, code in (("remote failure", 5), ("timeout", 1)):
+            with self.subTest(case=label):
+                with (
+                    patch.object(
+                        production_environment, "deploy_squid", return_value=code
+                    ),
+                    patch.object(production_environment, "check_squid_startup") as startup,
+                    patch.object(production_environment, "check_squid_http") as http,
+                    patch.object(production_environment, "check_squid_blocking") as blocking,
+                    self.assertLogs(production_environment.logger, level="ERROR") as logs,
+                ):
+                    self.assertEqual(production_environment.deploy_eu_squid(object()), code)
+
+                startup.assert_not_called()
+                http.assert_not_called()
+                blocking.assert_not_called()
+                self.assertIn("Squid deployment", logs.output[0])
+                self.assertIn(str(code), logs.output[0])
+
+    def test_deployment_uses_the_eu_runner_unchanged(self) -> None:
+        runner = production_environment.create_eu_runner(settings())
+        with (
+            patch.object(production_environment, "deploy_squid", return_value=1) as deploy,
+            self.assertLogs(production_environment.logger, level="ERROR"),
+        ):
+            production_environment.deploy_eu_squid(runner)
+
+        deploy.assert_called_once_with(runner)
+
     def test_entry_point_loads_no_gcp_code_or_credentials(self) -> None:
         code = (
             "import sys\n"

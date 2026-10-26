@@ -1345,7 +1345,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   and that the entry point and interactive setup do not reference it. No
   diagnostic ping exists, so nothing needs documenting as optional.
 
-### 213. Deploying EU Squid
+### 213. [x] Deploying EU Squid
 
 - **Source step:** `deploy_squid`.
 - **Deploy action:** `eu-server-agent deploy-squid`
@@ -1359,6 +1359,11 @@ checks restricted to the reviewed read-only behavior specified by each task.
   confirm the orchestrator reports the named EU action and fails closed.
   The standalone CLI equivalent is
   `.venv/bin/eu-server-agent deploy-squid`.
+- **Result:** `deploy_eu_squid` passes the EU `SshRunner` to `deploy_squid`.
+  Existing agent tests cover success, remote failure and timeout of the
+  action; new orchestrator tests assert that a failure is logged with the
+  step name `Squid deployment` and its status, and that no check runs
+  afterwards.
 
 ### 214. Checking EU Squid startup
 
@@ -1755,6 +1760,31 @@ runner, "ru-server-feasibility-probe")`), matching
   `prod-env-host configure` runs it, and `configure` is now the default
   operation when `prod-env-host` is invoked without arguments (superseding
   the `deploy-eu-squid` default from task 205).
+
+### 245. Running the full deployment and checks without arguments
+
+- **Depends on:** Task 244; the EU steps (tasks 213–242) and, for the RU
+  stage, task 201 and its tasks.
+- **Source step:** `_run` in `test_env_host`, which provisions, deploys and
+  verifies everything in sequence.
+- **Change:** Make `prod-env-host` without arguments the production
+  counterpart of `test_env_host`: load `config/prod.env`, starting the
+  interactive configuration (task 244) first when the file is missing or
+  invalid and a terminal is available, then call the `eu-server-agent`,
+  `eu-server-test-agent`, `ru-server-agent` and `ru-server-test-agent`
+  functions in the same order as `test_env_host`, each deployment or
+  firewall action followed by its matching check. Omit the steps excluded by
+  task 200 (GCP, IAP, test client, destructive checks, cleanup). Stop at the
+  first failure with a nonzero exit code naming the step. Implement it in
+  stages: EU steps are added as their tasks complete, RU steps after task
+  201; until then the RU stage is reported as not implemented. Keep
+  `configure` and `deploy-eu-squid` as explicit single-step operations. This
+  replaces the `configure` default set by task 244.
+- **Verify:** Fake-runner tests assert the exact call order against the trace
+  of `test_env_host`, that each deploy action is followed by its check, that
+  a failure stops later steps, that a missing or invalid config triggers the
+  interactive setup on a terminal and exit code 2 without one, and that no
+  excluded test-only action is called.
 
 ## Decisions that block dependent tasks
 

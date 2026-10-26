@@ -40,7 +40,8 @@ On first run, the command atomically creates a missing `config/prod.env` from
 `config/prod.env.example` with permissions `0600`. It does not overwrite an
 existing file. Run `prod-env-host configure` to build the file interactively
 (see [Interactive configuration](#interactive-configuration-required-behavior));
-`configure` is also the default when `prod-env-host` runs without arguments.
+`configure` is currently also the default when `prod-env-host` runs without
+arguments; task 245 replaces that default with the full deployment.
 Alternatively, fill in the template copy by hand.
 
 Required EU-stage settings:
@@ -118,7 +119,37 @@ production stages and are only validated at this point.
 
 ## Run
 
-With no arguments, `prod-env-host` runs its default operation, `configure`:
+### Target behavior: full deployment without arguments (required)
+
+`prod-env-host` is the production counterpart of `test_env_host`. Run without
+arguments, it deploys and verifies the system automatically, with no further
+operator commands:
+
+```sh
+.venv/bin/prod-env-host
+```
+
+1. If `config/prod.env` is missing or invalid and a terminal is available, it
+   first runs the [interactive configuration](#interactive-configuration-required-behavior).
+   Without a terminal it exits with code `2` and the validation diagnostics.
+2. It then invokes the existing `eu-server-agent`, `eu-server-test-agent`,
+   `ru-server-agent` and `ru-server-test-agent` functions in the same order
+   as `test_env_host`. Each deployment or firewall action is followed by its
+   matching test-agent check, and the run stops at the first failure with a
+   nonzero exit code that identifies the failed step. Only the steps with a
+   production equivalent run (see the exclusions in task 200: no GCP
+   provisioning, IAP, test client, destructive checks or cleanup).
+3. The sequence is implemented in stages: the EU stage first (tasks 213–242),
+   then the RU stage after the RU decomposition (task 201). Until the RU stage
+   exists, a run without arguments performs the EU stage only and reports
+   that the RU stage is not implemented.
+4. Single steps stay available as explicit operations (`configure`,
+   `deploy-eu-squid`) for repeating or debugging one step.
+
+### Current behavior
+
+Until the full sequence above is implemented (task 245), the default operation
+is `configure`:
 
 ```sh
 .venv/bin/prod-env-host

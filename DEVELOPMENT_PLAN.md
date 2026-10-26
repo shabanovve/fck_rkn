@@ -84,6 +84,16 @@ RU actions in Phase 2A.
 The two increments may be exposed as explicit subcommands or other
 operator-visible stages, but the EU-only stage must be independently
 invokable and must fail closed if it is asked to perform RU deployment.
+
+**Operator entry point without arguments (task 245).** `prod-env-host` run
+without arguments is the production counterpart of `test_env_host`: it ensures
+a valid `config/prod.env` (starting the interactive configuration when it is
+missing or invalid), then invokes `eu-server-agent`, `eu-server-test-agent`,
+`ru-server-agent` and `ru-server-test-agent` in the same order as
+`test_env_host`, each deployment followed by its check, stopping at the first
+failure. Test-only steps are omitted. The stages arrive incrementally: until
+Phase 2B exists, the no-argument run performs the EU stage only and reports
+that RU is not implemented; explicit single-step operations remain available.
 Because Phase 2A and Phase 2B may run at different times, the Outline access
 URL created for the RU connection must be retained or retrieved through an
 approved protected secret mechanism; the in-memory-only handoff used by one
