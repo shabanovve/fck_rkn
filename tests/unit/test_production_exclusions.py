@@ -208,5 +208,19 @@ class TestClientSquidTunnelExclusionTests(unittest.TestCase):
         self.assertNotIn("test_client", production_source())
 
 
+class TestClientSquidTunnelCheckExclusionTests(unittest.TestCase):
+    """Task 238."""
+
+    def test_stage_never_invokes_check_squid_tunnel(self) -> None:
+        stage = StageRun(self)
+        (trap,) = trap_attributes(self, test_client, ("check_squid_tunnel",))
+
+        self.assertEqual(stage.run(), 0)
+
+        trap.assert_not_called()
+        self.assertNotIn("check_squid_tunnel", production_source())
+        self.assertNotIn("test_client", production_source())
+
+
 if __name__ == "__main__":
     unittest.main()
