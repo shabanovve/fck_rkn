@@ -147,7 +147,7 @@ required by EU firewall rules. It must not require RU SSH credentials or RU
 provider-service settings merely to run the EU-only stage. Phase 2B adds the
 RU-only fields after its configuration requirements are implemented.
 
-Target workflow (task 244): `config/prod.env` is generated interactively. The
+Implemented by task 244 (`prod-env-host configure`): `config/prod.env` is generated interactively. The
 configuration step prompts
 for the server address and SSH settings, connects over SSH, automatically
 discovers the remaining settings that `eu-server` can report (read-only), and

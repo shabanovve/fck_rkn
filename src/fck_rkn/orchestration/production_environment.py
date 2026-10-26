@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from pathlib import Path
 
 from fck_rkn.agents.eu_server import deploy_squid
 from fck_rkn.agents.eu_server_test import (
@@ -18,6 +19,7 @@ from fck_rkn.production_config import (
     ensure_prod_config,
     load_eu_production_settings,
 )
+from fck_rkn.production_setup import ProductionSetupError, configure_interactively
 from fck_rkn.remote.runner import RemoteRunner
 from fck_rkn.remote.ssh import SshRunner
 
@@ -32,6 +34,22 @@ def create_eu_runner(settings: EuProductionSettings) -> RemoteRunner:
         key_path=settings.SSH_KEY_PATH,
         port=settings.SSH_PORT,
     )
+
+
+def create_runner(host: str, user: str, key_path: Path, port: int) -> RemoteRunner:
+    return SshRunner(host=host, user=user, key_path=key_path, port=port)
+
+
+def run_configuration() -> int:
+    try:
+        configure_interactively(create_runner)
+    except ProductionSetupError as error:
+        logger.error("Interactive configuration stopped: %s", error)
+        return 2
+    except (EOFError, KeyboardInterrupt):
+        logger.error("Interactive configuration cancelled; nothing was written")
+        return 2
+    return 0
 
 
 def deploy_eu_squid(runner: RemoteRunner) -> int:
@@ -63,9 +81,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "operation",
         nargs="?",
-        default="deploy-eu-squid",
-        choices=("deploy-eu-squid",),
-        help="Operation to run (default: deploy-eu-squid)",
+        default="configure",
+        choices=("deploy-eu-squid", "configure"),
+        help=(
+            "Operation to run (default: configure, which interactively "
+            "creates config/prod.env)"
+        ),
     )
     args = parser.parse_args(argv)
     logging.basicConfig(
@@ -73,6 +94,9 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         stream=sys.stdout,
     )
+
+    if args.operation == "configure":
+        return run_configuration()
 
     try:
         ensure_prod_config()

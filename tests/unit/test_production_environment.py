@@ -88,24 +88,15 @@ class ProductionEnvironmentTests(unittest.TestCase):
         self.assertIsInstance(deploy.call_args.args[0], SshRunner)
         self.assertEqual(deploy.call_args.args[0].host, "192.0.2.10")
 
-    def test_main_defaults_to_eu_squid_deployment_without_arguments(self) -> None:
+    def test_main_defaults_to_interactive_configuration_without_arguments(self) -> None:
         with (
-            patch.object(production_environment, "ensure_prod_config"),
-            patch.object(
-                production_environment,
-                "load_eu_production_settings",
-                return_value=settings(),
-            ),
-            patch.object(
-                production_environment,
-                "deploy_eu_squid",
-                return_value=0,
-            ) as deploy,
+            patch.object(production_environment, "configure_interactively") as setup,
+            patch.object(production_environment, "deploy_eu_squid") as deploy,
         ):
             self.assertEqual(production_environment.main([]), 0)
 
-        self.assertIsInstance(deploy.call_args.args[0], SshRunner)
-        self.assertEqual(deploy.call_args.args[0].host, "192.0.2.10")
+        setup.assert_called_once_with(production_environment.create_runner)
+        deploy.assert_not_called()
 
     def test_main_returns_nonzero_if_configuration_is_invalid(self) -> None:
         diagnostic = (
@@ -130,6 +121,26 @@ class ProductionEnvironmentTests(unittest.TestCase):
         self.assertIn(
             "EU_SERVER_ADDRESS: must be an IPv4 or IPv6 address", logs.output[0]
         )
+
+    def test_configure_operation_runs_interactive_setup_only(self) -> None:
+        with (
+            patch.object(production_environment, "configure_interactively") as setup,
+            patch.object(production_environment, "deploy_eu_squid") as deploy,
+        ):
+            self.assertEqual(production_environment.main(["configure"]), 0)
+
+        setup.assert_called_once_with(production_environment.create_runner)
+        deploy.assert_not_called()
+
+    def test_configure_failure_returns_nonzero(self) -> None:
+        error = production_environment.ProductionSetupError("declined")
+        with (
+            patch.object(
+                production_environment, "configure_interactively", side_effect=error
+            ),
+            self.assertLogs(production_environment.logger, level="ERROR"),
+        ):
+            self.assertEqual(production_environment.main(["configure"]), 2)
 
 
 if __name__ == "__main__":

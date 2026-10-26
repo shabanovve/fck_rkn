@@ -1243,8 +1243,9 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `config/prod.env`, creates one EU `SshRunner`, and runs the Squid deployment
   followed by its startup, HTTP and blocking checks. Every failure stops the
   sequence with a nonzero result. The entry point imports no GCP code and
-  exposes no RU or test-only shutdown operation. `deploy-eu-squid` is also the
-  default when `prod-env-host` is invoked without arguments.
+  exposes no RU or test-only shutdown operation. `deploy-eu-squid` was the
+  default when `prod-env-host` was invoked without arguments; task 244 changes
+  the default to `configure`.
 
 ### 206. Excluding GCP project-access validation
 
@@ -1701,7 +1702,7 @@ runner, "ru-server-feasibility-probe")`), matching
   prints these diagnostics and exits before creating a runner; syntax errors
   identify the config file and line without exposing its contents.
 
-### 244. Generating the production configuration interactively
+### 244. [x] Generating the production configuration interactively
 
 - **Source step:** `ensure_prod_config` copies the template, and the operator
   fills it in by hand (task 203). The template stays as the reference for
@@ -1724,6 +1725,10 @@ runner, "ru-server-feasibility-probe")`), matching
   discovery falling back to prompts, invalid input re-prompting, SSH failure
   writing no file, declined confirmation writing no file, and existing-file
   protection. Assert no value or secret leaks into logs.
+- **Result:** `fck_rkn/production_setup.py` implements the flow;
+  `prod-env-host configure` runs it, and `configure` is now the default
+  operation when `prod-env-host` is invoked without arguments (superseding
+  the `deploy-eu-squid` default from task 205).
 
 ## Decisions that block dependent tasks
 
