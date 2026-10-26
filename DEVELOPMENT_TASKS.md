@@ -2030,7 +2030,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   successful forward deployment. Unit tests verify step ordering, reachability
   result handling, and fail-fast termination on check failure.
 
-### 312. Deploying the RU-to-EU MTProxy forward
+### 312. [x] Deploying the RU-to-EU MTProxy forward
 
 - **Depends on:** Task 311.
 - **Source step:** `deploy_mtproxy_forward(ru_runner, access_url)`.
@@ -2038,6 +2038,9 @@ production settings and `SshRunner`, never the standalone CLIs that read
   the dedicated EU Outline endpoint; do not create a direct-route fallback.
 - **Verify:** Assert correct destination/port, protected key delivery and
   failure handling before the check.
+- **Result:** `ru_mtproxy_forward_deploy_steps` deploys the MTProxy forward
+  over the EU Outline endpoint using the in-memory access URL. Unit tests
+  verify parameter delivery and failure propagation.
 
 ### 313. Checking the RU-to-EU MTProxy forward
 
