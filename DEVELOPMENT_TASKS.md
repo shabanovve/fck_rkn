@@ -1660,7 +1660,7 @@ runner, "ru-server-feasibility-probe")`), matching
   compute calls.
 - **Result:** Added exclusion tests: lookup_test_client is never called and the production sources and remote commands contain no GCP access.
 
-### 233. Excluding test-client provisioning
+### 233. [x] Excluding test-client provisioning
 
 - **Source step:** `ensure_test_client(settings)`.
 - **Production disposition:** Do not create or manage a GCP test-client VM in
@@ -1668,6 +1668,7 @@ runner, "ru-server-feasibility-probe")`), matching
   this deployment scope.
 - **Verify:** EU-stage orchestration does not call test-client provisioning
   or GCP compute APIs.
+- **Result:** Added exclusion tests: ensure_test_client is never called or referenced.
 
 ### 234. Excluding creation of a test-client Outline key
 

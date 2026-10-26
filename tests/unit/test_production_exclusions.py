@@ -133,5 +133,18 @@ class TestClientLookupExclusionTests(unittest.TestCase):
         self.assertNotIn("gcloud", "\n".join(stage.runner.commands))
 
 
+class TestClientProvisioningExclusionTests(unittest.TestCase):
+    """Task 233."""
+
+    def test_stage_never_provisions_a_test_client(self) -> None:
+        stage = StageRun(self)
+        (ensure,) = trap_attributes(self, compute, ("ensure_test_client",))
+
+        self.assertEqual(stage.run(), 0)
+
+        ensure.assert_not_called()
+        self.assertNotIn("ensure_test_client", production_source())
+
+
 if __name__ == "__main__":
     unittest.main()
