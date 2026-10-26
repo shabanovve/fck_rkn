@@ -1389,7 +1389,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `.venv/bin/eu-server-test-agent startup`.
 - **Result:** The production EU stage runs the startup check immediately after the Squid deployment with the same runner. Tests (`test_production_eu_checks.py`) cover ordering, failure and timeout stopping later actions, a failed deployment never reaching the check, and the check command being read-only (no service or firewall mutation).
 
-### 215. Checking an HTTP request through EU Squid
+### 215. [x] Checking an HTTP request through EU Squid
 
 - **Source step:** `check_squid_http`.
 - **Check action:** `eu-server-test-agent http`
@@ -1403,6 +1403,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Verify:** Cover accepted status/header conditions, request failure and
   timeout with a fake runner; ensure failure stops the EU stage. Standalone
   CLI equivalent: `.venv/bin/eu-server-test-agent http`.
+- **Result:** The HTTP check is a distinct step after the startup check. Tests cover the accepted status range (200-399), error status and timeout stopping the stage before the blocking check, bounded output (status code only, no body or headers), no credentials in the command, and no remote output in failure logs.
 
 ### 216. Checking EU Squid destination blocking
 

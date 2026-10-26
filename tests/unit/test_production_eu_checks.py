@@ -77,5 +77,53 @@ class SquidStartupCheckTests(unittest.TestCase):
         self.assertIn("docker inspect", SQUID_STARTUP_CHECK_COMMAND)
 
 
+class SquidHttpCheckTests(unittest.TestCase):
+    """Task 215."""
+
+    def test_http_check_is_a_distinct_step_after_the_startup_check(self) -> None:
+        runner = ScriptedRunner()
+
+        self.assertEqual(run_deployment(runner), 0)
+
+        self.assertEqual(
+            runner.commands[1:3],
+            [SQUID_STARTUP_CHECK_COMMAND, SQUID_HTTP_CHECK_COMMAND],
+        )
+
+    def test_failed_http_check_stops_the_stage(self) -> None:
+        for label, outcome in (
+            ("error status", RemoteResult(1, stdout="503")),
+            ("timeout", RemoteTimeoutError()),
+        ):
+            with self.subTest(case=label):
+                runner = ScriptedRunner([RemoteResult(0), RemoteResult(0), outcome])
+
+                self.assertNotEqual(run_deployment(runner), 0)
+
+                self.assertEqual(len(runner.commands), 3)
+                self.assertNotIn(SQUID_BLOCK_CHECK_COMMAND, runner.commands)
+
+    def test_http_check_accepts_only_success_and_redirect_statuses(self) -> None:
+        self.assertIn("not 200 <= status < 400", SQUID_HTTP_CHECK_COMMAND)
+
+    def test_http_check_prints_only_the_status_and_sends_no_credentials(self) -> None:
+        self.assertIn("print(status)", SQUID_HTTP_CHECK_COMMAND)
+        self.assertNotIn(".read(", SQUID_HTTP_CHECK_COMMAND)
+        self.assertNotIn("getheaders", SQUID_HTTP_CHECK_COMMAND)
+        self.assertNotRegex(
+            SQUID_HTTP_CHECK_COMMAND, r"(?i)authorization|password|secret|token"
+        )
+        self.assertIsNone(MUTATING_COMMANDS.search(SQUID_HTTP_CHECK_COMMAND))
+
+    def test_failure_log_does_not_include_remote_output(self) -> None:
+        runner = ScriptedRunner(
+            [RemoteResult(0), RemoteResult(0), RemoteResult(1, "BODY-LEAK", "ERR-LEAK")]
+        )
+        with self.assertLogs(level="ERROR") as logs:
+            run_deployment(runner)
+
+        self.assertNotIn("BODY-LEAK", "\n".join(logs.output))
+
+
 if __name__ == "__main__":
     unittest.main()
