@@ -116,17 +116,19 @@ the loader checks the final file either way:
    other setting that can be read from `eu-server` (for example, local
    networks, DNS resolvers, DHCP server, NTP servers and the metadata
    endpoint, probed where the provider offers one).
-3. Settings that cannot be determined automatically, such as
-   `RU_SERVER_ADDRESS`, or whose discovery failed, is ambiguous or found
-   nothing (for example, no metadata endpoint), are requested from the
+3. It connects to `ru-server` using the entered `RU_SERVER_ADDRESS` and shared
+   SSH credentials, discovering read-only RU host settings (`RU_METADATA_ADDRESS`,
+   `RU_DNS_ADDRESSES`, `RU_DHCP_SERVER_ADDRESS`, `RU_NTP_ADDRESSES`,
+   `RU_LOCAL_NETWORKS`). Settings that cannot be determined automatically or whose
+   discovery failed (including `RU_PROVIDER_NETWORKS`) are requested from the
    operator explicitly, one by one, with the allowed form described in the
    prompt.
 4. Discovered and entered values are validated with the same rules as the
    loader, shown to the operator for confirmation, and only then written to
    `config/prod.env` (mode `0600`, atomically). An existing file is never
    overwritten without explicit confirmation.
-5. Discovery is read-only on `eu-server`, never prints secrets, and does not
-   change the server or its firewall.
+5. Discovery is read-only on both `eu-server` and `ru-server`, never prints secrets,
+   and does not change either server or its firewall.
 
 The schema currently requires all the settings listed above, although
 `deploy-eu-squid` directly uses only `EU_SERVER_ADDRESS` and the SSH settings.

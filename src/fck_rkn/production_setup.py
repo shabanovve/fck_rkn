@@ -158,6 +158,28 @@ def discover_eu_settings(runner: RemoteRunner) -> dict[str, object]:
     return found
 
 
+def discover_ru_settings(runner: RemoteRunner) -> dict[str, object]:
+    """Read-only discovery of RU host service settings; omit unknown values."""
+    found: dict[str, object] = {}
+    commands = (
+        ("RU_LOCAL_NETWORKS", LOCAL_NETWORKS_COMMAND, parse_local_networks),
+        ("RU_DNS_ADDRESSES", DNS_COMMAND, parse_dns_addresses),
+        ("RU_DHCP_SERVER_ADDRESS", DHCP_COMMAND, parse_dhcp_server),
+        ("RU_NTP_ADDRESSES", NTP_COMMAND, parse_ntp_addresses),
+    )
+    for name, command, parser in commands:
+        _, output = _query(runner, command)
+        values = parser(output)
+        if values:
+            found[name] = (
+                values[0] if name == "RU_DHCP_SERVER_ADDRESS" else values
+            )
+    exit_code, _ = _query(runner, METADATA_COMMAND)
+    if exit_code == 0:
+        found["RU_METADATA_ADDRESS"] = METADATA_CANDIDATE
+    return found
+
+
 def _format(value: object) -> str:
     return ", ".join(value) if isinstance(value, list) else str(value)
 
@@ -169,9 +191,17 @@ def _parse(name: str, raw: str) -> object:
         if not raw.isdecimal() or not 1 <= int(raw) <= 65535:
             raise ValueError("must be a TCP port from 1 through 65535")
         return int(raw)
-    if name in ("EU_DNS_ADDRESSES", "EU_NTP_ADDRESSES", "EU_LOCAL_NETWORKS"):
+    if name in (
+        "EU_DNS_ADDRESSES",
+        "EU_NTP_ADDRESSES",
+        "EU_LOCAL_NETWORKS",
+        "RU_DNS_ADDRESSES",
+        "RU_NTP_ADDRESSES",
+        "RU_LOCAL_NETWORKS",
+        "RU_PROVIDER_NETWORKS",
+    ):
         items = [item for item in re.split(r"[,\s]+", raw) if item]
-        if name == "EU_LOCAL_NETWORKS":
+        if name in ("EU_LOCAL_NETWORKS", "RU_LOCAL_NETWORKS", "RU_PROVIDER_NETWORKS"):
             return EuProductionSettings.validate_local_networks(items)
         return EuProductionSettings.validate_address_lists(items)
     if name == "SSH_USER":
@@ -192,6 +222,12 @@ HINTS = {
     "EU_DHCP_SERVER_ADDRESS": "IPv4 address of the DHCP server",
     "EU_NTP_ADDRESSES": "IPv4/IPv6 NTP server addresses, comma-separated",
     "EU_LOCAL_NETWORKS": "CIDR networks local to eu-server, comma-separated",
+    "RU_METADATA_ADDRESS": "IPv4 or IPv6 address of the RU provider metadata service",
+    "RU_DNS_ADDRESSES": "RU IPv4/IPv6 resolver addresses, comma-separated",
+    "RU_DHCP_SERVER_ADDRESS": "IPv4 or IPv6 address of the RU DHCP server",
+    "RU_NTP_ADDRESSES": "RU IPv4/IPv6 NTP server addresses, comma-separated",
+    "RU_LOCAL_NETWORKS": "CIDR networks local to ru-server, comma-separated",
+    "RU_PROVIDER_NETWORKS": "production provider egress CIDRs, comma-separated",
 }
 
 
@@ -313,6 +349,32 @@ def configure_interactively(
         "EU_LOCAL_NETWORKS",
     ):
         values[name] = _ask(name, prompt, output, detected.get(name))
+
+    ru_runner = runner_factory(
+        str(values["RU_SERVER_ADDRESS"]),
+        str(values["SSH_USER"]),
+        Path(str(values["SSH_KEY_PATH"])),
+        int(values["SSH_PORT"]),  # type: ignore[call-overload]
+    )
+    exit_code, _ = _query(ru_runner, "true")
+    if exit_code != 0:
+        raise ProductionSetupError(
+            "Could not connect to ru-server over SSH. Check the address, "
+            "account, key and port, and make sure the host key is already "
+            "trusted (connect once with ssh manually). Nothing was written."
+        )
+
+    output("Connected. Detecting settings on ru-server (read-only)...")
+    detected_ru = discover_ru_settings(ru_runner)
+    for name in (
+        "RU_METADATA_ADDRESS",
+        "RU_DNS_ADDRESSES",
+        "RU_DHCP_SERVER_ADDRESS",
+        "RU_NTP_ADDRESSES",
+        "RU_LOCAL_NETWORKS",
+    ):
+        values[name] = _ask(name, prompt, output, detected_ru.get(name))
+    values["RU_PROVIDER_NETWORKS"] = _ask("RU_PROVIDER_NETWORKS", prompt, output)
 
     output("\nConfiguration to write:")
     for name, value in values.items():

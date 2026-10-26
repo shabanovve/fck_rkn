@@ -55,7 +55,25 @@ class Session:
         self.lines.append(text)
 
 
-ANSWERS = ["192.0.2.10", "deploy", "/keys/id", "", "192.0.2.20", "", "", "", "", "", "y"]
+ANSWERS = [
+    "192.0.2.10",
+    "deploy",
+    "/keys/id",
+    "",
+    "192.0.2.20",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "198.51.100.0/24",
+    "y",
+]
 
 
 class ProductionSetupTests(unittest.TestCase):
@@ -111,9 +129,20 @@ class ProductionSetupTests(unittest.TestCase):
         runner = ScriptedRunner(FULL)
         session = self.run_setup(ANSWERS, runner, log)
 
-        self.assertEqual(log, [("192.0.2.10", "deploy", Path("/keys/id"), 22)])
+        self.assertEqual(
+            log,
+            [
+                ("192.0.2.10", "deploy", Path("/keys/id"), 22),
+                ("192.0.2.20", "deploy", Path("/keys/id"), 22),
+            ],
+        )
         settings = load_eu_production_settings(self.path)
         self.assertEqual(settings.RU_SERVER_ADDRESS, "192.0.2.20")
+        self.assertEqual(settings.RU_LOCAL_NETWORKS, ["192.0.2.0/24"])
+        self.assertEqual(settings.RU_DNS_ADDRESSES, ["192.0.2.53", "2001:db8::53"])
+        self.assertEqual(settings.RU_DHCP_SERVER_ADDRESS, "192.0.2.2")
+        self.assertEqual(settings.RU_NTP_ADDRESSES, ["192.0.2.123"])
+        self.assertEqual(settings.RU_PROVIDER_NETWORKS, ["198.51.100.0/24"])
         self.assertEqual(settings.EU_LOCAL_NETWORKS, ["192.0.2.0/24"])
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "2001:db8::53"])
         self.assertEqual(settings.EU_DHCP_SERVER_ADDRESS, "192.0.2.2")
@@ -122,6 +151,7 @@ class ProductionSetupTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
         self.assertIn("# IPv4 or IPv6 address assigned to eu-server", self.path.read_text())
         self.assertTrue(any("detected" in prompt for prompt in session.prompts))
+        self.assertTrue(any("RU_PROVIDER_NETWORKS" in prompt for prompt in session.prompts))
 
     def test_discovery_only_runs_read_only_queries(self) -> None:
         runner = ScriptedRunner(FULL)
@@ -134,12 +164,23 @@ class ProductionSetupTests(unittest.TestCase):
     def test_undetected_values_are_prompted_and_invalid_input_reprompts(self) -> None:
         runner = ScriptedRunner({})
         answers = [
-            "192.0.2.10", "deploy", "/keys/id", "2222", "192.0.2.20",
-            "bad", "192.0.2.1",
+            "192.0.2.10",
+            "deploy",
+            "/keys/id",
+            "2222",
+            "192.0.2.20",
+            "bad",
+            "192.0.2.1",
             "192.0.2.53, 192.0.2.54",
             "192.0.2.2",
             "192.0.2.123",
             "192.0.2.0/24",
+            "192.0.2.1",
+            "192.0.2.54, 2001:db8::54",
+            "192.0.2.3",
+            "192.0.2.124",
+            "192.0.3.0/24",
+            "198.51.100.0/24, 2001:db8:abcd::/48",
             "y",
         ]
         session = self.run_setup(answers, runner)
@@ -147,6 +188,7 @@ class ProductionSetupTests(unittest.TestCase):
         settings = load_eu_production_settings(self.path)
         self.assertEqual(settings.SSH_PORT, 2222)
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "192.0.2.54"])
+        self.assertEqual(settings.RU_PROVIDER_NETWORKS, ["198.51.100.0/24", "2001:db8:abcd::/48"])
         self.assertTrue(any("EU_METADATA_ADDRESS" in l for l in session.lines))
 
     def test_ssh_failure_writes_nothing(self) -> None:
@@ -154,6 +196,62 @@ class ProductionSetupTests(unittest.TestCase):
         with self.assertRaises(setup.ProductionSetupError):
             self.run_setup(ANSWERS[:4], runner)
         self.assertFalse(self.path.exists())
+
+    def test_ru_ssh_failure_writes_nothing(self) -> None:
+        runner = ScriptedRunner(FULL, connect=255)
+        # The first (EU) connection succeeds; the RU connection then fails.
+        runner.connects = [0, 255]
+
+        original_run = runner.run
+        connection_index = 0
+
+        def run(command, stdin, timeout, stream_output=False):
+            nonlocal connection_index
+            if command == "true":
+                result = runner.connects[connection_index]
+                connection_index += 1
+                return RemoteResult(result)
+            return original_run(command, stdin, timeout, stream_output)
+
+        runner.run = run
+        with self.assertRaises(setup.ProductionSetupError):
+            self.run_setup(ANSWERS, runner)
+        self.assertFalse(self.path.exists())
+
+    def test_ru_configuration_failure_does_not_prevent_otherwise_valid_eu_only_run(self) -> None:
+        eu_only_content = (
+            "EU_SERVER_ADDRESS=192.0.2.10\n"
+            "SSH_USER=deploy\n"
+            "SSH_KEY_PATH=/keys/id\n"
+            "SSH_PORT=22\n"
+            "RU_SERVER_ADDRESS=192.0.2.20\n"
+            "EU_METADATA_ADDRESS=192.0.2.1\n"
+            'EU_DNS_ADDRESSES=["192.0.2.53"]\n'
+            "EU_DHCP_SERVER_ADDRESS=192.0.2.2\n"
+            'EU_NTP_ADDRESSES=["192.0.2.123"]\n'
+            'EU_LOCAL_NETWORKS=["192.0.2.0/24"]\n'
+        )
+        self.path.write_text(eu_only_content)
+        runner = ScriptedRunner(FULL, connect=255)
+        runner.connects = [0, 255]
+        connection_index = 0
+
+        original_run = runner.run
+        def run(command, stdin, timeout, stream_output=False):
+            nonlocal connection_index
+            if command == "true":
+                result = runner.connects[connection_index]
+                connection_index += 1
+                return RemoteResult(result)
+            return original_run(command, stdin, timeout, stream_output)
+
+        runner.run = run
+        with self.assertRaises(setup.ProductionSetupError):
+            self.run_setup(["y"] + ANSWERS, runner)
+        self.assertEqual(self.path.read_text(), eu_only_content)
+        loaded = load_eu_production_settings(self.path)
+        self.assertEqual(loaded.EU_SERVER_ADDRESS, "192.0.2.10")
+        self.assertIsNone(loaded.RU_LOCAL_NETWORKS)
 
     def test_declined_confirmation_writes_nothing(self) -> None:
         with self.assertRaises(setup.ProductionSetupError):

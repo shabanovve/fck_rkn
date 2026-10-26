@@ -1875,7 +1875,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   RU rollout. Tests cover omitted RU values, valid IPv4/IPv6 values, malformed
   values, strict network notation and placeholder-free blank entries.
 
-### 302. Configuring RU production settings interactively
+### 302. [x] Configuring RU production settings interactively
 
 - **Depends on:** Tasks 244 and 301.
 - **Source step:** `configure_missing_test_env` and the RU-specific settings
@@ -1891,6 +1891,11 @@ production settings and `SshRunner`, never the standalone CLIs that read
   validation/re-prompting, cancellation, SSH failure, existing-file
   protection and atomic writes. Confirm an RU configuration failure does not
   prevent an otherwise valid EU-only run.
+- **Result:** `fck_rkn/production_setup.py` supports read-only SSH discovery
+  for RU host settings, prompting for undiscoverable or ambiguous values
+  including `RU_PROVIDER_NETWORKS`. Validated entries are written atomically
+  with mode 0600. Tests cover discovery, fallback prompts, input validation,
+  declined/canceled runs, SSH failure, and existing valid EU configurations.
 
 ### 303. Creating the RU production runner
 
