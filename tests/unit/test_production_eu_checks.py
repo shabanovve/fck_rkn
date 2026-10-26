@@ -17,6 +17,7 @@ from fck_rkn.agents.outline import (
     OUTLINE_IMAGE,
 )
 from fck_rkn.agents.eu_server_test import (
+    MTPROXY_CHECK_COMMAND,
     SQUID_BLOCK_CHECK_COMMAND,
     SQUID_HTTP_CHECK_COMMAND,
     SQUID_STARTUP_CHECK_COMMAND,
@@ -415,6 +416,41 @@ class MtproxyDeploymentTests(unittest.TestCase):
             run_stage(runner, self.archive)
 
         self.assertNotIn(secret, "\n".join(logs.output))
+
+
+class MtproxyCheckTests(unittest.TestCase):
+    """Task 223."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.archive = Path(directory.name) / "outline-image.tar.gz"
+        self.archive.write_bytes(b"verified archive")
+
+    def test_check_runs_right_after_the_mtproxy_deployment(self) -> None:
+        runner = ScriptedRunner()
+
+        self.assertEqual(run_stage(runner, self.archive), 0)
+
+        self.assertEqual(runner.commands[8], MTPROXY_CHECK_COMMAND)
+
+    def test_failed_or_timed_out_check_stops_the_stage(self) -> None:
+        for label, outcome in (
+            ("unhealthy", RemoteResult(1, stderr="TCP listener is unavailable")),
+            ("timeout", RemoteTimeoutError()),
+        ):
+            with self.subTest(case=label):
+                runner = ScriptedRunner([RemoteResult(0)] * 8 + [outcome])
+                with self.assertLogs(production_environment.logger, level="ERROR") as logs:
+                    self.assertNotEqual(run_stage(runner, self.archive), 0)
+
+                self.assertIn("MTProxy check", logs.output[-1])
+                self.assertEqual(len(runner.commands), 9)
+
+    def test_check_is_read_only_and_never_prints_the_secret(self) -> None:
+        self.assertIsNone(MUTATING_COMMANDS.search(MTPROXY_CHECK_COMMAND))
+        self.assertIn("grep -qE", MTPROXY_CHECK_COMMAND)
+        self.assertNotRegex(MTPROXY_CHECK_COMMAND, r"cat\s+\"?\$secret_file")
 
 
 if __name__ == "__main__":

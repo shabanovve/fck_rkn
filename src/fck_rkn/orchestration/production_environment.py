@@ -15,6 +15,7 @@ from fck_rkn.agents.eu_server import (
 )
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.eu_server_test import (
+    check_mtproxy,
     check_outline_health,
     check_squid_blocking,
     check_squid_http,
@@ -121,7 +122,10 @@ def outline_steps(runner: RemoteRunner, private_address: str) -> list[Step]:
 
 
 def mtproxy_steps(runner: RemoteRunner) -> list[Step]:
-    return [("MTProxy deployment", lambda: deploy_mtproxy(runner))]
+    return [
+        ("MTProxy deployment", lambda: deploy_mtproxy(runner)),
+        ("MTProxy check", lambda: check_mtproxy(runner)),
+    ]
 
 
 def eu_stage_steps(runner: RemoteRunner, settings: EuProductionSettings) -> list[Step]:
