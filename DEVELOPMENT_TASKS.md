@@ -1290,7 +1290,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   missing values, and show a real invalid file stops `main` before a runner
   or deployment is created.
 
-### 209. Selecting the EU production SSH runner
+### 209. [x] Selecting the EU production SSH runner
 
 - **Source step:** Construction of `GcloudIapRunner` after test VM readiness.
 - **Change:** Construct an `SshRunner` for the existing EU server from
@@ -1300,6 +1300,11 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Verify:** Use a fake transport to test successful command execution,
   authentication/start failure and timeout; assert the private key is never
   included in argv or logs.
+- **Result:** `create_eu_runner` builds the `SshRunner` from validated
+  settings (task 205). `SshRunnerTests` now cover success, authentication
+  failure, start failure and timeout through a fake transport, and assert
+  that neither key material nor remote output appears in argv or logs; only
+  the key file path is passed to ssh.
 
 ### 210. Excluding removal of the test EU firewall
 

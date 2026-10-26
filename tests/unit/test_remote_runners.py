@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fck_rkn.gcp.runner import GcloudIapRunner
-from fck_rkn.remote.runner import RemoteStartError, RemoteTimeoutError
+from fck_rkn.remote.runner import RemoteStartError, RemoteTimeoutError, execute
 from fck_rkn.remote.ssh import SshRunner
 
 RUN = "fck_rkn.remote.subprocess_runner.subprocess.run"
@@ -61,6 +61,55 @@ class SshRunnerTests(unittest.TestCase):
         self.assertEqual(argv[argv.index("-p") + 1], "2222")
         self.assertIn("BatchMode=yes", argv)
         self.assertNotIn("gcloud", argv)
+
+    def execute_with_key(self, side_effect=None, completed=None):
+        with tempfile.TemporaryDirectory() as directory:
+            key = Path(directory) / "id"
+            key.write_text("PRIVATE-KEY-MATERIAL", encoding="utf-8")
+            runner = SshRunner("192.0.2.10", "deploy", key)
+            with (
+                patch(RUN, return_value=completed, side_effect=side_effect) as run,
+                self.assertLogs("fck_rkn.remote.runner", level="ERROR") as logs,
+            ):
+                code = execute(runner, "true", "SSH check", 5)
+        return code, run, logs
+
+    def test_execute_succeeds_with_fake_transport(self) -> None:
+        completed = subprocess.CompletedProcess([], 0, stdout="ok", stderr="")
+        with tempfile.TemporaryDirectory() as directory:
+            runner = SshRunner("192.0.2.10", "deploy", Path(directory) / "id")
+            with patch(RUN, return_value=completed) as run:
+                self.assertEqual(execute(runner, "true", "SSH check", 5), 0)
+        self.assertEqual(run.call_args.args[0][-2:], ["deploy@192.0.2.10", "true"])
+
+    def test_authentication_failure_is_reported_without_key_or_remote_output(
+        self,
+    ) -> None:
+        completed = subprocess.CompletedProcess(
+            [], 255, stdout="", stderr="Permission denied (publickey) SECRET-REMOTE"
+        )
+        code, run, logs = self.execute_with_key(completed=completed)
+
+        self.assertEqual(code, 255)
+        self.assertIn("255", logs.output[0])
+        self.assertNotIn("SECRET-REMOTE", " ".join(logs.output))
+        self.assertNotIn("PRIVATE-KEY-MATERIAL", " ".join(logs.output))
+        self.assertNotIn("PRIVATE-KEY-MATERIAL", " ".join(run.call_args.args[0]))
+
+    def test_start_failure_is_reported(self) -> None:
+        code, run, logs = self.execute_with_key(side_effect=FileNotFoundError("ssh"))
+
+        self.assertEqual(code, 1)
+        self.assertIn("Could not start", logs.output[0])
+        self.assertNotIn("PRIVATE-KEY-MATERIAL", " ".join(logs.output))
+
+    def test_timeout_is_reported(self) -> None:
+        error = subprocess.TimeoutExpired(["ssh"], 5)
+        code, run, logs = self.execute_with_key(side_effect=error)
+
+        self.assertEqual(code, 1)
+        self.assertIn("5 second timeout", logs.output[0])
+        self.assertNotIn("PRIVATE-KEY-MATERIAL", " ".join(logs.output))
 
     def test_run_passes_stdin_through_input(self) -> None:
         completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
