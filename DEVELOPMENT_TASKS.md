@@ -1319,7 +1319,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `remove_eu_firewall` or `apply_eu_firewall`, and that the entry point and
   interactive setup contain no reference to firewall removal.
 
-### 211. Excluding the test EU firewall-absence check
+### 211. [x] Excluding the test EU firewall-absence check
 
 - **Source step:** `_reset_firewall` calls `check_eu_firewall_removed` after
   the removal action.
@@ -1327,6 +1327,9 @@ checks restricted to the reviewed read-only behavior specified by each task.
   firewall is absent; absence is an artifact of the isolated test reset
   workflow and unsafe as a production precondition.
 - **Verify:** EU-only orchestration never invokes the firewall-absence check.
+- **Result:** A test asserts `deploy_eu_squid` never calls
+  `check_eu_firewall_removed`, and that the entry point and interactive setup
+  do not reference it.
 
 ### 212. Excluding the standalone ICMP ping gate
 

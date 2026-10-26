@@ -210,6 +210,23 @@ class ProductionEnvironmentTests(unittest.TestCase):
             self.assertNotIn("remove_eu_firewall", source, module.__name__)
             self.assertNotIn("remove-firewall", source, module.__name__)
 
+    def test_deployment_never_checks_firewall_absence(self) -> None:
+        with (
+            patch.object(production_environment, "deploy_squid", return_value=0),
+            patch.object(production_environment, "check_squid_startup", return_value=0),
+            patch.object(production_environment, "check_squid_http", return_value=0),
+            patch.object(production_environment, "check_squid_blocking", return_value=0),
+            patch(
+                "fck_rkn.agents.eu_server_test.check_eu_firewall_removed"
+            ) as absent,
+        ):
+            self.assertEqual(production_environment.deploy_eu_squid(object()), 0)
+
+        absent.assert_not_called()
+        for module in (production_environment, production_setup):
+            source = Path(module.__file__).read_text(encoding="utf-8")
+            self.assertNotIn("check_eu_firewall_removed", source, module.__name__)
+
     def test_entry_point_loads_no_gcp_code_or_credentials(self) -> None:
         code = (
             "import sys\n"
