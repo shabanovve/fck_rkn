@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from fck_rkn.agents.eu_server import deploy_squid
+from fck_rkn.agents.eu_server import deploy_outline, deploy_squid
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.eu_server_test import (
     check_squid_blocking,
@@ -108,8 +108,18 @@ def outline_image_steps(runner: RemoteRunner) -> list[Step]:
     return [("Outline image load", lambda: load_eu_outline_image(runner))]
 
 
-def eu_stage_steps(runner: RemoteRunner) -> list[Step]:
-    return squid_steps(runner) + outline_image_steps(runner)
+def outline_steps(runner: RemoteRunner, private_address: str) -> list[Step]:
+    return [
+        ("Outline deployment", lambda: deploy_outline(runner, private_address)),
+    ]
+
+
+def eu_stage_steps(runner: RemoteRunner, settings: EuProductionSettings) -> list[Step]:
+    return (
+        squid_steps(runner)
+        + outline_image_steps(runner)
+        + outline_steps(runner, settings.EU_SERVER_ADDRESS)
+    )
 
 
 def deploy_eu_squid(runner: RemoteRunner) -> int:
@@ -117,8 +127,8 @@ def deploy_eu_squid(runner: RemoteRunner) -> int:
     return run_steps(squid_steps(runner), "EU Squid deployment and checks completed")
 
 
-def run_eu_stage(runner: RemoteRunner) -> int:
-    return run_steps(eu_stage_steps(runner), "EU production stage completed")
+def run_eu_stage(runner: RemoteRunner, settings: EuProductionSettings) -> int:
+    return run_steps(eu_stage_steps(runner, settings), "EU production stage completed")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -172,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("Running the EU production stage; the RU stage is not implemented")
     runner = create_eu_runner(settings)
     if args.operation is None:
-        return run_eu_stage(runner)
+        return run_eu_stage(runner, settings)
     return deploy_eu_squid(runner)
 
 

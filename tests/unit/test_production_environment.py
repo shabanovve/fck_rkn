@@ -134,7 +134,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
             patch.object(
                 production_environment,
                 "run_eu_stage",
-                side_effect=lambda r: calls.append("deploy") or 0,
+                side_effect=lambda *a: calls.append("deploy") or 0,
             ),
         ):
             self.assertEqual(production_environment.main([]), 0)

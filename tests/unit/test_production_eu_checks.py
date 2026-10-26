@@ -10,12 +10,14 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from fck_rkn.agents.outline import OUTLINE_CONTAINER_NAME, OUTLINE_IMAGE
 from fck_rkn.agents.eu_server_test import (
     SQUID_BLOCK_CHECK_COMMAND,
     SQUID_HTTP_CHECK_COMMAND,
     SQUID_STARTUP_CHECK_COMMAND,
 )
 from fck_rkn.orchestration import production_environment
+from fck_rkn.production_config import EuProductionSettings
 from fck_rkn.remote.runner import RemoteResult, RemoteTimeoutError
 
 MUTATING_COMMANDS = re.compile(
@@ -42,6 +44,20 @@ class ScriptedRunner:
         return outcome
 
 
+def stage_settings() -> EuProductionSettings:
+    return EuProductionSettings(
+        EU_SERVER_ADDRESS="192.0.2.10",
+        RU_SERVER_ADDRESS="192.0.2.20",
+        SSH_USER="deploy",
+        SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
+        EU_METADATA_ADDRESS="192.0.2.1",
+        EU_DNS_ADDRESSES=["192.0.2.53"],
+        EU_DHCP_SERVER_ADDRESS="192.0.2.2",
+        EU_NTP_ADDRESSES=["192.0.2.123"],
+        EU_LOCAL_NETWORKS=["192.0.2.0/24"],
+    )
+
+
 def run_stage(runner: ScriptedRunner, archive: Path | None) -> int:
     with (
         patch.object(
@@ -50,7 +66,7 @@ def run_stage(runner: ScriptedRunner, archive: Path | None) -> int:
         redirect_stdout(StringIO()),
         redirect_stderr(StringIO()),
     ):
-        return production_environment.run_eu_stage(runner)
+        return production_environment.run_eu_stage(runner, stage_settings())
 
 
 def run_deployment(runner: ScriptedRunner) -> int:
@@ -199,7 +215,7 @@ class OutlineImageLoadTests(unittest.TestCase):
 
         self.assertEqual(run_stage(runner, self.archive), 0)
 
-        self.assertEqual(len(runner.commands), 5)
+        self.assertEqual(len(runner.commands), 6)
         self.assertEqual(runner.commands[3], SQUID_BLOCK_CHECK_COMMAND)
         self.assertEqual(runner.stdins[4], self.archive)
         self.assertIn(str(self.archive.stat().st_size), runner.commands[4])
@@ -241,6 +257,62 @@ class OutlineImageLoadTests(unittest.TestCase):
         self.assertNotEqual(run_stage(runner, self.archive), 0)
 
         self.assertEqual(len(runner.commands), 3)
+
+
+class OutlineDeploymentTests(unittest.TestCase):
+    """Task 220."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.archive = Path(directory.name) / "outline-image.tar.gz"
+        self.archive.write_bytes(b"verified archive")
+
+    def test_deploys_outline_with_the_explicit_eu_address_and_image(self) -> None:
+        runner = ScriptedRunner()
+
+        self.assertEqual(run_stage(runner, self.archive), 0)
+
+        command = runner.commands[5]
+        self.assertIn("192.0.2.10", command)
+        self.assertIn(OUTLINE_IMAGE, command)
+        self.assertIn(OUTLINE_CONTAINER_NAME, command)
+
+    def test_deploy_runs_only_after_the_image_load(self) -> None:
+        runner = ScriptedRunner([RemoteResult(0)] * 4 + [RemoteResult(3)])
+
+        self.assertEqual(run_stage(runner, self.archive), 3)
+
+        self.assertEqual(len(runner.commands), 5)
+
+    def test_script_reuses_a_valid_container_and_refuses_unexpected_ones(self) -> None:
+        runner = ScriptedRunner()
+        run_stage(runner, self.archive)
+
+        command = runner.commands[5]
+        self.assertIn("already running; leaving it unchanged", command)
+        self.assertIn("differs; refusing to replace it", command)
+
+    def test_failure_and_timeout_stop_the_stage_and_name_the_step(self) -> None:
+        for label, outcome in (
+            ("mismatch", RemoteResult(1, stderr="Existing Outline Server container differs")),
+            ("transport failure", RemoteResult(255)),
+            ("timeout", RemoteTimeoutError()),
+        ):
+            with self.subTest(case=label):
+                runner = ScriptedRunner([RemoteResult(0)] * 5 + [outcome])
+                with self.assertLogs(production_environment.logger, level="ERROR") as logs:
+                    self.assertNotEqual(run_stage(runner, self.archive), 0)
+
+                self.assertIn("Outline deployment", logs.output[-1])
+
+    def test_address_comes_from_the_call_not_from_agent_settings(self) -> None:
+        with patch.object(production_environment, "deploy_outline", return_value=0) as deploy:
+            steps = dict(production_environment.outline_steps(object(), "192.0.2.10"))
+            self.assertEqual(steps["Outline deployment"](), 0)
+
+        deploy.assert_called_once()
+        self.assertEqual(deploy.call_args.args[1], "192.0.2.10")
 
 
 if __name__ == "__main__":

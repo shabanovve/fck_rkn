@@ -1460,7 +1460,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   failed load; assert the archive is streamed through stdin.
 - **Result:** The EU stage retrieves the verified archive (task 218) and calls `load_outline_image` on the EU runner after the Squid blocking check; the existing script skips the load when the image is present and receives the archive through stdin. An unverified archive stops the stage before any transfer. Tests: `OutlineImageLoadTests` in `test_production_eu_checks.py`.
 
-### 220. Deploying EU Outline Server
+### 220. [x] Deploying EU Outline Server
 
 - **Source step:** `deploy_outline(eu_runner, eu_private_address)`.
 - **Deploy action:** `eu-server-agent deploy-outline`
@@ -1476,6 +1476,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   equivalent: `.venv/bin/eu-server-agent deploy-outline`; production
   orchestration must pass the `EU_SERVER_ADDRESS` explicitly through
   the function call, not rely on `agents.env`.
+- **Result:** The EU stage calls `deploy_outline` with the EU runner and the validated `EU_SERVER_ADDRESS` passed explicitly, after the image load. The existing script reuses a valid running container and refuses an unexpected one. Tests: `OutlineDeploymentTests` in `test_production_eu_checks.py`.
 
 ### 221. Checking EU Outline health
 
