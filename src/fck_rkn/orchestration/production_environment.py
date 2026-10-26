@@ -11,6 +11,7 @@ from pathlib import Path
 from fck_rkn.agents.eu_server import deploy_outline, deploy_squid
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.eu_server_test import (
+    check_outline_health,
     check_squid_blocking,
     check_squid_http,
     check_squid_startup,
@@ -111,6 +112,7 @@ def outline_image_steps(runner: RemoteRunner) -> list[Step]:
 def outline_steps(runner: RemoteRunner, private_address: str) -> list[Step]:
     return [
         ("Outline deployment", lambda: deploy_outline(runner, private_address)),
+        ("Outline health check", lambda: check_outline_health(runner)),
     ]
 
 

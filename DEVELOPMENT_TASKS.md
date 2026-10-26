@@ -1478,7 +1478,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   the function call, not rely on `agents.env`.
 - **Result:** The EU stage calls `deploy_outline` with the EU runner and the validated `EU_SERVER_ADDRESS` passed explicitly, after the image load. The existing script reuses a valid running container and refuses an unexpected one. Tests: `OutlineDeploymentTests` in `test_production_eu_checks.py`.
 
-### 221. Checking EU Outline health
+### 221. [x] Checking EU Outline health
 
 - **Source step:** `check_outline_health`.
 - **Check action:** `eu-server-test-agent outline`
@@ -1492,6 +1492,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Verify:** Test healthy/unhealthy outcomes and assert no key-like material
   is emitted. Standalone CLI equivalent:
   `.venv/bin/eu-server-test-agent outline`.
+- **Result:** The EU stage runs `check_outline_health` right after the Outline deployment. Tests (`OutlineHealthCheckTests`) cover healthy, unhealthy and timeout outcomes stopping the stage, the read-only check script that never prints the management URL, and failure logs that omit remote key-like output.
 
 ### 222. Deploying EU MTProxy
 

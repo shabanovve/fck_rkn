@@ -10,7 +10,11 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from fck_rkn.agents.outline import OUTLINE_CONTAINER_NAME, OUTLINE_IMAGE
+from fck_rkn.agents.outline import (
+    OUTLINE_CONTAINER_NAME,
+    OUTLINE_HEALTH_CHECK_COMMAND,
+    OUTLINE_IMAGE,
+)
 from fck_rkn.agents.eu_server_test import (
     SQUID_BLOCK_CHECK_COMMAND,
     SQUID_HTTP_CHECK_COMMAND,
@@ -215,7 +219,7 @@ class OutlineImageLoadTests(unittest.TestCase):
 
         self.assertEqual(run_stage(runner, self.archive), 0)
 
-        self.assertEqual(len(runner.commands), 6)
+        self.assertEqual(len(runner.commands), 7)
         self.assertEqual(runner.commands[3], SQUID_BLOCK_CHECK_COMMAND)
         self.assertEqual(runner.stdins[4], self.archive)
         self.assertIn(str(self.archive.stat().st_size), runner.commands[4])
@@ -313,6 +317,51 @@ class OutlineDeploymentTests(unittest.TestCase):
 
         deploy.assert_called_once()
         self.assertEqual(deploy.call_args.args[1], "192.0.2.10")
+
+
+class OutlineHealthCheckTests(unittest.TestCase):
+    """Task 221."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.archive = Path(directory.name) / "outline-image.tar.gz"
+        self.archive.write_bytes(b"verified archive")
+
+    def test_health_check_runs_right_after_the_outline_deployment(self) -> None:
+        runner = ScriptedRunner()
+
+        self.assertEqual(run_stage(runner, self.archive), 0)
+
+        self.assertEqual(runner.commands[6], OUTLINE_HEALTH_CHECK_COMMAND)
+        self.assertEqual(len(runner.commands), 7)
+
+    def test_unhealthy_and_timed_out_checks_stop_the_stage(self) -> None:
+        for label, outcome in (
+            ("unhealthy", RemoteResult(1, stderr="endpoint is unhealthy")),
+            ("timeout", RemoteTimeoutError()),
+        ):
+            with self.subTest(case=label):
+                runner = ScriptedRunner([RemoteResult(0)] * 6 + [outcome])
+                with self.assertLogs(production_environment.logger, level="ERROR") as logs:
+                    self.assertNotEqual(run_stage(runner, self.archive), 0)
+
+                self.assertIn("Outline health check", logs.output[-1])
+                self.assertEqual(len(runner.commands), 7)
+
+    def test_check_is_read_only_and_does_not_print_the_api_url_or_keys(self) -> None:
+        command = OUTLINE_HEALTH_CHECK_COMMAND
+        self.assertIsNone(MUTATING_COMMANDS.search(command.replace("2>/dev/null", "")))
+        self.assertNotRegex(command, r"echo[^\n]*\$api_url|print\([^)]*(key|url)")
+        self.assertIn("--silent", command)
+
+    def test_failure_log_hides_remote_output_with_key_like_material(self) -> None:
+        secret = "ss://Y2hhY2hhMjA6c2VjcmV0@192.0.2.10:10001"
+        runner = ScriptedRunner([RemoteResult(0)] * 6 + [RemoteResult(1, secret, secret)])
+        with self.assertLogs(production_environment.logger, level="ERROR") as logs:
+            run_stage(runner, self.archive)
+
+        self.assertNotIn("ss://", "\n".join(logs.output))
 
 
 if __name__ == "__main__":
