@@ -1544,7 +1544,7 @@ runner, "ru-server-feasibility-probe")`), matching
   the approved secret-store client without printing it.
 - **Result:** Approved backend: an operator-local `0600` file in a `0700` directory outside the repository (`production_secrets.LocalSecretStore`, documented in `PROD_ENV_HOST.md`). The stage captures `create_outline_user` output in memory, writes it atomically to the store, and never prints it. Reuse refreshes the local copy; failures store nothing and log no secret. Tests: `test_production_secrets.py` and `RuStageOutlineKeyTests`.
 
-### 225. Preparing production EU firewall inputs
+### 225. [x] Preparing production EU firewall inputs
 
 - **Source step:** Fetch/validate the RKN blacklist and construct EU firewall
   JSON with the RU peer address and VM service settings.
@@ -1560,6 +1560,7 @@ runner, "ru-server-feasibility-probe")`), matching
 - **Verify:** Test valid IPv4/IPv6 input, empty/invalid/upstream failure,
   RKN/service-range overlap rules where applicable, and ensure no firewall
   command runs when preparation fails.
+- **Result:** `production_firewall.prepare_eu_firewall_input` fetches the RKN blacklist through the shared `agents.rkn_blacklist` (no GCP orchestrator import) and builds the EU firewall JSON from `prod.env` (RU peer, SSH port, metadata/DNS/DHCP/NTP/local networks), validated by `build_eu_firewall_rules`. It rejects upstream failure, empty lists and an RU peer inside a crawler range; the stage stops before any firewall command when preparation fails. Tests: `test_production_firewall.py` and `FirewallInputPreparationTests`.
 
 ### 226. Applying the EU guest firewall
 

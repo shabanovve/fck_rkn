@@ -33,6 +33,7 @@ from fck_rkn.production_config import (
     ensure_prod_config,
     load_eu_production_settings,
 )
+from fck_rkn.production_firewall import FirewallInputError, prepare_eu_firewall_input
 from fck_rkn.production_secrets import LocalSecretStore, SecretStoreError
 from fck_rkn.production_setup import ProductionSetupError, configure_interactively
 from fck_rkn.remote.runner import RemoteRunner
@@ -152,6 +153,22 @@ def ru_key_steps(runner: RemoteRunner) -> list[Step]:
     return [("RU-stage Outline key", lambda: provision_ru_outline_key(runner))]
 
 
+def firewall_steps(
+    runner: RemoteRunner, settings: EuProductionSettings
+) -> list[Step]:
+    prepared: dict[str, str] = {}
+
+    def prepare() -> int:
+        try:
+            prepared["config"] = prepare_eu_firewall_input(settings)
+        except FirewallInputError as error:
+            logger.error("Preparing the EU firewall input failed: %s", error)
+            return 1
+        return 0
+
+    return [("EU firewall input preparation", prepare)]
+
+
 def eu_stage_steps(runner: RemoteRunner, settings: EuProductionSettings) -> list[Step]:
     return (
         squid_steps(runner)
@@ -159,6 +176,7 @@ def eu_stage_steps(runner: RemoteRunner, settings: EuProductionSettings) -> list
         + outline_steps(runner, settings.EU_SERVER_ADDRESS)
         + mtproxy_steps(runner)
         + ru_key_steps(runner)
+        + firewall_steps(runner, settings)
     )
 
 

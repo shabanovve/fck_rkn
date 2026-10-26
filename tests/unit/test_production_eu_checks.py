@@ -25,6 +25,7 @@ from fck_rkn.agents.eu_server_test import (
 )
 from fck_rkn.orchestration import production_environment
 from fck_rkn.production_config import EuProductionSettings
+from fck_rkn.production_firewall import FirewallInputError
 from fck_rkn.production_secrets import LocalSecretStore, SecretStoreError
 from fck_rkn.remote.runner import RemoteResult, RemoteTimeoutError
 
@@ -36,6 +37,9 @@ MUTATING_COMMANDS = re.compile(
 
 
 ACCESS_URL = "ss://Y2hhY2hhOnNlY3JldA@192.0.2.10:10001/?outline=1\n"
+
+
+FIREWALL_INPUT = '{"ru_server_address": "192.0.2.20"}'
 
 
 class ScriptedRunner:
@@ -79,6 +83,11 @@ def run_stage(runner: ScriptedRunner, archive: Path | None) -> int:
     with (
         config_home,
         patch.dict(os.environ, {"XDG_CONFIG_HOME": config_home.name}),
+        patch.object(
+            production_environment,
+            "prepare_eu_firewall_input",
+            return_value=FIREWALL_INPUT,
+        ),
         patch.object(
             production_environment, "retrieve_outline_artifact", return_value=archive
         ),
@@ -536,6 +545,11 @@ class RuStageOutlineKeyTests(unittest.TestCase):
                 production_environment, "retrieve_outline_artifact", return_value=self.archive
             ),
             patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.directory)}),
+            patch.object(
+                production_environment,
+                "prepare_eu_firewall_input",
+                return_value=FIREWALL_INPUT,
+            ),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
             self.assertLogs(production_environment.logger, level="INFO") as logs,
@@ -552,6 +566,50 @@ class RuStageOutlineKeyTests(unittest.TestCase):
         source = Path(production_environment.__file__).read_text(encoding="utf-8")
         self.assertNotIn("last_run", source)
         self.assertNotIn("prod.env", source.replace("config/prod.env", ""))
+
+
+class FirewallInputPreparationTests(unittest.TestCase):
+    """Task 225."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.archive = Path(directory.name) / "outline-image.tar.gz"
+        self.archive.write_bytes(b"verified archive")
+
+    def test_preparation_runs_after_the_key_step_and_needs_no_remote_command(self) -> None:
+        runner = ScriptedRunner()
+
+        self.assertEqual(run_stage(runner, self.archive), 0)
+
+        self.assertIn("ru-server-feasibility-probe", runner.commands[-1])
+
+    def test_failed_preparation_stops_the_stage_before_any_firewall_command(self) -> None:
+        runner = ScriptedRunner()
+        config_home = tempfile.TemporaryDirectory()
+        self.addCleanup(config_home.cleanup)
+        with (
+            patch.dict(os.environ, {"XDG_CONFIG_HOME": config_home.name}),
+            patch.object(
+                production_environment,
+                "retrieve_outline_artifact",
+                return_value=self.archive,
+            ),
+            patch.object(
+                production_environment,
+                "prepare_eu_firewall_input",
+                side_effect=FirewallInputError("The RKN blacklist is unavailable"),
+            ),
+            redirect_stdout(StringIO()),
+            redirect_stderr(StringIO()),
+            self.assertLogs(production_environment.logger, level="ERROR") as logs,
+        ):
+            result = production_environment.run_eu_stage(runner, stage_settings())
+
+        self.assertEqual(result, 1)
+        self.assertIn("EU firewall input preparation", logs.output[-1])
+        self.assertTrue(all("nft" not in command for command in runner.commands))
+        self.assertIn("ru-server-feasibility-probe", runner.commands[-1])
 
 
 if __name__ == "__main__":
