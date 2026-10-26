@@ -150,13 +150,27 @@ operator commands:
 
 ### Current behavior
 
-The EU stage currently runs the Squid deployment and checks, then loads the
-verified Outline image (task 219). The load step fails closed until an
-approved digest is committed (see "Outline image artifact"); use
-`deploy-eu-squid` to run the Squid steps alone.
+A run without arguments performs the whole EU stage and stops at the first
+failure, naming the step. Steps, in order:
 
-Until the full sequence above is implemented (task 245), a run without
-arguments ensures a valid configuration (interactively on a terminal) and then
+1. Squid deployment, startup check, HTTP check and blocking check.
+2. Outline image load (verified artifact), Outline deployment and health check.
+3. MTProxy deployment and check.
+4. Creation or reuse of the dedicated EU Outline key for the RU stage, kept in
+   the operator-local secret store.
+5. EU firewall input preparation, firewall application (transactional, no
+   reset), read-only policy verification and the RKN blacklist updater check.
+
+Not run, by design: the firewall rollback simulation, the invasive probe-based
+firewall check, test-run state, and every GCP or test-client operation. On
+success the log ends with "EU production stage completed on eu-server"; the RU
+stage is reported as not implemented (task 201). The Outline load step fails
+closed until an approved digest is committed (see "Outline image artifact");
+use `deploy-eu-squid` to run the Squid steps alone. The read-only firewall
+check is also available as `eu-server-test-agent firewall-readonly` (config on
+stdin).
+
+A run without arguments ensures a valid configuration (interactively on a terminal) and then
 performs the EU stage described above:
 
 ```sh

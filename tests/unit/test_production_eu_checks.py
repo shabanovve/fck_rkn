@@ -861,5 +861,66 @@ class StageSummaryTests(unittest.TestCase):
         self.assertNotIn("secret", text)
 
 
+class FullStageOrderTests(unittest.TestCase):
+    """Task 245: the EU stage mirrors the EU part of the test_env_host order."""
+
+    EXPECTED = [
+        "Squid deployment",
+        "Squid startup check",
+        "Squid HTTP check",
+        "Squid blocking check",
+        "Outline image load",
+        "Outline deployment",
+        "Outline health check",
+        "MTProxy deployment",
+        "MTProxy check",
+        "RU-stage Outline key",
+        "EU firewall input preparation",
+        "EU firewall application",
+        "EU firewall verification",
+        "EU RKN blacklist updater check",
+    ]
+
+    def test_steps_run_in_the_documented_order_and_each_deploy_has_its_check(self) -> None:
+        names = [
+            name
+            for name, _ in production_environment.eu_stage_steps(
+                ScriptedRunner(), stage_settings()
+            )
+        ]
+
+        self.assertEqual(names, self.EXPECTED)
+        for deploy, check in (
+            ("Squid deployment", "Squid startup check"),
+            ("Outline deployment", "Outline health check"),
+            ("MTProxy deployment", "MTProxy check"),
+            ("EU firewall application", "EU firewall verification"),
+        ):
+            self.assertLess(names.index(deploy), names.index(check))
+
+    def test_every_failure_stops_all_later_steps(self) -> None:
+        steps = production_environment.eu_stage_steps(ScriptedRunner(), stage_settings())
+        for index in range(len(steps)):
+            calls: list[str] = []
+
+            def make(name: str, code: int):
+                def action() -> int:
+                    calls.append(name)
+                    return code
+
+                return (name, action)
+
+            fake = [make(name, 1 if i == index else 0) for i, (name, _) in enumerate(steps)]
+            with self.assertLogs(production_environment.logger, level="ERROR"):
+                self.assertEqual(production_environment.run_steps(fake, "done"), 1)
+
+            self.assertEqual(calls, self.EXPECTED[: index + 1])
+
+    def test_no_test_only_action_is_part_of_the_stage(self) -> None:
+        source = Path(production_environment.__file__).read_text(encoding="utf-8")
+        for name in ("check_eu_firewall(", "test_client", "last_run", "lookup_test_client"):
+            self.assertNotIn(name, source)
+
+
 if __name__ == "__main__":
     unittest.main()

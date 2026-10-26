@@ -1797,7 +1797,7 @@ runner, "ru-server-feasibility-probe")`), matching
   `prod-env-host configure` runs it, and a run without arguments starts it
   first when `config/prod.env` is missing or invalid on a terminal (task 213).
 
-### 245. Running the full deployment and checks without arguments
+### 245. [x] Running the full deployment and checks without arguments
 
 - **Depends on:** Task 244; the EU steps (tasks 213–242) and, for the RU
   stage, task 201 and its tasks.
@@ -1822,6 +1822,7 @@ runner, "ru-server-feasibility-probe")`), matching
   a failure stops later steps, that a missing or invalid config triggers the
   interactive setup on a terminal and exit code 2 without one, and that no
   excluded test-only action is called.
+- **Result:** The no-argument run executes the full EU stage (Squid, Outline image, Outline, MTProxy, RU-stage key, firewall apply, read-only verification, blacklist updater check) and stops at the first failure, naming the step. Tests assert the exact order, that each deploy precedes its check, that every failure stops later steps, config/TTY behavior and that no test-only action is used. PROD_ENV_HOST.md is updated. The RU stage remains not implemented until task 201, so the full test_env_host parity is reached only for the EU side.
 
 ## Decisions that block dependent tasks
 
