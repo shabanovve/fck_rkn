@@ -150,6 +150,39 @@ class ProductionEnvironmentTests(unittest.TestCase):
             _, action = steps[0]
             self.assertEqual(action(), 24)
 
+    def test_ru_outline_steps_runs_deploy_and_health_check_in_order(self) -> None:
+        runner = object()
+        settings = ru_settings()
+        with (
+            patch.object(
+                production_environment, "deploy_outline_server", return_value=0
+            ) as deploy,
+            patch.object(
+                production_environment, "check_ru_outline_health", return_value=0
+            ) as check,
+        ):
+            steps = production_environment.ru_outline_steps(
+                runner, settings.RU_SERVER_ADDRESS
+            )
+            self.assertEqual(len(steps), 2)
+            self.assertEqual(steps[0][0], "RU Outline deployment")
+            self.assertEqual(steps[1][0], "RU Outline health check")
+            self.assertEqual(steps[0][1](), 0)
+            self.assertEqual(steps[1][1](), 0)
+
+        deploy.assert_called_once_with(runner, "192.0.2.20")
+        check.assert_called_once_with(runner)
+
+    def test_ru_outline_steps_health_check_reports_failure(self) -> None:
+        runner = object()
+        with patch.object(
+            production_environment, "check_ru_outline_health", return_value=25
+        ) as check:
+            steps = production_environment.ru_outline_steps(runner, "192.0.2.20")
+            self.assertEqual(steps[1][1](), 25)
+
+        check.assert_called_once_with(runner)
+
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()
         with (

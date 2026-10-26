@@ -1945,7 +1945,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   `RU_SERVER_ADDRESS`. Unit tests verify that the address is passed, failures
   propagate, and no EU state or actions are affected.
 
-### 306. Checking RU Outline Server health
+### 306. [x] Checking RU Outline Server health
 
 - **Depends on:** Task 305.
 - **Source step:** `check_ru_outline_health(ru_runner)`.
@@ -1955,6 +1955,10 @@ production settings and `SshRunner`, never the standalone CLIs that read
   access URLs or key material.
 - **Verify:** Test success, unhealthy service, transport failure and that no
   subsequent RU action runs after a failed check.
+- **Result:** `ru_outline_steps` chains `deploy_outline_server` with
+  `check_ru_outline_health` on ru-server. The health check is read-only and
+  redacts key material. Tests verify step order, health check success, and
+  fail-fast execution.
 
 ### 307. Retrieving the protected EU Outline key for RU
 
