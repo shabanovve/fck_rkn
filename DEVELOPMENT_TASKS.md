@@ -1638,7 +1638,7 @@ runner, "ru-server-feasibility-probe")`), matching
   actions to repeat the already completed EU policy inspection.
 - **Result:** Added exclusion tests: check_eu_firewall (the invasive probe check) never runs, the EU policy is inspected once by the read-only check, and no RU action is required.
 
-### 231. Excluding persistence of test-run inputs
+### 231. [x] Excluding persistence of test-run inputs
 
 - **Source step:** The `last_run.save(...)` calls persist firewall payloads,
   crawler probe input and test Outline keys for rerunning test checks.
@@ -1648,6 +1648,7 @@ runner, "ru-server-feasibility-probe")`), matching
   mechanism.
 - **Verify:** EU-stage tests assert no production value or key is written to
   test run state.
+- **Result:** Added exclusion tests: last_run.save is never called, config/last_run is unchanged, and the production sources do not reference run state.
 
 ### 232. Excluding test-client lookup
 

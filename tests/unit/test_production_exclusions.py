@@ -101,5 +101,23 @@ class RepeatedFinalFirewallCheckExclusionTests(unittest.TestCase):
         self.assertNotIn("check_ru_firewall", production_source())
 
 
+class TestRunStateExclusionTests(unittest.TestCase):
+    """Task 231."""
+
+    def test_stage_writes_no_test_run_state(self) -> None:
+        stage = StageRun(self)
+        traps = trap_attributes(self, last_run, ("save",))
+        before = sorted(Path("config/last_run").glob("*")) if Path("config/last_run").exists() else []
+
+        self.assertEqual(stage.run(), 0)
+
+        traps[0].assert_not_called()
+        after = sorted(Path("config/last_run").glob("*")) if Path("config/last_run").exists() else []
+        self.assertEqual(before, after)
+
+    def test_production_sources_do_not_use_run_state(self) -> None:
+        self.assertNotIn("last_run", production_source())
+
+
 if __name__ == "__main__":
     unittest.main()
