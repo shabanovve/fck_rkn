@@ -1276,7 +1276,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   cloud-firewall references; the import test from task 206 covers loaded
   modules.
 
-### 208. Resolving the production EU address
+### 208. [x] Resolving the production EU address
 
 - **Source step:** `private_address_of(instance)` obtains the address passed
   to the Outline deployment and firewall configuration.
@@ -1284,6 +1284,11 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `config/prod.env`; do not discover it from a cloud VM object or metadata.
 - **Verify:** Test valid IPv4/IPv6 addresses and malformed/missing values;
   assert invalid values stop before any remote operation.
+- **Result:** `EU_SERVER_ADDRESS` is the only source of the address (already
+  validated by task 204 and used by `create_eu_runner`). Tests cover IPv4,
+  IPv6 normalization, DNS names, out-of-range octets, ports, and empty or
+  missing values, and show a real invalid file stops `main` before a runner
+  or deployment is created.
 
 ### 209. Selecting the EU production SSH runner
 

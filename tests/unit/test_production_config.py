@@ -199,6 +199,38 @@ class ProductionConfigTests(unittest.TestCase):
         )
         self.assertNotIn("SET_TO_ADDRESS", str(raised.exception))
 
+    def test_eu_server_address_accepts_ipv4_and_normalizes_ipv6(self) -> None:
+        self.config_path.parent.mkdir(parents=True)
+        for raw, expected in (
+            ("192.0.2.10", "192.0.2.10"),
+            ("2001:0db8:0:0:0:0:0:10", "2001:db8::10"),
+        ):
+            with self.subTest(address=raw):
+                self.config_path.write_text(
+                    VALID.replace("EU_SERVER_ADDRESS=192.0.2.10", f"EU_SERVER_ADDRESS={raw}"),
+                    encoding="utf-8",
+                )
+                settings = load_eu_production_settings(self.config_path)
+                self.assertEqual(settings.EU_SERVER_ADDRESS, expected)
+
+    def test_eu_server_address_rejects_malformed_and_missing_values(self) -> None:
+        self.config_path.parent.mkdir(parents=True)
+        for label, replacement in (
+            ("dns name", "EU_SERVER_ADDRESS=eu.example.com"),
+            ("octet out of range", "EU_SERVER_ADDRESS=192.0.2.300"),
+            ("with port", "EU_SERVER_ADDRESS=192.0.2.10:22"),
+            ("empty", "EU_SERVER_ADDRESS="),
+            ("missing", ""),
+        ):
+            with self.subTest(case=label):
+                self.config_path.write_text(
+                    VALID.replace("EU_SERVER_ADDRESS=192.0.2.10", replacement),
+                    encoding="utf-8",
+                )
+                with self.assertRaises(ProductionConfigError) as caught:
+                    load_eu_production_settings(self.config_path)
+                self.assertIn("EU_SERVER_ADDRESS", str(caught.exception))
+
     def test_rejects_invalid_addresses_networks_and_ssh_port(self) -> None:
         invalid_variants = (
             ("EU_SERVER_ADDRESS=192.0.2.10", "EU_SERVER_ADDRESS=not-an-ip"),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -9,7 +10,11 @@ from unittest.mock import call, patch
 
 from fck_rkn import production_setup
 from fck_rkn.orchestration import production_environment
-from fck_rkn.production_config import EuProductionSettings, ProductionConfigError
+from fck_rkn.production_config import (
+    EuProductionSettings,
+    ProductionConfigError,
+    load_eu_production_settings,
+)
 from fck_rkn.remote.ssh import SshRunner
 
 
@@ -156,6 +161,33 @@ class ProductionEnvironmentTests(unittest.TestCase):
             self.assertLogs(production_environment.logger, level="ERROR"),
         ):
             self.assertEqual(production_environment.main(["configure"]), 2)
+
+    def test_invalid_eu_address_in_real_file_stops_before_any_remote_operation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "prod.env"
+            config.write_text(
+                "EU_SERVER_ADDRESS=eu.example.com\n", encoding="utf-8"
+            )
+            with (
+                patch.object(production_environment, "ensure_prod_config"),
+                patch.object(
+                    production_environment,
+                    "load_eu_production_settings",
+                    side_effect=lambda: load_eu_production_settings(config),
+                ),
+                patch.object(production_environment, "create_eu_runner") as create,
+                patch.object(production_environment, "deploy_eu_squid") as deploy,
+                patch.object(production_environment, "SshRunner") as ssh,
+                self.assertLogs(production_environment.logger, level="ERROR") as logs,
+            ):
+                self.assertEqual(production_environment.main(["deploy-eu-squid"]), 2)
+
+        create.assert_not_called()
+        deploy.assert_not_called()
+        ssh.assert_not_called()
+        self.assertIn("EU_SERVER_ADDRESS", logs.output[0])
 
     def test_entry_point_loads_no_gcp_code_or_credentials(self) -> None:
         code = (
