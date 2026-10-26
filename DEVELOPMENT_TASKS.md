@@ -1144,9 +1144,9 @@ behavior that requires them.
   access-key provisioning and protected cross-stage key handoff as explicit
   prerequisite tasks if they are still unresolved.
 - **Deliverable:** Add the detailed, dependency-ordered RU task breakdown to
-  this file. Continue numbering after the tasks created by task 200 (currently
-  task 243 is the next available number). Do not implement the RU production
-  deployment as part of task 201.
+  this file. Every new task related to `ru-server` must be numbered above 300
+  (start at 301); numbers 246–300 are not used for RU work. Do not implement
+  the RU production deployment as part of task 201.
 
 ## EU production implementation tasks created by task 200
 
