@@ -817,5 +817,49 @@ class BlacklistUpdaterCheckTests(unittest.TestCase):
                 self.assertNotIn("secret-out", "\n".join(logs.output))
 
 
+class StageSummaryTests(unittest.TestCase):
+    """Task 242."""
+
+    FORBIDDEN = ("project", "zone", "gcp", "gcloud", "iap", "test-client", "secret-out")
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.archive = Path(directory.name) / "outline-image.tar.gz"
+        self.archive.write_bytes(b"verified archive")
+
+    def run_logged(self, runner):
+        stdout = StringIO()
+        with (
+            self.assertLogs(production_environment.logger, level="INFO") as logs,
+            redirect_stdout(stdout),
+            redirect_stderr(StringIO()),
+        ):
+            result = run_stage(runner, self.archive)
+        return result, "\n".join(logs.output)
+
+    def test_success_summary_names_the_eu_stage_without_values_or_gcp(self) -> None:
+        result, text = self.run_logged(ScriptedRunner())
+
+        self.assertEqual(result, 0)
+        summary = text.splitlines()[-1]
+        self.assertIn("EU production stage completed on eu-server", summary)
+        self.assertIn("RU stage not implemented", summary)
+        for value in ("192.0.2.10", "192.0.2.20", "ss://", "test-client"):
+            self.assertNotIn(value, text)
+        for word in self.FORBIDDEN:
+            self.assertNotIn(word, summary.lower())
+
+    def test_failure_summary_names_the_step_and_has_no_success_message(self) -> None:
+        runner = ScriptedRunner([RemoteResult(0), RemoteResult(1, "secret-out", "secret-err")])
+
+        result, text = self.run_logged(runner)
+
+        self.assertNotEqual(result, 0)
+        self.assertIn("Squid startup check failed with exit status 1", text)
+        self.assertNotIn("completed", text)
+        self.assertNotIn("secret", text)
+
+
 if __name__ == "__main__":
     unittest.main()

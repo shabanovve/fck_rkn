@@ -203,7 +203,12 @@ def deploy_eu_squid(runner: RemoteRunner) -> int:
 
 
 def run_eu_stage(runner: RemoteRunner, settings: EuProductionSettings) -> int:
-    return run_steps(eu_stage_steps(runner, settings), "EU production stage completed")
+    steps = eu_stage_steps(runner, settings)
+    return run_steps(
+        steps,
+        f"EU production stage completed on eu-server: all {len(steps)} steps "
+        "and checks passed (RU stage not implemented)",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

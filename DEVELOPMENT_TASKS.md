@@ -1737,7 +1737,7 @@ runner, "ru-server-feasibility-probe")`), matching
   test-client runner.
 - **Result:** Added exclusion tests: request_youtube is never invoked and the stage completes without a test-client runner.
 
-### 242. Reporting the EU deployment result
+### 242. [x] Reporting the EU deployment result
 
 - **Source step:** The final project/zone success message and completion log
   in `_run`.
@@ -1748,6 +1748,7 @@ runner, "ru-server-feasibility-probe")`), matching
   identified.
 - **Verify:** Test success/failure summaries and assert no secret or
   test-environment value is emitted.
+- **Result:** The success summary now reads 'EU production stage completed on eu-server: all N steps and checks passed (RU stage not implemented)' and carries no addresses, keys or GCP values. A failure names the step and exit status and emits no success message. Both cases are tested.
 
 ### 243. [x] Reporting actionable production configuration errors
 
