@@ -1679,12 +1679,13 @@ runner, "ru-server-feasibility-probe")`), matching
 - **Verify:** The EU stage does not invoke RU actions or create this key.
 - **Result:** Added exclusion tests: the only key created is the production RU-stage key, never TEST_CLIENT_OUTLINE_USER, and there is no RU runner.
 
-### 235. Excluding test-client Outline connection deployment
+### 235. [x] Excluding test-client Outline connection deployment
 
 - **Source step:** `connect_to_outline(client_runner, client_access_url)`.
 - **Production disposition:** Do not connect a GCP test-client to production
   Outline as part of EU deployment.
 - **Verify:** No test-client runner or client access URL is created or passed.
+- **Result:** Added exclusion tests: connect_to_outline is never invoked and no test-client module is referenced.
 
 ### 236. Excluding the test-client Outline connection check
 

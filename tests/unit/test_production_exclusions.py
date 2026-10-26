@@ -166,5 +166,19 @@ class TestClientKeyExclusionTests(unittest.TestCase):
         self.assertNotIn("ru_server_runner", production_source())
 
 
+class TestClientOutlineConnectionExclusionTests(unittest.TestCase):
+    """Task 235."""
+
+    def test_stage_never_invokes_connect_to_outline(self) -> None:
+        stage = StageRun(self)
+        (trap,) = trap_attributes(self, test_client, ("connect_to_outline",))
+
+        self.assertEqual(stage.run(), 0)
+
+        trap.assert_not_called()
+        self.assertNotIn("connect_to_outline", production_source())
+        self.assertNotIn("test_client", production_source())
+
+
 if __name__ == "__main__":
     unittest.main()
