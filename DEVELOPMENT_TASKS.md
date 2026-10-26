@@ -1960,7 +1960,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   redacts key material. Tests verify step order, health check success, and
   fail-fast execution.
 
-### 307. Retrieving the protected EU Outline key for RU
+### 307. [x] Retrieving the protected EU Outline key for RU
 
 - **Depends on:** Task 224 and successful completion of task 306.
 - **Source step:** `create_outline_user(eu_runner, RU_PROBE_OUTLINE_USER)` and
@@ -1974,6 +1974,9 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Verify:** Missing or over-permissive secret files fail closed; tests assert
   the key is never logged, persisted again, placed in argv or passed to a
   shell command.
+- **Result:** `retrieve_ru_outline_key` reads the dedicated EU key from
+  `LocalSecretStore` in memory. Missing or unsafe files fail closed. The secret
+  is never logged, placed in argv or written to git-tracked files.
 
 ### 308. Deploying the RU Outline client
 

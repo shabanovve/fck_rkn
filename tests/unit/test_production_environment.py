@@ -183,6 +183,42 @@ class ProductionEnvironmentTests(unittest.TestCase):
 
         check.assert_called_once_with(runner)
 
+    def test_retrieve_ru_outline_key_returns_stored_key(self) -> None:
+        store = object()
+        with (
+            patch.object(
+                production_environment.LocalSecretStore,
+                "read",
+                return_value="ss://secret-key@192.0.2.10:10001",
+            ),
+        ):
+            key = production_environment.retrieve_ru_outline_key()
+            self.assertEqual(key, "ss://secret-key@192.0.2.10:10001")
+
+    def test_retrieve_ru_outline_key_missing_or_error_fails_closed(self) -> None:
+        with (
+            patch.object(
+                production_environment.LocalSecretStore,
+                "read",
+                return_value=None,
+            ),
+            self.assertLogs(production_environment.logger, level="ERROR") as logs,
+        ):
+            self.assertIsNone(production_environment.retrieve_ru_outline_key())
+            self.assertIn("missing", logs.output[0])
+
+        with (
+            patch.object(
+                production_environment.LocalSecretStore,
+                "read",
+                side_effect=production_environment.SecretStoreError("unsafe perms"),
+            ),
+            self.assertLogs(production_environment.logger, level="ERROR") as logs,
+        ):
+            self.assertIsNone(production_environment.retrieve_ru_outline_key())
+            self.assertIn("unsafe perms", logs.output[0])
+            self.assertNotIn("ss://", "\n".join(logs.output))
+
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()
         with (

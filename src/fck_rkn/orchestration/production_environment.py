@@ -215,6 +215,19 @@ def provision_ru_outline_key(
     return 0
 
 
+def retrieve_ru_outline_key(store: LocalSecretStore | None = None) -> str | None:
+    """Read the dedicated EU Outline access key stored by task 224 for RU."""
+    try:
+        key = (store or LocalSecretStore()).read(RU_PROBE_KEY_SECRET)
+    except SecretStoreError as error:
+        logger.error("Could not read the RU-stage Outline key: %s", error)
+        return None
+    if not key:
+        logger.error("The RU-stage Outline key is missing from the secret store")
+        return None
+    return key
+
+
 def ru_key_steps(runner: RemoteRunner) -> list[Step]:
     return [("RU-stage Outline key", lambda: provision_ru_outline_key(runner))]
 
