@@ -189,6 +189,27 @@ class ProductionEnvironmentTests(unittest.TestCase):
         ssh.assert_not_called()
         self.assertIn("EU_SERVER_ADDRESS", logs.output[0])
 
+    def test_deployment_never_removes_the_eu_firewall(self) -> None:
+        runner = object()
+        with (
+            patch.object(production_environment, "deploy_squid", return_value=0),
+            patch.object(production_environment, "check_squid_startup", return_value=0),
+            patch.object(production_environment, "check_squid_http", return_value=0),
+            patch.object(production_environment, "check_squid_blocking", return_value=0),
+            patch("fck_rkn.agents.eu_server.remove_eu_firewall") as remove,
+            patch("fck_rkn.agents.eu_server.apply_eu_firewall") as apply,
+        ):
+            self.assertEqual(production_environment.deploy_eu_squid(runner), 0)
+
+        remove.assert_not_called()
+        apply.assert_not_called()
+
+    def test_entry_point_does_not_reference_firewall_removal(self) -> None:
+        for module in (production_environment, production_setup):
+            source = Path(module.__file__).read_text(encoding="utf-8")
+            self.assertNotIn("remove_eu_firewall", source, module.__name__)
+            self.assertNotIn("remove-firewall", source, module.__name__)
+
     def test_entry_point_loads_no_gcp_code_or_credentials(self) -> None:
         code = (
             "import sys\n"

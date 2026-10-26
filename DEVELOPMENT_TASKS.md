@@ -1306,7 +1306,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   that neither key material nor remote output appears in argv or logs; only
   the key file path is passed to ssh.
 
-### 210. Excluding removal of the test EU firewall
+### 210. [x] Excluding removal of the test EU firewall
 
 - **Source step:** `_reset_firewall` calls `remove_eu_firewall` before the
   initial EU agent action.
@@ -1315,6 +1315,9 @@ checks restricted to the reviewed read-only behavior specified by each task.
   reviewed replacement is transactionally applied.
 - **Verify:** EU-only orchestration tests assert no firewall-removal action
   is called.
+- **Result:** Tests assert `deploy_eu_squid` never calls
+  `remove_eu_firewall` or `apply_eu_firewall`, and that the entry point and
+  interactive setup contain no reference to firewall removal.
 
 ### 211. Excluding the test EU firewall-absence check
 
