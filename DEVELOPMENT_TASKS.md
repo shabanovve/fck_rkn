@@ -2004,7 +2004,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   the in-memory key via `check_ru_outline_client`. Unit tests check execution
   order, failure reporting, and key redaction.
 
-### 310. Deploying the RU-to-EU Squid forward
+### 310. [x] Deploying the RU-to-EU Squid forward
 
 - **Depends on:** Task 309.
 - **Source step:** `deploy_squid_forward(ru_runner, access_url)`.
@@ -2013,6 +2013,9 @@ production settings and `SshRunner`, never the standalone CLIs that read
   introduced as a fallback.
 - **Verify:** Assert correct destination/port and protected key delivery;
   deployment failure prevents the corresponding check and all later steps.
+- **Result:** `ru_squid_forward_deploy_steps` deploys the Squid forward over
+  the EU Outline endpoint using the in-memory access URL. Unit tests verify
+  parameter delivery and error propagation without direct fallbacks.
 
 ### 311. Checking the RU-to-EU Squid forward
 

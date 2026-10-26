@@ -275,6 +275,33 @@ class ProductionEnvironmentTests(unittest.TestCase):
             steps = production_environment.ru_outline_client_steps(runner, "ss://key")
             self.assertEqual(steps[1][1](), 17)
 
+    def test_ru_squid_forward_deploy_steps_passes_access_url(self) -> None:
+        runner = object()
+        secret_url = "ss://Y2hhY2hhOnBhc3M@192.0.2.10:10001"
+        with patch.object(
+            production_environment, "deploy_squid_forward", return_value=0
+        ) as deploy:
+            steps = production_environment.ru_squid_forward_deploy_steps(
+                runner, secret_url
+            )
+            self.assertEqual(len(steps), 1)
+            name, action = steps[0]
+            self.assertEqual(name, "RU Squid forward deployment")
+            self.assertEqual(action(), 0)
+
+        deploy.assert_called_once_with(runner, secret_url)
+
+    def test_ru_squid_forward_deploy_steps_reports_failure(self) -> None:
+        runner = object()
+        with patch.object(
+            production_environment, "deploy_squid_forward", return_value=18
+        ) as deploy:
+            steps = production_environment.ru_squid_forward_deploy_steps(
+                runner, "ss://key"
+            )
+            _, action = steps[0]
+            self.assertEqual(action(), 18)
+
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()
         with (

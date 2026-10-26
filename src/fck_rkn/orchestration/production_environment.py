@@ -18,6 +18,7 @@ from fck_rkn.agents.eu_server import (
 from fck_rkn.agents.ru_server import (
     deploy_outline_client,
     deploy_outline_server,
+    deploy_squid_forward,
 )
 from fck_rkn.agents.ru_server_test import (
     check_outline_client as check_ru_outline_client,
@@ -208,6 +209,17 @@ def ru_outline_client_steps(
             "RU Outline client check",
             lambda: check_ru_outline_client(runner, access_url),
         ),
+    ]
+
+
+def ru_squid_forward_deploy_steps(
+    runner: RemoteRunner, access_url: str
+) -> list[Step]:
+    return [
+        (
+            "RU Squid forward deployment",
+            lambda: deploy_squid_forward(runner, access_url),
+        )
     ]
 
 
