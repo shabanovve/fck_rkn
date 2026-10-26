@@ -22,6 +22,7 @@ from fck_rkn.agents.ru_server import (
     deploy_squid_forward,
 )
 from fck_rkn.agents.ru_server_test import (
+    check_mtproxy_forward as check_ru_mtproxy_forward,
     check_outline_client as check_ru_outline_client,
     check_outline_health as check_ru_outline_health,
     check_squid_forward as check_ru_squid_forward,
@@ -248,6 +249,21 @@ def ru_mtproxy_forward_deploy_steps(
             "RU MTProxy forward deployment",
             lambda: deploy_mtproxy_forward(runner, access_url),
         )
+    ]
+
+
+def ru_mtproxy_forward_steps(
+    runner: RemoteRunner, access_url: str
+) -> list[Step]:
+    return [
+        (
+            "RU MTProxy forward deployment",
+            lambda: deploy_mtproxy_forward(runner, access_url),
+        ),
+        (
+            "RU MTProxy forward check",
+            lambda: check_ru_mtproxy_forward(runner),
+        ),
     ]
 
 

@@ -2042,7 +2042,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   over the EU Outline endpoint using the in-memory access URL. Unit tests
   verify parameter delivery and failure propagation.
 
-### 313. Checking the RU-to-EU MTProxy forward
+### 313. [x] Checking the RU-to-EU MTProxy forward
 
 - **Depends on:** Task 312.
 - **Source step:** `check_mtproxy_forward(ru_runner)`.
@@ -2050,6 +2050,8 @@ production settings and `SshRunner`, never the standalone CLIs that read
   check after deployment succeeds, without changing server configuration.
 - **Verify:** Cover expected listener/forward behavior, check failure and
   fail-fast sequencing.
+- **Result:** `ru_mtproxy_forward_steps` runs `check_ru_mtproxy_forward`
+  after deployment. Unit tests verify step ordering and failure propagation.
 
 ### 314. Preparing production RU firewall input
 
