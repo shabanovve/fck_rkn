@@ -52,10 +52,11 @@
      has been developed and verified in the test environment. Implement and
      verify the production deployment entry point for EU before extending it
      to deploy RU; the first stage must not configure or change `ru-server`.
-- Before implementing `prod_env_host`, analyze `test_env_host` and its full
-  dependency path. Record how the test and production responsibilities
-  differ; identify and justify every setting that belongs in the future
-  `config/prod.env` and `config/prod.env.example`; and decide how
+- The analysis of `test_env_host` and its dependency path is recorded in
+  `DEVELOPMENT_PLAN.md` (tasks 88, 200 and 201). Keep it current when production
+  requirements change. Record how test and production responsibilities
+  differ; identify and justify every setting in `config/prod.env` and
+  `config/prod.env.example`; and decide how
   `prod_env_host` will invoke and sequence `ru-server-agent`,
   `ru-server-test-agent`, `eu-server-agent`, and `eu-server-test-agent`.
   Include each agent's configuration, runner, side effects, exit status, and
@@ -63,17 +64,19 @@
   can be reused unchanged: test-only GCP provisioning, IAP access, test
   clients, firewall resets, and test-environment cleanup must remain out of
   production installation unless explicitly justified and approved.
-- Keep the production analysis and its decisions in the development plan
-  before implementation begins. Do not treat the analysis requirement as
-  evidence that `prod_env_host`, `config/prod.env`, or
-  `config/prod.env.example` already exist.
+- Keep production decisions in the development plan. The analysis is complete;
+  it does not by itself establish that a particular implementation or
+  configuration file exists.
 - Implement production deployment in two ordered increments: first,
-  `prod_env_host` deploys and verifies `eu-server` only; after that stage is
-  reviewed and verified, extend the same production tooling to deploy and
-  verify `ru-server`. The EU-only stage must not run RU deployment actions or
-  modify RU state. Keep any cross-server inputs needed by EU (such as the RU
-  peer address for its firewall policy) separate from permission to deploy
-  RU. The EU-generated Outline access URL needed by the later RU stage is
+  `prod_env_host` deploys and verifies EU services only; this Phase 2A must not
+  run RU deployment actions or modify RU state. Phase 2B then deploys and
+  verifies RU services. Do not apply either production firewall until both
+  servers' services pass their pre-firewall checks. Then apply both firewall
+  policies and repeat the approved read-only service/forwarding checks on
+  both servers, along with read-only policy and updater checks. Never reset an
+  existing production firewall or run destructive/test-client checks against
+  production. Keep the RU peer address needed for EU policy separate from
+  permission to deploy RU. The EU-generated Outline access URL needed by RU is
   stored and retrieved through the approved operator-local `LocalSecretStore`;
   never place it in `prod.env`, command arguments, logs, or an unprotected
   file.
@@ -128,10 +131,14 @@
   `ru-server-test-agent`, and every change made by `eu-server-agent` by
   `eu-server-test-agent`; `test-client-agent` additionally verifies the
   result from the client side.
-- Build in this order: `eu-server` first, then `ru-server`, and `test-client`
-  last. Each stage must pass its checks before the next one starts.
-- Firewall rules are installed only after the whole infrastructure is
-  configured and verified (all three stages above). In the test environment,
+- In the test environment, build in this order: `eu-server` first, then
+  `ru-server`, and `test-client` last. Each stage must pass its checks before
+  the next one starts.
+- In the test environment, firewall rules are installed only after the whole
+  infrastructure is configured and verified (all three stages above). In
+  production, apply neither firewall until both servers' services pass their
+  checks, then repeat the approved read-only checks after applying both. In
+  the test environment,
   `test_env_host` removes the project firewall rules left by an earlier run
   on `eu-server` and `ru-server` as soon as the VMs are running and
   SSH-ready, before the first agent step of every full run, so the build is

@@ -1034,10 +1034,11 @@ behavior that requires them.
   production configuration schema and value sources, direct function
   invocation through injected `SshRunner`s, fail-fast sequencing for all four
   server agents, and production safety exclusions for test-agent actions.
-  It also records the missing RU Outline key-provisioning action and the
-  production Outline image-artifact decision as blockers for a complete
-  production deployment. No production orchestrator or config template was
-  created by this analysis task.
+  Follow-up tasks 202–245 implemented the Phase 2A configuration, approved
+  Outline artifact workflow and protected EU-to-RU key handoff. Task 201
+  completed the RU decomposition; Phase 2B implementation remains pending
+  tasks 301–328, including the deferred-firewall and post-firewall recheck
+  tasks.
 
 ### 89. Add service and tunnel metrics
 
@@ -1566,7 +1567,7 @@ runner, "ru-server-feasibility-probe")`), matching
   command runs when preparation fails.
 - **Result:** `production_firewall.prepare_eu_firewall_input` fetches the RKN blacklist through the shared `agents.rkn_blacklist` (no GCP orchestrator import) and builds the EU firewall JSON from `prod.env` (RU peer, SSH port, metadata/DNS/DHCP/NTP/local networks), validated by `build_eu_firewall_rules`. It rejects upstream failure, empty lists and an RU peer inside a crawler range; the stage stops before any firewall command when preparation fails. Tests: `test_production_firewall.py` and `FirewallInputPreparationTests`.
 
-### 226. [x] Applying the EU guest firewall
+### 226. [ ] Applying the EU guest firewall after RU services pass
 
 - **Source step:** `apply_eu_firewall`.
 - **Deploy action:** `eu-server-agent apply-firewall`
@@ -1574,17 +1575,23 @@ runner, "ru-server-feasibility-probe")`), matching
   validated JSON on stdin for the standalone CLI form. The production
   orchestrator should call the function directly with the production runner.
 - **Next check:** Task 227, read-only EU firewall policy verification.
-- **Change:** Apply the validated EU firewall transactionally only after the
-  EU service checks pass. Preserve the active firewall on candidate failure;
-  do not run a preceding reset or disable the existing policy.
-- **Depends on:** Task 225.
+- **Change:** Defer application until Phase 2B, after EU and RU services have
+  both been deployed and passed their pre-firewall checks. Apply the validated
+  EU policy transactionally without resetting or disabling an existing
+  policy.
+- **Depends on:** Task 225 and successful pre-firewall checks for all EU and
+  RU services (tasks 213–224 and 306–313).
 - **Verify:** Fake-runner tests cover accepted/rejected candidates and confirm
-  no reset action occurs and a failed apply stops the stage.
-- **Result:** The stage now applies the prepared EU firewall through apply_eu_firewall after the key and preparation steps. The apply is transactional and has no reset; a rejected candidate or timeout stops the stage.
+  the apply occurs only after both server stages pass, no reset action occurs,
+  and a failed apply stops before any later firewall or post-firewall check.
+- **Current implementation:** The EU stage currently applies this firewall
+  before Phase 2B. This is the old ordering and must be changed to meet the
+  revised production requirement.
 
-### 227. [x] Verifying the EU firewall policy safely after application
+### 227. [ ] Verifying the EU firewall policy after both applications
 
-- **Source step:** The first `check_eu_firewall` call after applying EU rules.
+- **Depends on:** Tasks 226 and 315.
+- **Source step:** The `check_eu_firewall` call after firewall installation.
 - **Check action:** The existing CLI spelling is
   `eu-server-test-agent firewall`, with the firewall configuration on stdin.
   Its current implementation is an invasive test, not an approved production
@@ -1596,14 +1603,16 @@ runner, "ru-server-feasibility-probe")`), matching
   state remotely.
 - **Next check:** Task 229, `eu-server-test-agent firewall-blacklist`
   (`agents.firewall_test_common.check_rkn_blacklist_updater(runner, "eu")`).
-- **Change:** Add a production-safe, read-only EU policy inspection that
+- **Change:** Keep a production-safe, read-only EU policy inspection that
   verifies the active rules, SSH/VPN allowances, crawler sets and default
   policy without creating namespaces, routes, probe rules, listeners or
-  external test sources. Use it after application; do not repeat test
-  simulation steps that depend on rollback testing.
+  external test sources. Run it only after both EU and RU firewalls have been
+  applied in Phase 2B.
 - **Verify:** Test inspection against expected/missing/mismatched policy
   output and assert it performs no remote mutation.
-- **Result:** Added check_eu_firewall_readonly, CLI action firewall-readonly and a read-only remote script that only lists the active table. It verifies the default-deny policy, SSH and RU VPN allowances, crawler sets, rule order and the direct-service drop. The stage runs it after the apply step.
+- **Existing behavior:** `check_eu_firewall_readonly` and the read-only remote
+  script already inspect active rules. Update orchestration so the check runs
+  only after deferred application in Phase 2B.
 
 ### 228. [x] Excluding the EU firewall rollback simulation
 
@@ -1617,30 +1626,35 @@ runner, "ru-server-feasibility-probe")`), matching
   `check_eu_firewall_rollback`.
 - **Result:** Added test_production_exclusions.py: the stage never calls check_eu_firewall_rollback, only the validated candidate is sent to the apply, and the production sources do not reference the rollback check.
 
-### 229. [x] Checking the EU RKN blacklist updater
+### 229. [ ] Checking the EU RKN blacklist updater after deferred firewall application
 
+- **Depends on:** Tasks 226, 315, 227 and 316; run after both firewall
+  applications and both policy checks.
 - **Source step:** `check_rkn_blacklist_updater(eu_runner, "eu")`.
 - **Check action:** `eu-server-test-agent firewall-blacklist`
   (`agents.firewall_test_common.check_rkn_blacklist_updater(runner, "eu")`),
-  after task 226 and task 227 succeed.
+  after both firewall applications and both read-only policy checks succeed.
 - **Change:** Run the reviewed read-only check for an active daily timer and
-  populated active IPv4/IPv6 crawler sets after firewall installation. It
-  must not update, restart, or reset the firewall.
+  populated active IPv4/IPv6 crawler sets after both firewalls are installed
+  and their read-only policies have been verified in Phase 2B. It must not
+  update, restart, or reset the firewall.
 - **Verify:** Test active/inactive timer, missing/empty sets, command failure
   and timeout without leaking remote output.
-- **Result:** The stage runs check_rkn_blacklist_updater(runner, 'eu') after the apply and read-only verification. Tests cover an active/inactive timer, a failed update, empty sets, failure and timeout without leaked output, and that the check never changes the updater or firewall.
+- **Existing behavior:** The EU stage currently checks the updater after its
+  firewall apply. Move the check to the deferred Phase 2B firewall sequence.
 
-### 230. [x] Excluding the repeated final EU firewall check
+### 230. [x] Excluding the duplicate final EU policy check
 
-- **Source step:** The final `check_eu_firewall` call after RU firewall and
-  rollback checks in the test workflow.
-- **Production disposition:** Do not add this later test-matrix repetition
-  to the EU-only stage. It follows test-only RU and rollback operations; task
-  227 provides the production-safe EU policy verification immediately after
-  applying the EU rules.
-- **Verify:** EU-only orchestration does not defer its success or require RU
-  actions to repeat the already completed EU policy inspection.
-- **Result:** Added exclusion tests: check_eu_firewall (the invasive probe check) never runs, the EU policy is inspected once by the read-only check, and no RU action is required.
+- **Source step:** The final `check_eu_firewall` call after both firewall
+  applications in the test workflow.
+- **Production disposition:** Do not duplicate the production-safe policy
+  check. Task 227 runs the read-only EU policy check after both firewalls are
+  applied. Do not run the invasive `check_eu_firewall` simulation.
+- **Verify:** Assert exactly one EU policy check runs after both firewall
+  applications and it is read-only.
+- **Result:** The production sequence uses the task 227 read-only check once
+  after both firewall applications; it does not run the invasive final test
+  matrix check.
 
 ### 231. [x] Excluding persistence of test-run inputs
 
@@ -1810,24 +1824,20 @@ runner, "ru-server-feasibility-probe")`), matching
 - **Change:** Make `prod-env-host` without arguments the production
   counterpart of `test_env_host`: load `config/prod.env`, starting the
   interactive configuration (task 244) first when the file is missing or
-  invalid and a terminal is available, then call the `eu-server-agent`,
-  `eu-server-test-agent`, `ru-server-agent` and `ru-server-test-agent`
-  functions in the same order as `test_env_host`, each deployment or
-  firewall action followed by its matching check. Omit the steps excluded by
-  task 200 (GCP, IAP, test client, destructive checks, cleanup). Stop at the
-  first failure with a nonzero exit code naming the step. Implement it in
-  stages: EU steps are added as their tasks complete, RU steps after
-  decomposition task 201 and implementation tasks 301–318; until Phase 2B is
-  implemented, the RU stage is reported as not implemented. Keep
-  `configure` and `deploy-eu-squid` as explicit single-step operations. This
-  completes the no-argument behavior started in task 213 for the EU Squid
-  steps.
+  invalid and a terminal is available. The original EU-only implementation
+  was completed here; the revised full-rollout ordering is specified by task
+  328: always run Phase 2A then Phase 2B, defer both firewall applications
+  until both server stages pass, and then run the approved post-firewall
+  checks. Omit the steps excluded by task 200 (GCP, IAP, test client,
+  destructive checks, cleanup). Stop at the first failure with a nonzero exit
+  code naming the step. Keep `configure` and `deploy-eu-squid` as explicit
+  single-step operations.
 - **Verify:** Fake-runner tests assert the exact call order against the trace
   of `test_env_host`, that each deploy action is followed by its check, that
   a failure stops later steps, that a missing or invalid config triggers the
   interactive setup on a terminal and exit code 2 without one, and that no
   excluded test-only action is called.
-- **Result:** The no-argument run executes the full EU stage (Squid, Outline image, Outline, MTProxy, RU-stage key, firewall apply, read-only verification, blacklist updater check) and stops at the first failure, naming the step. Tests assert the exact order, that each deploy precedes its check, that every failure stops later steps, config/TTY behavior and that no test-only action is used. `PROD_ENV_HOST.md` is updated. RU decomposition is complete in task 201; RU implementation remains pending tasks 301–318, so the no-argument run currently executes only the EU stage.
+- **Result:** The current no-argument run executes the implemented EU stage (Squid, Outline image, Outline, MTProxy, RU-stage key, EU firewall apply and checks) and stops at the first failure. Tests cover order, fail-fast behavior, configuration/TTY behavior and test-only exclusions. This is the existing behavior, not the revised target: task 328 requires Phase 2A without firewalls, unconditional EU-then-RU execution, both firewall applications only after both pre-firewall service stages pass, then approved post-firewall checks on both servers. The RU implementation and deferred-firewall changes remain pending tasks 226–230 and 301–328.
 
 ## RU production implementation tasks created by task 201
 
@@ -2013,20 +2023,21 @@ production settings and `SshRunner`, never the standalone CLIs that read
   family constraints and rejection of test-only fields. Preparation failure
   must occur before any firewall command.
 
-### 315. Applying the RU production firewall
+### 315. Applying the RU production firewall after EU firewall
 
-- **Depends on:** Task 314.
+- **Depends on:** Task 226 and task 314.
 - **Source step:** `apply_ru_firewall(ru_runner, firewall_config)`.
 - **Production adaptation:** Apply the validated guest policy transactionally
-  without first removing or resetting existing rules. The existing agent also
-  installs the daily blacklist updater; no RU firewall action runs before all
-  RU service checks pass.
+  without first removing or resetting existing rules. Run this after task 226
+  applies the EU policy. The existing agent also installs the daily blacklist
+  updater. Neither firewall is applied until all EU and RU service checks
+  pass.
 - **Verify:** Test successful apply, rejected input, remote failure and
   updater-install failure; never report success or continue after a failure.
 
 ### 316. Verifying the RU production firewall policy
 
-- **Depends on:** Task 315.
+- **Depends on:** Tasks 226 and 315.
 - **Source step:** `check_firewall_policy(ru_runner, firewall_config)`.
 - **Production adaptation:** Add/use a production-safe, read-only policy
   verification path for the RU firewall and its approved service flows.
@@ -2037,8 +2048,8 @@ production settings and `SshRunner`, never the standalone CLIs that read
 
 ### 317. Checking the RU blacklist updater
 
-- **Depends on:** Task 315; run after firewall application, with task 316
-  also required before RU-stage completion.
+- **Depends on:** Tasks 226, 315, 227 and 316; run after both firewall
+  applications and both policy checks.
 - **Source step:** `check_rkn_blacklist_updater(ru_runner, "ru")`.
 - **Production adaptation:** Reuse the reviewed read-only updater check for
   timer state and populated active crawler sets. Do not fetch or display
@@ -2046,23 +2057,100 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Verify:** Test active/inactive timer, missing/empty sets and transport
   failure; any failure makes the RU stage fail.
 
-### 318. Integrating the RU production stage
+### 328. Integrating the complete production rollout
 
-- **Depends on:** Tasks 301–317, task 245 and successful review of Phase 2A.
+- **Depends on:** Tasks 226–229, 301–327 and task 245.
 - **Source step:** The RU sequence in `_run` and the full-run behavior of
   `prod-env-host`.
-- **Change:** Add an explicit `deploy-eu` operation for the complete,
-  independently invokable Phase 2A and a `deploy-ru` operation that runs only
-  Phase 2B. Before `deploy-ru`, verify Phase 2A readiness with reviewed,
-  read-only checks and require the protected RU-stage key; never redeploy or
-  reset EU from this operation. In the no-argument run, skip Phase 2A only
-  when its read-only readiness checks all pass; otherwise run Phase 2A and
-  stop on failure before starting RU. Then run Phase 2B in dependency order.
-  Keep `deploy-eu-squid` and existing single-step operations available.
+- **Change:** Make Phase 2A deploy and check EU services only; it must not
+  apply either firewall. Add an explicit `deploy-ru` operation for Phase 2B.
+  The no-argument run always executes Phase 2A followed by Phase 2B, stopping
+  on the first failure. Only after all pre-firewall EU and RU service checks
+  pass, apply the EU firewall (task 226), then the RU firewall (task 315),
+  each transactionally without a reset. Run the read-only policy/updater
+  checks and post-firewall service checks (tasks 227, 229, 316–317 and
+  319–327). Do not repeat successful service deployments or reset EU. Keep
+  `deploy-eu-squid` and existing single-step operations available.
 - **Verify:** Assert exact stage/agent ordering, RU-only mode does not invoke
-  EU deployment or firewall-apply actions, RU cannot start before EU
-  readiness, every failure stops later steps, and summaries contain no
-  production addresses or secrets. Update `PROD_ENV_HOST.md`.
+  EU deployment actions, Phase 2A does not apply either firewall, RU cannot
+  start before EU readiness, both firewall applications happen after all
+  pre-firewall service checks, all approved checks repeat after both applies,
+  every failure stops later steps, and summaries contain no production
+  addresses or secrets. Update `PROD_ENV_HOST.md`.
+
+### 319. Rechecking EU Squid after firewall installation
+
+- **Depends on:** Tasks 226 and 315.
+- **Source step:** The EU Squid startup check after both firewall applications.
+- **Change:** Rerun the read-only Squid startup check after both guest
+  firewalls are installed.
+- **Verify:** Assert the check occurs after both apply actions and performs no
+  remote mutation.
+
+### 320. Rechecking EU Squid HTTP after firewall installation
+
+- **Depends on:** Tasks 226 and 315.
+- **Source step:** The EU Squid HTTP check after both firewall applications.
+- **Change:** Rerun the bounded HTTP-through-Squid check after both guest
+  firewalls are installed.
+- **Verify:** Assert ordering, expected status handling and fail-fast behavior.
+
+### 321. Rechecking EU Squid blocking after firewall installation
+
+- **Depends on:** Tasks 226 and 315.
+- **Source step:** The EU Squid blocking check after both firewall applications.
+- **Change:** Rerun the read-only denied-destination check after both guest
+  firewalls are installed.
+- **Verify:** Assert ordering and that disallowed destinations remain denied.
+
+### 322. Rechecking EU Outline health after firewall installation
+
+- **Depends on:** Tasks 226 and 315.
+- **Source step:** The EU Outline health check after both firewall applications.
+- **Change:** Rerun the read-only Outline container/API/listener health check.
+- **Verify:** Assert it runs after both applies and reveals no key material.
+
+### 323. Rechecking EU MTProxy health after firewall installation
+
+- **Depends on:** Tasks 226 and 315.
+- **Source step:** The EU MTProxy check after both firewall applications.
+- **Change:** Rerun the read-only MTProxy health check.
+- **Verify:** Assert ordering, failure propagation and secret-free output.
+
+### 324. Rechecking RU Outline Server health after firewall installation
+
+- **Depends on:** Tasks 226 and 315.
+- **Source step:** The RU Outline health check after both firewall applications.
+- **Change:** Rerun the read-only RU Outline container/API/listener health
+  check.
+- **Verify:** Assert ordering and that access URLs/key material are not
+  exposed.
+
+### 325. Rechecking the RU Outline client after firewall installation
+
+- **Depends on:** Tasks 226 and 315.
+- **Source step:** The RU Outline client check after both firewall
+  applications.
+- **Change:** Rerun the reviewed RU-side client check using the protected
+  EU key through the existing secure input path.
+- **Verify:** Assert ordering, bounded checks and secret-free output.
+
+### 326. Rechecking the RU Squid forward after firewall installation
+
+- **Depends on:** Tasks 226 and 315.
+- **Source step:** The RU-to-EU Squid forwarding check after both firewall
+  applications.
+- **Change:** Rerun the bounded RU-to-EU Squid forwarding check.
+- **Verify:** Assert ordering and that no direct-route fallback is used.
+
+### 327. Rechecking the RU MTProxy forward after firewall installation
+
+- **Depends on:** Tasks 226 and 315.
+- **Source step:** The RU-to-EU MTProxy forwarding check after both firewall
+  applications.
+- **Change:** Rerun the bounded RU-to-EU MTProxy forwarding check.
+- **Verify:** Assert ordering, failure propagation and no direct-route
+  fallback.
 
 ### RU test-environment exclusions
 
@@ -2100,11 +2188,11 @@ remain absent from RU deployment:
 - Outline client version and the technically proven Outline-to-Squid
   forwarding design.
 - The actual proxy listener/address meant by "router IP".
-- Protected secret store and test VPN-key handoff.
 - Freshness policy for the daily `C24Be/AS_Network_List` update (task 87).
 - Russian destination domain source and shared-address policy (ru-domain
   blocking is done in Squid; there is no ru-IP blocking).
-- MTProxy image/version and secret delivery.
+- MTProxy image tag pinning (task 70 records that the tag is not pinned yet;
+  the secret is generated on EU and stored root-only there).
 - Monitoring access, retention, alert recipients, and VM cleanup policy.
 
 ## Deferred firewall work

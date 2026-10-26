@@ -1,10 +1,12 @@
 # `prod-env-host` Guide
 
-`prod-env-host` is the production deployment controller. With no operation
-specified, it runs the complete implemented EU stage: Squid, the approved
-Outline image and server, MTProxy, the protected Outline key for the future RU
-stage, and the EU firewall with its read-only checks. The RU production stage
-is planned in tasks 301–318 and is not implemented yet.
+`prod-env-host` is the production deployment controller. The current
+implementation runs the EU stage, including EU firewall application. The
+revised production rollout requires Phase 2A to deploy and check EU services
+without applying a firewall; after RU services pass their checks in Phase 2B,
+it must apply both firewalls and repeat the approved checks on both servers.
+These changes and the RU production stage are pending tasks 226–230 and
+301–328.
 
 The explicit `deploy-eu-squid` operation connects to the existing `eu-server`,
 deploys Squid, and checks that it starts, serves HTTP requests through the
@@ -137,17 +139,18 @@ operator commands:
 1. If `config/prod.env` is missing or invalid and a terminal is available, it
    first runs the [interactive configuration](#interactive-configuration-required-behavior).
    Without a terminal it exits with code `2` and the validation diagnostics.
-2. It invokes the implemented deployment and test-agent functions in the
-   `test_env_host` dependency order. Each deployment or firewall action is
-   followed by its matching check, and the run stops at the first failure
-   with a nonzero exit code that identifies the failed step. Only steps with
-   a production equivalent run (see task 200 exclusions: no GCP provisioning,
-   IAP, test client, destructive checks or cleanup).
-3. The sequence is implemented in stages: the EU stage (tasks 213–242) is
-   implemented. RU decomposition is complete (task 201); RU production
-   implementation is planned in tasks 301–318. Until those tasks are
-   implemented, a run without arguments performs only the EU stage and
-   reports that the RU stage is not implemented.
+2. It runs Phase 2A followed by Phase 2B in dependency order, stopping at the
+   first failure with a nonzero exit code identifying the failed step. It
+   omits test-only actions (GCP provisioning, IAP, test client, destructive
+   checks and cleanup).
+3. Phase 2A deploys and checks EU services only. Phase 2B deploys and checks
+   RU services. After both server stages pass, it applies both guest firewalls
+   without resetting existing policies, then repeats the approved read-only
+   service/forwarding checks and verifies both active firewall policies and
+   blacklist updaters. RU decomposition is complete (task 201); the
+   implementation and revised EU firewall sequence are pending tasks 226–230
+   and 301–328. Until then, the current command runs only the existing EU
+   stage and reports that RU is not implemented.
 4. Single steps stay available as explicit operations (`configure`,
    `deploy-eu-squid`, `build-outline-artifact`) for repeating or debugging
    one step.
@@ -168,7 +171,10 @@ failure, naming the step. Steps, in order:
 Not run, by design: the firewall rollback simulation, the invasive probe-based
 firewall check, test-run state, and every GCP or test-client operation. On
 success the log ends with "EU production stage completed on eu-server"; the RU
-stage is reported as not implemented pending tasks 301–318. The Outline load
+stage is reported as not implemented pending tasks 301–328. This describes
+the current implementation; under the revised requirement, Phase 2A must not
+apply the EU firewall, and both firewalls are applied only after RU services
+pass their pre-firewall checks. The Outline load
 step fails closed until an approved digest is committed (see "Outline image
 artifact"); use `deploy-eu-squid` to run the Squid steps alone. The read-only
 firewall check is also available as `eu-server-test-agent firewall-readonly`
