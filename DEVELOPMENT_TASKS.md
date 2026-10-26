@@ -1405,7 +1405,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   CLI equivalent: `.venv/bin/eu-server-test-agent http`.
 - **Result:** The HTTP check is a distinct step after the startup check. Tests cover the accepted status range (200-399), error status and timeout stopping the stage before the blocking check, bounded output (status code only, no body or headers), no credentials in the command, and no remote output in failure logs.
 
-### 216. Checking EU Squid destination blocking
+### 216. [x] Checking EU Squid destination blocking
 
 - **Source step:** `check_squid_blocking`.
 - **Check action:** `eu-server-test-agent squid-block`
@@ -1421,6 +1421,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Verify:** Use the established denied/allowed destination cases and confirm
   that the check is read-only and fail-fast. Standalone CLI equivalent:
   `.venv/bin/eu-server-test-agent squid-block`.
+- **Result:** The blocking check runs last in the Squid stage. Tests cover its fail-fast behavior (non-denial and timeout), the denied ru-domain and IP-literal cases (including CONNECT and IPv6), and that the command is read-only and carries no credentials or keys. The next production action, Outline deployment (task 220), is blocked by tasks 217-219.
 
 ### 217. Selecting the production Outline image artifact
 

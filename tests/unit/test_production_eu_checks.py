@@ -125,5 +125,47 @@ class SquidHttpCheckTests(unittest.TestCase):
         self.assertNotIn("BODY-LEAK", "\n".join(logs.output))
 
 
+class SquidBlockingCheckTests(unittest.TestCase):
+    """Task 216."""
+
+    def test_blocking_check_runs_last_after_the_http_check(self) -> None:
+        runner = ScriptedRunner()
+
+        self.assertEqual(run_deployment(runner), 0)
+
+        self.assertEqual(runner.commands[3], SQUID_BLOCK_CHECK_COMMAND)
+        self.assertEqual(len(runner.commands), 4)
+
+    def test_failed_blocking_check_fails_the_stage(self) -> None:
+        for label, outcome in (
+            ("destination not denied", RemoteResult(1, stdout="GET example.ru: 200")),
+            ("timeout", RemoteTimeoutError()),
+        ):
+            with self.subTest(case=label):
+                runner = ScriptedRunner([RemoteResult(0)] * 3 + [outcome])
+
+                self.assertNotEqual(run_deployment(runner), 0)
+
+    def test_check_covers_ru_domains_and_ip_literals_and_expects_denial(self) -> None:
+        for destination in (
+            "example.ru",
+            "www.example.su",
+            "example.xn--p1ai",
+            "192.0.2.1",
+            "[2001:db8::1]",
+            "3221225985",
+        ):
+            self.assertIn(destination, SQUID_BLOCK_CHECK_COMMAND)
+        self.assertIn('status != "403"', SQUID_BLOCK_CHECK_COMMAND)
+        self.assertIn("CONNECT", SQUID_BLOCK_CHECK_COMMAND)
+
+    def test_check_is_read_only_and_sends_no_credentials_or_keys(self) -> None:
+        self.assertIsNone(MUTATING_COMMANDS.search(SQUID_BLOCK_CHECK_COMMAND))
+        self.assertNotRegex(
+            SQUID_BLOCK_CHECK_COMMAND,
+            r"(?i)authorization|password|secret|token|ss://|accessurl",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
