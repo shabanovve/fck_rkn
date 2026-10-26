@@ -1991,7 +1991,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   using the in-memory access URL. Unit tests verify that the key is passed,
   failures propagate, and no secrets are logged.
 
-### 309. Checking the RU Outline client
+### 309. [x] Checking the RU Outline client
 
 - **Depends on:** Task 308.
 - **Source step:** `check_outline_client(ru_runner, access_url)`.
@@ -2000,6 +2000,9 @@ production settings and `SshRunner`, never the standalone CLIs that read
   request before production use and keep key material out of output.
 - **Verify:** Check the expected client configuration and bounded request
   result, failure propagation and secret redaction.
+- **Result:** `ru_outline_client_steps` verifies the RU Outline client using
+  the in-memory key via `check_ru_outline_client`. Unit tests check execution
+  order, failure reporting, and key redaction.
 
 ### 310. Deploying the RU-to-EU Squid forward
 

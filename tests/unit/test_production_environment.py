@@ -246,6 +246,35 @@ class ProductionEnvironmentTests(unittest.TestCase):
             _, action = steps[0]
             self.assertEqual(action(), 16)
 
+    def test_ru_outline_client_steps_runs_deploy_and_check_in_order(self) -> None:
+        runner = object()
+        secret_url = "ss://Y2hhY2hhOnBhc3M@192.0.2.10:10001"
+        with (
+            patch.object(
+                production_environment, "deploy_outline_client", return_value=0
+            ) as deploy,
+            patch.object(
+                production_environment, "check_ru_outline_client", return_value=0
+            ) as check,
+        ):
+            steps = production_environment.ru_outline_client_steps(runner, secret_url)
+            self.assertEqual(len(steps), 2)
+            self.assertEqual(steps[0][0], "RU Outline client deployment")
+            self.assertEqual(steps[1][0], "RU Outline client check")
+            self.assertEqual(steps[0][1](), 0)
+            self.assertEqual(steps[1][1](), 0)
+
+        deploy.assert_called_once_with(runner, secret_url)
+        check.assert_called_once_with(runner, secret_url)
+
+    def test_ru_outline_client_steps_check_reports_failure(self) -> None:
+        runner = object()
+        with patch.object(
+            production_environment, "check_ru_outline_client", return_value=17
+        ) as check:
+            steps = production_environment.ru_outline_client_steps(runner, "ss://key")
+            self.assertEqual(steps[1][1](), 17)
+
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()
         with (

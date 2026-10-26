@@ -20,6 +20,7 @@ from fck_rkn.agents.ru_server import (
     deploy_outline_server,
 )
 from fck_rkn.agents.ru_server_test import (
+    check_outline_client as check_ru_outline_client,
     check_outline_health as check_ru_outline_health,
 )
 from fck_rkn.agents.outline import load_outline_image
@@ -192,6 +193,21 @@ def ru_outline_client_deploy_steps(
             "RU Outline client deployment",
             lambda: deploy_outline_client(runner, access_url),
         )
+    ]
+
+
+def ru_outline_client_steps(
+    runner: RemoteRunner, access_url: str
+) -> list[Step]:
+    return [
+        (
+            "RU Outline client deployment",
+            lambda: deploy_outline_client(runner, access_url),
+        ),
+        (
+            "RU Outline client check",
+            lambda: check_ru_outline_client(runner, access_url),
+        ),
     ]
 
 
