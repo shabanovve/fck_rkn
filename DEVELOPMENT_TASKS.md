@@ -2100,7 +2100,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Result:** `ru_firewall_steps` runs `check_ru_firewall_policy_rules` after
   applying the firewall. Unit tests check ordering and failure propagation.
 
-### 317. Checking the RU blacklist updater
+### 317. [x] Checking the RU blacklist updater
 
 - **Depends on:** Tasks 226, 315, 227 and 316; run after both firewall
   applications and both policy checks.
@@ -2110,6 +2110,8 @@ production settings and `SshRunner`, never the standalone CLIs that read
   secrets or change firewall policy during the check.
 - **Verify:** Test active/inactive timer, missing/empty sets and transport
   failure; any failure makes the RU stage fail.
+- **Result:** `ru_firewall_steps` runs `check_rkn_blacklist_updater(..., "ru")`
+  after the policy check. Unit tests check ordering and failure handling.
 
 ### 328. Integrating the complete production rollout
 

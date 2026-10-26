@@ -403,18 +403,30 @@ class ProductionEnvironmentTests(unittest.TestCase):
             patch.object(
                 production_environment, "apply_ru_firewall", return_value=0
             ) as apply,
+            patch.object(
+                production_environment, "check_ru_firewall_policy_rules", return_value=0
+            ) as check,
+            patch.object(
+                production_environment, "check_rkn_blacklist_updater", return_value=0
+            ) as updater_check,
         ):
             steps = production_environment.ru_firewall_steps(
                 runner, settings(), secret_url
             )
-            self.assertEqual(len(steps), 2)
+            self.assertEqual(len(steps), 4)
             self.assertEqual(steps[0][0], "RU firewall input preparation")
             self.assertEqual(steps[1][0], "RU firewall application")
+            self.assertEqual(steps[2][0], "RU firewall verification")
+            self.assertEqual(steps[3][0], "RU RKN blacklist updater check")
             self.assertEqual(steps[0][1](), 0)
             self.assertEqual(steps[1][1](), 0)
+            self.assertEqual(steps[2][1](), 0)
+            self.assertEqual(steps[3][1](), 0)
 
         prepare.assert_called_once_with(settings(), secret_url)
         apply.assert_called_once_with(runner, "prepared-ru-config")
+        check.assert_called_once_with(runner, "prepared-ru-config")
+        updater_check.assert_called_once_with(runner, "ru")
 
     def test_ru_firewall_steps_prepare_failure_stops_sequence(self) -> None:
         runner = object()
@@ -424,6 +436,8 @@ class ProductionEnvironmentTests(unittest.TestCase):
                 "fck_rkn.production_firewall.prepare_ru_firewall_input", side_effect=error
             ) as prepare,
             patch.object(production_environment, "apply_ru_firewall") as apply,
+            patch.object(production_environment, "check_ru_firewall_policy_rules") as check,
+            patch.object(production_environment, "check_rkn_blacklist_updater") as updater_check,
             self.assertLogs(production_environment.logger, level="ERROR"),
         ):
             steps = production_environment.ru_firewall_steps(
@@ -433,6 +447,8 @@ class ProductionEnvironmentTests(unittest.TestCase):
             
         prepare.assert_called_once()
         apply.assert_not_called()
+        check.assert_not_called()
+        updater_check.assert_not_called()
 
     def test_ru_firewall_steps_apply_reports_failure(self) -> None:
         runner = object()
@@ -444,12 +460,51 @@ class ProductionEnvironmentTests(unittest.TestCase):
             patch.object(
                 production_environment, "apply_ru_firewall", return_value=42
             ) as apply,
+            patch.object(production_environment, "check_ru_firewall_policy_rules") as check,
+            patch.object(production_environment, "check_rkn_blacklist_updater") as updater_check,
         ):
             steps = production_environment.ru_firewall_steps(
                 runner, settings(), "ss://key"
             )
             steps[0][1]()
             self.assertEqual(steps[1][1](), 42)
+        updater_check.assert_not_called()
+
+    def test_ru_firewall_steps_check_reports_failure(self) -> None:
+        runner = object()
+        with (
+            patch(
+                "fck_rkn.production_firewall.prepare_ru_firewall_input",
+                return_value="prepared-ru-config",
+            ),
+            patch.object(
+                production_environment, "check_ru_firewall_policy_rules", return_value=43
+            ) as check,
+            patch.object(production_environment, "check_rkn_blacklist_updater") as updater_check,
+        ):
+            steps = production_environment.ru_firewall_steps(
+                runner, settings(), "ss://key"
+            )
+            steps[0][1]()
+            self.assertEqual(steps[2][1](), 43)
+        updater_check.assert_not_called()
+
+    def test_ru_firewall_steps_updater_check_reports_failure(self) -> None:
+        runner = object()
+        with (
+            patch(
+                "fck_rkn.production_firewall.prepare_ru_firewall_input",
+                return_value="prepared-ru-config",
+            ),
+            patch.object(
+                production_environment, "check_rkn_blacklist_updater", return_value=44
+            ) as updater_check,
+        ):
+            steps = production_environment.ru_firewall_steps(
+                runner, settings(), "ss://key"
+            )
+            steps[0][1]()
+            self.assertEqual(steps[3][1](), 44)
 
     def test_deployment_runs_eu_operations_in_order(self) -> None:
         runner = object()

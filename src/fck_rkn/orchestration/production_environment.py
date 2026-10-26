@@ -23,6 +23,7 @@ from fck_rkn.agents.ru_server import (
     deploy_squid_forward,
 )
 from fck_rkn.agents.ru_server_test import (
+    check_firewall_policy_rules as check_ru_firewall_policy_rules,
     check_mtproxy_forward as check_ru_mtproxy_forward,
     check_outline_client as check_ru_outline_client,
     check_outline_health as check_ru_outline_health,
@@ -368,6 +369,14 @@ def ru_firewall_steps(
         (
             "RU firewall application",
             lambda: apply_ru_firewall(runner, prepared["config"]),
+        ),
+        (
+            "RU firewall verification",
+            lambda: check_ru_firewall_policy_rules(runner, prepared["config"]),
+        ),
+        (
+            "RU RKN blacklist updater check",
+            lambda: check_rkn_blacklist_updater(runner, "ru"),
         ),
     ]
 
