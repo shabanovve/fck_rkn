@@ -1727,7 +1727,7 @@ runner, "ru-server-feasibility-probe")`), matching
 - **Verify:** EU-stage orchestration never invokes the check.
 - **Result:** Added exclusion tests: check_mtproxy_tunnel is never invoked.
 
-### 241. Excluding the final test-client proxy request
+### 241. [x] Excluding the final test-client proxy request
 
 - **Source step:** `request_youtube(client_runner)`.
 - **Production disposition:** Do not make a production deployment depend on
@@ -1735,6 +1735,7 @@ runner, "ru-server-feasibility-probe")`), matching
   and traffic source require their own operational design.
 - **Verify:** The EU stage completes without creating or invoking a
   test-client runner.
+- **Result:** Added exclusion tests: request_youtube is never invoked and the stage completes without a test-client runner.
 
 ### 242. Reporting the EU deployment result
 
