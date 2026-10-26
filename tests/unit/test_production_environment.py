@@ -97,42 +97,85 @@ class ProductionEnvironmentTests(unittest.TestCase):
         self.assertIsInstance(deploy.call_args.args[0], SshRunner)
         self.assertEqual(deploy.call_args.args[0].host, "192.0.2.10")
 
-    def test_main_defaults_to_interactive_configuration_without_arguments(self) -> None:
+    def test_main_without_arguments_deploys_eu_squid_with_the_eu_runner(self) -> None:
         with (
-            patch.object(production_environment, "configure_interactively") as setup,
-            patch.object(production_environment, "deploy_eu_squid") as deploy,
-        ):
-            self.assertEqual(production_environment.main([]), 0)
-
-        setup.assert_called_once_with(
-            production_environment.create_runner,
-            prompt=production_environment.read_input,
-        )
-        deploy.assert_not_called()
-
-    def test_main_returns_nonzero_if_configuration_is_invalid(self) -> None:
-        diagnostic = (
-            "Invalid production configuration in prod.env:\n"
-            "- EU_SERVER_ADDRESS: must be an IPv4 or IPv6 address"
-        )
-        with (
+            patch.object(production_environment.sys.stdin, "isatty", return_value=False),
             patch.object(production_environment, "ensure_prod_config"),
             patch.object(
                 production_environment,
                 "load_eu_production_settings",
-                side_effect=ProductionConfigError(diagnostic),
+                return_value=settings(),
             ),
-            patch.object(production_environment, "create_eu_runner") as create_runner,
-            patch.object(production_environment, "deploy_eu_squid") as deploy,
-            self.assertLogs(production_environment.logger, level="ERROR") as logs,
+            patch.object(production_environment, "configure_interactively") as setup,
+            patch.object(production_environment, "deploy_eu_squid", return_value=0) as deploy,
         ):
-            self.assertEqual(production_environment.main(["deploy-eu-squid"]), 2)
+            self.assertEqual(production_environment.main([]), 0)
 
-        create_runner.assert_not_called()
+        setup.assert_not_called()
+        self.assertIsInstance(deploy.call_args.args[0], SshRunner)
+        self.assertEqual(deploy.call_args.args[0].host, "192.0.2.10")
+
+    def test_main_without_arguments_configures_first_when_file_is_missing(self) -> None:
+        calls: list[str] = []
+        with (
+            patch.object(production_environment, "PROD_CONFIG_FILE", Path("/nonexistent/prod.env")),
+            patch.object(production_environment.sys.stdin, "isatty", return_value=True),
+            patch.object(
+                production_environment,
+                "configure_interactively",
+                side_effect=lambda *a, **k: calls.append("configure"),
+            ),
+            patch.object(production_environment, "ensure_prod_config"),
+            patch.object(
+                production_environment,
+                "load_eu_production_settings",
+                return_value=settings(),
+            ),
+            patch.object(
+                production_environment,
+                "deploy_eu_squid",
+                side_effect=lambda r: calls.append("deploy") or 0,
+            ),
+        ):
+            self.assertEqual(production_environment.main([]), 0)
+
+        self.assertEqual(calls, ["configure", "deploy"])
+
+    def test_main_without_arguments_configures_when_file_is_invalid(self) -> None:
+        error = ProductionConfigError("Invalid production configuration")
+        with (
+            patch.object(production_environment.sys.stdin, "isatty", return_value=True),
+            patch.object(production_environment, "ensure_prod_config"),
+            patch.object(
+                production_environment,
+                "load_eu_production_settings",
+                side_effect=[error, settings()],
+            ),
+            patch.object(production_environment, "configure_interactively") as setup,
+            patch.object(production_environment, "deploy_eu_squid", return_value=0) as deploy,
+            self.assertLogs(production_environment.logger, level="ERROR"),
+        ):
+            self.assertEqual(production_environment.main([]), 0)
+
+        setup.assert_called_once()
+        deploy.assert_called_once()
+
+    def test_main_without_terminal_and_invalid_config_exits_with_2(self) -> None:
+        error = ProductionConfigError("Invalid production configuration")
+        with (
+            patch.object(production_environment.sys.stdin, "isatty", return_value=False),
+            patch.object(production_environment, "ensure_prod_config"),
+            patch.object(
+                production_environment, "load_eu_production_settings", side_effect=error
+            ),
+            patch.object(production_environment, "configure_interactively") as setup,
+            patch.object(production_environment, "deploy_eu_squid") as deploy,
+            self.assertLogs(production_environment.logger, level="ERROR"),
+        ):
+            self.assertEqual(production_environment.main([]), 2)
+
+        setup.assert_not_called()
         deploy.assert_not_called()
-        self.assertIn(
-            "EU_SERVER_ADDRESS: must be an IPv4 or IPv6 address", logs.output[0]
-        )
 
     def test_configure_operation_runs_interactive_setup_only(self) -> None:
         with (

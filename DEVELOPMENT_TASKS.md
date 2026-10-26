@@ -1243,9 +1243,9 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `config/prod.env`, creates one EU `SshRunner`, and runs the Squid deployment
   followed by its startup, HTTP and blocking checks. Every failure stops the
   sequence with a nonzero result. The entry point imports no GCP code and
-  exposes no RU or test-only shutdown operation. `deploy-eu-squid` was the
-  default when `prod-env-host` was invoked without arguments; task 244 changes
-  the default to `configure`.
+  exposes no RU or test-only shutdown operation. Running `prod-env-host` without
+  arguments performs this deployment after ensuring the configuration (tasks
+  213 and 245).
 
 ### 206. [x] Excluding GCP project-access validation
 
@@ -1256,7 +1256,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   GCP. Validate production settings locally and let an actual SSH operation
   report access failures.
 - **Verify:** EU-stage tests do not call GCP client libraries or request cloud
-  credentials.
+о  credentials.
 - **Result:** `test_entry_point_loads_no_gcp_code_or_credentials` imports the
   entry point in a clean interpreter and fails if any `google*`,
   `fck_rkn.gcp` or test-environment module is loaded.
@@ -1359,11 +1359,19 @@ checks restricted to the reviewed read-only behavior specified by each task.
   confirm the orchestrator reports the named EU action and fails closed.
   The standalone CLI equivalent is
   `.venv/bin/eu-server-agent deploy-squid`.
+- **Invocation:** `prod-env-host` without arguments must run this deployment
+  (see task 245). It first ensures a valid `config/prod.env`, starting the
+  interactive configuration when the file is missing or invalid on a terminal
+  and exiting with code 2 otherwise; it then deploys Squid and runs the
+  checks. `prod-env-host deploy-eu-squid` runs the same sequence without the
+  interactive step.
 - **Result:** `deploy_eu_squid` passes the EU `SshRunner` to `deploy_squid`.
   Existing agent tests cover success, remote failure and timeout of the
   action; new orchestrator tests assert that a failure is logged with the
   step name `Squid deployment` and its status, and that no check runs
-  afterwards.
+  afterwards. Further tests assert that a run without arguments deploys with
+  the EU `SshRunner`, configures first when the file is missing or invalid on
+  a terminal, and exits with code 2 without a terminal.
 
 ### 214. Checking EU Squid startup
 
@@ -1757,9 +1765,8 @@ runner, "ru-server-feasibility-probe")`), matching
   writing no file, declined confirmation writing no file, and existing-file
   protection. Assert no value or secret leaks into logs.
 - **Result:** `fck_rkn/production_setup.py` implements the flow;
-  `prod-env-host configure` runs it, and `configure` is now the default
-  operation when `prod-env-host` is invoked without arguments (superseding
-  the `deploy-eu-squid` default from task 205).
+  `prod-env-host configure` runs it, and a run without arguments starts it
+  first when `config/prod.env` is missing or invalid on a terminal (task 213).
 
 ### 245. Running the full deployment and checks without arguments
 
@@ -1779,7 +1786,8 @@ runner, "ru-server-feasibility-probe")`), matching
   stages: EU steps are added as their tasks complete, RU steps after task
   201; until then the RU stage is reported as not implemented. Keep
   `configure` and `deploy-eu-squid` as explicit single-step operations. This
-  replaces the `configure` default set by task 244.
+  completes the no-argument behavior started in task 213 for the EU Squid
+  steps.
 - **Verify:** Fake-runner tests assert the exact call order against the trace
   of `test_env_host`, that each deploy action is followed by its check, that
   a failure stops later steps, that a missing or invalid config triggers the

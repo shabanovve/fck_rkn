@@ -40,8 +40,9 @@ On first run, the command atomically creates a missing `config/prod.env` from
 `config/prod.env.example` with permissions `0600`. It does not overwrite an
 existing file. Run `prod-env-host configure` to build the file interactively
 (see [Interactive configuration](#interactive-configuration-required-behavior));
-`configure` is currently also the default when `prod-env-host` runs without
-arguments; task 245 replaces that default with the full deployment.
+Running `prod-env-host` without arguments starts the same flow automatically
+when `config/prod.env` is missing or invalid on a terminal, then continues
+with the deployment.
 Alternatively, fill in the template copy by hand.
 
 Required EU-stage settings:
@@ -148,14 +149,16 @@ operator commands:
 
 ### Current behavior
 
-Until the full sequence above is implemented (task 245), the default operation
-is `configure`:
+Until the full sequence above is implemented (task 245), a run without
+arguments ensures a valid configuration (interactively on a terminal) and then
+performs the EU stage, which currently deploys Squid and runs its checks:
 
 ```sh
 .venv/bin/prod-env-host
 ```
 
-Deploy EU Squid by selecting the operation explicitly:
+Run `configure` or the Squid deployment alone by selecting the operation
+explicitly:
 
 ```sh
 .venv/bin/prod-env-host deploy-eu-squid
