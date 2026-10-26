@@ -227,6 +227,21 @@ class ProductionEnvironmentTests(unittest.TestCase):
             source = Path(module.__file__).read_text(encoding="utf-8")
             self.assertNotIn("check_eu_firewall_removed", source, module.__name__)
 
+    def test_deployment_never_runs_the_icmp_ping_gate(self) -> None:
+        with (
+            patch.object(production_environment, "deploy_squid", return_value=0),
+            patch.object(production_environment, "check_squid_startup", return_value=0),
+            patch.object(production_environment, "check_squid_http", return_value=0),
+            patch.object(production_environment, "check_squid_blocking", return_value=0),
+            patch("fck_rkn.agents.eu_server.run_youtube_ping") as ping,
+        ):
+            self.assertEqual(production_environment.deploy_eu_squid(object()), 0)
+
+        ping.assert_not_called()
+        for module in (production_environment, production_setup):
+            source = Path(module.__file__).read_text(encoding="utf-8")
+            self.assertNotIn("run_youtube_ping", source, module.__name__)
+
     def test_entry_point_loads_no_gcp_code_or_credentials(self) -> None:
         code = (
             "import sys\n"

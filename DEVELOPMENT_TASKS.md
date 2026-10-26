@@ -1331,7 +1331,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   `check_eu_firewall_removed`, and that the entry point and interactive setup
   do not reference it.
 
-### 212. Excluding the standalone ICMP ping gate
+### 212. [x] Excluding the standalone ICMP ping gate
 
 - **Source step:** `run_youtube_ping` invokes the initial
   `eu-server-agent` ping action.
@@ -1341,6 +1341,9 @@ checks restricted to the reviewed read-only behavior specified by each task.
   checks below. Do not change guest firewall state to make ping pass.
 - **Verify:** EU production orchestration does not invoke `run_youtube_ping`;
   document any future diagnostic ping as optional and non-gating.
+- **Result:** A test asserts `deploy_eu_squid` never calls `run_youtube_ping`,
+  and that the entry point and interactive setup do not reference it. No
+  diagnostic ping exists, so nothing needs documenting as optional.
 
 ### 213. Deploying EU Squid
 
