@@ -145,7 +145,8 @@ operator commands:
    exists, a run without arguments performs the EU stage only and reports
    that the RU stage is not implemented.
 4. Single steps stay available as explicit operations (`configure`,
-   `deploy-eu-squid`) for repeating or debugging one step.
+   `deploy-eu-squid`, `build-outline-artifact`) for repeating or debugging
+   one step.
 
 ### Current behavior
 

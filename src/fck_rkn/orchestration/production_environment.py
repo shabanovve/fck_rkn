@@ -13,6 +13,7 @@ from fck_rkn.agents.eu_server_test import (
     check_squid_http,
     check_squid_startup,
 )
+from fck_rkn.orchestration.outline_artifact import build_outline_artifact
 from fck_rkn.production_config import (
     PROD_CONFIG_FILE,
     ProductionConfigError,
@@ -92,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
         "operation",
         nargs="?",
         default=None,
-        choices=("deploy-eu-squid", "configure"),
+        choices=("deploy-eu-squid", "configure", "build-outline-artifact"),
         help=(
             "Single operation to run. Without it, the configuration is "
             "ensured (interactively on a terminal if missing or invalid) and "
@@ -108,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.operation == "configure":
         return run_configuration()
+    if args.operation == "build-outline-artifact":
+        return build_outline_artifact()
 
     interactive = args.operation is None and sys.stdin.isatty()
     if interactive and not PROD_CONFIG_FILE.exists():

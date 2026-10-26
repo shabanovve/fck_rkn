@@ -1437,7 +1437,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
   registry or publishing service without approval.
 - **Result:** Approved by the operator: a locally built archive from the pinned Dockerfile, identified by its SHA-256 digest recorded in the tracked `artifacts/outline-image.sha256` and verified before transfer; no registry. Source, identity, provenance, verification and update policy are documented in `PROD_ENV_HOST.md` ("Outline image artifact") and `DEVELOPMENT_PLAN.md`.
 
-### 218. Retrieving and verifying the EU Outline image artifact
+### 218. [x] Retrieving and verifying the EU Outline image artifact
 
 - **Source step:** `export_outline_image` creates the archive passed to the VM.
 - **Change:** Implement retrieval of the approved immutable production
@@ -1446,6 +1446,7 @@ checks restricted to the reviewed read-only behavior specified by each task.
 - **Depends on:** Task 217.
 - **Verify:** Fake artifact-source tests cover a valid artifact, missing
   artifact and integrity mismatch; invalid artifacts never reach the server.
+- **Result:** `fck_rkn/orchestration/outline_artifact.py` reads the approved digest from `artifacts/outline-image.sha256` and releases `config/artifacts/outline-image.tar.gz` only if its SHA-256 matches; a missing, empty or malformed digest, a missing archive, or a mismatch returns no archive, so nothing reaches the server. `prod-env-host build-outline-artifact` builds the archive locally for review and prints its digest without approving it. Tests: `test_outline_artifact.py`.
 
 ### 219. Loading the Outline image on EU
 

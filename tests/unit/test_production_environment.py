@@ -190,6 +190,22 @@ class ProductionEnvironmentTests(unittest.TestCase):
         )
         deploy.assert_not_called()
 
+    def test_build_outline_artifact_operation_needs_no_configuration(self) -> None:
+        with (
+            patch.object(
+                production_environment, "build_outline_artifact", return_value=0
+            ) as build,
+            patch.object(production_environment, "load_eu_production_settings") as load,
+            patch.object(production_environment, "create_eu_runner") as create,
+        ):
+            self.assertEqual(
+                production_environment.main(["build-outline-artifact"]), 0
+            )
+
+        build.assert_called_once_with()
+        load.assert_not_called()
+        create.assert_not_called()
+
     def test_read_input_retries_after_invalid_utf8(self) -> None:
         bad = UnicodeDecodeError("utf-8", b"\xd0", 0, 1, "bad")
         with patch("builtins.input", side_effect=[bad, "n"]):
