@@ -11,6 +11,7 @@ from pathlib import Path
 from fck_rkn.agents.eu_server import (
     deploy_mtproxy,
     deploy_outline,
+    apply_eu_firewall,
     create_outline_user,
     deploy_squid,
 )
@@ -166,7 +167,13 @@ def firewall_steps(
             return 1
         return 0
 
-    return [("EU firewall input preparation", prepare)]
+    return [
+        ("EU firewall input preparation", prepare),
+        (
+            "EU firewall application",
+            lambda: apply_eu_firewall(runner, prepared["config"]),
+        ),
+    ]
 
 
 def eu_stage_steps(runner: RemoteRunner, settings: EuProductionSettings) -> list[Step]:

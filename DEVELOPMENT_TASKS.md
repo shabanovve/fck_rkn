@@ -1562,7 +1562,7 @@ runner, "ru-server-feasibility-probe")`), matching
   command runs when preparation fails.
 - **Result:** `production_firewall.prepare_eu_firewall_input` fetches the RKN blacklist through the shared `agents.rkn_blacklist` (no GCP orchestrator import) and builds the EU firewall JSON from `prod.env` (RU peer, SSH port, metadata/DNS/DHCP/NTP/local networks), validated by `build_eu_firewall_rules`. It rejects upstream failure, empty lists and an RU peer inside a crawler range; the stage stops before any firewall command when preparation fails. Tests: `test_production_firewall.py` and `FirewallInputPreparationTests`.
 
-### 226. Applying the EU guest firewall
+### 226. [x] Applying the EU guest firewall
 
 - **Source step:** `apply_eu_firewall`.
 - **Deploy action:** `eu-server-agent apply-firewall`
@@ -1576,6 +1576,7 @@ runner, "ru-server-feasibility-probe")`), matching
 - **Depends on:** Task 225.
 - **Verify:** Fake-runner tests cover accepted/rejected candidates and confirm
   no reset action occurs and a failed apply stops the stage.
+- **Result:** The stage now applies the prepared EU firewall through apply_eu_firewall after the key and preparation steps. The apply is transactional and has no reset; a rejected candidate or timeout stops the stage.
 
 ### 227. Verifying the EU firewall policy safely after application
 
