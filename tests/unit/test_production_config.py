@@ -84,6 +84,81 @@ class ProductionConfigTests(unittest.TestCase):
         self.assertEqual(settings.SSH_PORT, 2222)
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "2001:db8::53"])
         self.assertEqual(settings.EU_LOCAL_NETWORKS, ["192.0.2.0/24", "2001:db8:1::/64"])
+        self.assertIsNone(settings.RU_METADATA_ADDRESS)
+        self.assertIsNone(settings.RU_PROVIDER_NETWORKS)
+
+    def test_eu_only_configuration_does_not_require_ru_settings(self) -> None:
+        self.config_path.parent.mkdir(parents=True)
+        self.config_path.write_text(
+            VALID.replace("RU_SERVER_ADDRESS=192.0.2.20\n", ""),
+            encoding="utf-8",
+        )
+
+        settings = load_eu_production_settings(self.config_path)
+
+        self.assertIsNone(settings.RU_SERVER_ADDRESS)
+        self.assertIsNone(settings.RU_DNS_ADDRESSES)
+        self.assertIsNone(settings.RU_PROVIDER_NETWORKS)
+
+    def test_loads_and_normalizes_all_ru_settings(self) -> None:
+        self.config_path.parent.mkdir(parents=True)
+        complete = VALID + """\
+RU_METADATA_ADDRESS=2001:0db8::1
+RU_DNS_ADDRESSES=["192.0.2.54","2001:db8::54"]
+RU_DHCP_SERVER_ADDRESS=192.0.2.3
+RU_NTP_ADDRESSES=["192.0.2.124"]
+RU_LOCAL_NETWORKS=["192.0.3.0/24","2001:db8:2::/64"]
+RU_PROVIDER_NETWORKS=["198.51.100.0/24","2001:db8:abcd::/48"]
+"""
+        self.config_path.write_text(complete, encoding="utf-8")
+
+        settings = load_eu_production_settings(self.config_path)
+
+        self.assertEqual(settings.RU_METADATA_ADDRESS, "2001:db8::1")
+        self.assertEqual(settings.RU_DNS_ADDRESSES, ["192.0.2.54", "2001:db8::54"])
+        self.assertEqual(settings.RU_DHCP_SERVER_ADDRESS, "192.0.2.3")
+        self.assertEqual(settings.RU_NTP_ADDRESSES, ["192.0.2.124"])
+        self.assertEqual(settings.RU_LOCAL_NETWORKS, ["192.0.3.0/24", "2001:db8:2::/64"])
+        self.assertEqual(
+            settings.RU_PROVIDER_NETWORKS,
+            ["198.51.100.0/24", "2001:db8:abcd::/48"],
+        )
+
+    def test_rejects_invalid_ru_addresses_lists_and_networks_without_values(self) -> None:
+        self.config_path.parent.mkdir(parents=True)
+        invalid_variants = (
+            ("RU_SERVER_ADDRESS=192.0.2.20", "RU_SERVER_ADDRESS=ru.example.com"),
+            ("RU_METADATA_ADDRESS=192.0.2.1", "RU_METADATA_ADDRESS=not-an-ip-secret"),
+            ('RU_DNS_ADDRESSES=["192.0.2.54"]', "RU_DNS_ADDRESSES=not-json-secret"),
+            ('RU_PROVIDER_NETWORKS=["198.51.100.0/24"]', 'RU_PROVIDER_NETWORKS=["198.51.100.5/24"]'),
+        )
+        valid = VALID + """\
+RU_METADATA_ADDRESS=192.0.2.1
+RU_DNS_ADDRESSES=["192.0.2.54"]
+RU_PROVIDER_NETWORKS=["198.51.100.0/24"]
+"""
+        for old, new in invalid_variants:
+            with self.subTest(value=new):
+                self.config_path.write_text(valid.replace(old, new), encoding="utf-8")
+                with self.assertRaises(ProductionConfigError) as raised:
+                    load_eu_production_settings(self.config_path)
+                self.assertNotIn("secret", str(raised.exception))
+
+    def test_optional_ru_template_values_are_blank_and_documented(self) -> None:
+        template = PROD_TEMPLATE_FILE.read_text(encoding="utf-8")
+        for name in (
+            "RU_SERVER_ADDRESS",
+            "RU_METADATA_ADDRESS",
+            "RU_DNS_ADDRESSES",
+            "RU_DHCP_SERVER_ADDRESS",
+            "RU_NTP_ADDRESSES",
+            "RU_LOCAL_NETWORKS",
+            "RU_PROVIDER_NETWORKS",
+        ):
+            with self.subTest(name=name):
+                self.assertRegex(template, rf"(?m)^{name}=$")
+        self.assertNotIn("ss://", template)
+        self.assertNotIn("PRIVATE KEY", template)
 
     def test_local_production_file_is_not_overridden_by_process_environment(self) -> None:
         self.config_path.parent.mkdir(parents=True)

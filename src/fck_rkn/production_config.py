@@ -24,7 +24,20 @@ JSON_LIST_FIELDS = {
     "EU_DNS_ADDRESSES": "a JSON array of IPv4/IPv6 addresses",
     "EU_NTP_ADDRESSES": "a JSON array of IPv4/IPv6 addresses",
     "EU_LOCAL_NETWORKS": "a JSON array of CIDR networks",
+    "RU_DNS_ADDRESSES": "a JSON array of IPv4/IPv6 addresses",
+    "RU_NTP_ADDRESSES": "a JSON array of IPv4/IPv6 addresses",
+    "RU_LOCAL_NETWORKS": "a JSON array of CIDR networks",
+    "RU_PROVIDER_NETWORKS": "a JSON array of CIDR networks",
 }
+OPTIONAL_RU_FIELDS = (
+    "RU_SERVER_ADDRESS",
+    "RU_METADATA_ADDRESS",
+    "RU_DNS_ADDRESSES",
+    "RU_DHCP_SERVER_ADDRESS",
+    "RU_NTP_ADDRESSES",
+    "RU_LOCAL_NETWORKS",
+    "RU_PROVIDER_NETWORKS",
+)
 
 
 class ProductionConfigError(ValueError):
@@ -64,7 +77,7 @@ class EuProductionSettings(BaseSettings):
         return init_settings, dotenv_settings
 
     EU_SERVER_ADDRESS: str = Field(min_length=1)
-    RU_SERVER_ADDRESS: str = Field(min_length=1)
+    RU_SERVER_ADDRESS: str | None = None
     SSH_USER: str = Field(min_length=1)
     SSH_KEY_PATH: Path
     SSH_PORT: int = Field(default=22, ge=1, le=65535)
@@ -73,6 +86,12 @@ class EuProductionSettings(BaseSettings):
     EU_DHCP_SERVER_ADDRESS: str = Field(min_length=1)
     EU_NTP_ADDRESSES: list[str]
     EU_LOCAL_NETWORKS: list[str]
+    RU_METADATA_ADDRESS: str | None = None
+    RU_DNS_ADDRESSES: list[str] | None = None
+    RU_DHCP_SERVER_ADDRESS: str | None = None
+    RU_NTP_ADDRESSES: list[str] | None = None
+    RU_LOCAL_NETWORKS: list[str] | None = None
+    RU_PROVIDER_NETWORKS: list[str] | None = None
 
     @field_validator(
         "EU_SERVER_ADDRESS",
@@ -80,6 +99,8 @@ class EuProductionSettings(BaseSettings):
         "SSH_USER",
         "EU_METADATA_ADDRESS",
         "EU_DHCP_SERVER_ADDRESS",
+        "RU_METADATA_ADDRESS",
+        "RU_DHCP_SERVER_ADDRESS",
         mode="before",
     )
     @classmethod
@@ -95,9 +116,13 @@ class EuProductionSettings(BaseSettings):
         "RU_SERVER_ADDRESS",
         "EU_METADATA_ADDRESS",
         "EU_DHCP_SERVER_ADDRESS",
+        "RU_METADATA_ADDRESS",
+        "RU_DHCP_SERVER_ADDRESS",
     )
     @classmethod
-    def validate_ip_address(cls, value: str) -> str:
+    def validate_ip_address(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         try:
             return ipaddress.ip_address(value.strip()).compressed
         except ValueError as error:
@@ -119,9 +144,18 @@ class EuProductionSettings(BaseSettings):
             raise ValueError("must be replaced with an operator-supplied path")
         return value
 
-    @field_validator("EU_DNS_ADDRESSES", "EU_NTP_ADDRESSES")
+    @field_validator(
+        "EU_DNS_ADDRESSES",
+        "EU_NTP_ADDRESSES",
+        "RU_DNS_ADDRESSES",
+        "RU_NTP_ADDRESSES",
+    )
     @classmethod
-    def validate_address_lists(cls, values: list[str]) -> list[str]:
+    def validate_address_lists(
+        cls, values: list[str] | None
+    ) -> list[str] | None:
+        if values is None:
+            return None
         if not values:
             raise ValueError("must contain at least one address")
         result = []
@@ -134,9 +168,13 @@ class EuProductionSettings(BaseSettings):
                 ) from error
         return result
 
-    @field_validator("EU_LOCAL_NETWORKS")
+    @field_validator("EU_LOCAL_NETWORKS", "RU_LOCAL_NETWORKS", "RU_PROVIDER_NETWORKS")
     @classmethod
-    def validate_local_networks(cls, values: list[str]) -> list[str]:
+    def validate_local_networks(
+        cls, values: list[str] | None
+    ) -> list[str] | None:
+        if values is None:
+            return None
         if not values:
             raise ValueError("must contain at least one CIDR network")
         try:
@@ -214,9 +252,12 @@ def load_eu_production_settings(
         ) from error
 
     issues: dict[str, str] = {}
+    for field in OPTIONAL_RU_FIELDS:
+        if values.get(field) == "":
+            values[field] = None
     for field, expected in JSON_LIST_FIELDS.items():
         raw_value = values.get(field)
-        if raw_value is None:
+        if raw_value is None or raw_value == "":
             continue
         if any(marker in raw_value.upper() for marker in PLACEHOLDER_MARKERS):
             issues[field] = "contains a placeholder that must be replaced"

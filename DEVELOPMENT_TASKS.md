@@ -1567,7 +1567,7 @@ runner, "ru-server-feasibility-probe")`), matching
   command runs when preparation fails.
 - **Result:** `production_firewall.prepare_eu_firewall_input` fetches the RKN blacklist through the shared `agents.rkn_blacklist` (no GCP orchestrator import) and builds the EU firewall JSON from `prod.env` (RU peer, SSH port, metadata/DNS/DHCP/NTP/local networks), validated by `build_eu_firewall_rules`. It rejects upstream failure, empty lists and an RU peer inside a crawler range; the stage stops before any firewall command when preparation fails. Tests: `test_production_firewall.py` and `FirewallInputPreparationTests`.
 
-### 226. [ ] Applying the EU guest firewall after RU services pass
+### 226. [x] Deferring EU firewall application until RU services pass
 
 - **Source step:** `apply_eu_firewall`.
 - **Deploy action:** `eu-server-agent apply-firewall`
@@ -1581,12 +1581,12 @@ runner, "ru-server-feasibility-probe")`), matching
   policy.
 - **Depends on:** Task 225 and successful pre-firewall checks for all EU and
   RU services (tasks 213–224 and 306–313).
-- **Verify:** Fake-runner tests cover accepted/rejected candidates and confirm
-  the apply occurs only after both server stages pass, no reset action occurs,
-  and a failed apply stops before any later firewall or post-firewall check.
-- **Current implementation:** The EU stage currently applies this firewall
-  before Phase 2B. This is the old ordering and must be changed to meet the
-  revised production requirement.
+- **Verify:** Fake-runner tests confirm Phase 2A does not prepare or apply the
+  firewall and never resets an existing policy. The full rollout must apply
+  this policy only after both server stages pass; task 328 wires that sequence.
+- **Result:** Removed firewall preparation, application and checks from the
+  Phase 2A service stage. Existing firewall policy is never reset; task 328
+  will apply the validated EU firewall after EU and RU pre-firewall checks.
 
 ### 227. [ ] Verifying the EU firewall policy after both applications
 
@@ -1837,7 +1837,7 @@ runner, "ru-server-feasibility-probe")`), matching
   a failure stops later steps, that a missing or invalid config triggers the
   interactive setup on a terminal and exit code 2 without one, and that no
   excluded test-only action is called.
-- **Result:** The current no-argument run executes the implemented EU stage (Squid, Outline image, Outline, MTProxy, RU-stage key, EU firewall apply and checks) and stops at the first failure. Tests cover order, fail-fast behavior, configuration/TTY behavior and test-only exclusions. This is the existing behavior, not the revised target: task 328 requires Phase 2A without firewalls, unconditional EU-then-RU execution, both firewall applications only after both pre-firewall service stages pass, then approved post-firewall checks on both servers. The RU implementation and deferred-firewall changes remain pending tasks 226–230 and 301–328.
+- **Result:** The current no-argument run executes the implemented EU service stage (Squid, Outline image, Outline, MTProxy and RU-stage key) without applying a firewall. Tests cover order, fail-fast behavior, configuration/TTY behavior and test-only exclusions. Task 328 will add unconditional EU-then-RU execution, both firewall applications only after both pre-firewall service stages pass, and approved post-firewall checks on both servers; RU implementation remains pending tasks 301–328.
 
 ## RU production implementation tasks created by task 201
 
@@ -1849,7 +1849,7 @@ deployment work. Production calls the Python agent functions with the validated
 production settings and `SshRunner`, never the standalone CLIs that read
 `config/agents.env`.
 
-### 301. Adding RU production settings
+### 301. [x] Adding RU production settings
 
 - **Depends on:** Tasks 202–204; retain the EU-only behavior they provide.
 - **Source step:** The RU host and service values currently come from
@@ -1869,6 +1869,11 @@ production settings and `SshRunner`, never the standalone CLIs that read
   CIDR and JSON-list validation, and provider CIDR validation. Prove EU-only
   configuration and operation remain usable without RU-only fields, and the
   template contains no real production values or credentials.
+- **Result:** Added optional RU fields to `EuProductionSettings`, with
+  normalized IP/CIDR and JSON-list validation. Blank RU template fields remain
+  absent for Phase 2A; RU Phase 2B settings are documented as required for the
+  RU rollout. Tests cover omitted RU values, valid IPv4/IPv6 values, malformed
+  values, strict network notation and placeholder-free blank entries.
 
 ### 302. Configuring RU production settings interactively
 

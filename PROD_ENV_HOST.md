@@ -1,12 +1,10 @@
 # `prod-env-host` Guide
 
 `prod-env-host` is the production deployment controller. The current
-implementation runs the EU stage, including EU firewall application. The
-revised production rollout requires Phase 2A to deploy and check EU services
-without applying a firewall; after RU services pass their checks in Phase 2B,
-it must apply both firewalls and repeat the approved checks on both servers.
-These changes and the RU production stage are pending tasks 226–230 and
-301–328.
+implementation runs the EU Phase 2A service stage without applying a firewall.
+The RU stage and full rollout remain pending: after RU services pass their
+checks in Phase 2B, the controller must apply both firewalls and repeat the
+approved checks on both servers (tasks 227–230 and 301–328).
 
 The explicit `deploy-eu-squid` operation connects to the existing `eu-server`,
 deploys Squid, and checks that it starts, serves HTTP requests through the
@@ -49,12 +47,11 @@ when `config/prod.env` is missing or invalid on a terminal, then continues
 with the deployment.
 Alternatively, fill in the template copy by hand.
 
-Required EU-stage settings:
+Required Phase 2A settings:
 
 | Variable | Value |
 | --- | --- |
 | `EU_SERVER_ADDRESS` | IPv4 or IPv6 address of `eu-server`, used by the controller for SSH and by the service configuration. |
-| `RU_SERVER_ADDRESS` | IPv4 or IPv6 address of `ru-server`, used only as the peer address for the EU firewall in Phase 2A. It does not authorize Phase 2A to connect to or modify RU. The same setting is the RU SSH and service address in the planned Phase 2B. |
 | `SSH_USER` | SSH account on `eu-server`. |
 | `SSH_KEY_PATH` | Absolute path on the controller to the SSH key; do not put the key itself in `prod.env`. |
 | `SSH_PORT` | SSH TCP port; defaults to `22`. |
@@ -62,12 +59,22 @@ Required EU-stage settings:
 | `EU_DNS_ADDRESSES`, `EU_NTP_ADDRESSES` | Non-empty JSON arrays of IPv4/IPv6 addresses for EU DNS and NTP services. |
 | `EU_LOCAL_NETWORKS` | Non-empty JSON array of EU networks in strict CIDR notation. |
 
+Required Phase 2B settings (optional for Phase 2A):
+
+| Variable | Value |
+| --- | --- |
+| `RU_SERVER_ADDRESS` | IPv4 or IPv6 address used for RU SSH and service/firewall configuration. |
+| `RU_METADATA_ADDRESS`, `RU_DHCP_SERVER_ADDRESS` | IPv4 or IPv6 addresses of RU's metadata and DHCP services. |
+| `RU_DNS_ADDRESSES`, `RU_NTP_ADDRESSES` | Non-empty JSON arrays of RU DNS and NTP service addresses. |
+| `RU_LOCAL_NETWORKS` | Non-empty JSON array of RU local networks in strict CIDR notation. |
+| `RU_PROVIDER_NETWORKS` | Non-empty JSON array of production provider egress CIDRs, validated against the crawler blacklist. |
+
 Server addresses are validated as IP addresses. `EU_SERVER_ADDRESS` must be
 the SSH-reachable address assigned to `eu-server`; DNS names are not accepted.
-`RU_SERVER_ADDRESS` is collected for the EU firewall peer rule and is not used
-as an RU SSH target in Phase 2A. The
-`EU_SERVER_ADDRESS` and `RU_SERVER_ADDRESS` names do not themselves restrict
-the address range.
+RU values are optional for Phase 2A. Phase 2B requires the RU server address,
+host service values and provider network ranges described in task 301. The
+same `RU_SERVER_ADDRESS` is used for SSH and RU service/firewall configuration;
+do not add a separate RU SSH-host or private-address setting.
 
 Lists must be written as JSON directly in the dotenv file, for example:
 
@@ -75,6 +82,8 @@ Lists must be written as JSON directly in the dotenv file, for example:
 EU_DNS_ADDRESSES=["192.0.2.53","2001:db8::53"]
 EU_NTP_ADDRESSES=["192.0.2.123"]
 EU_LOCAL_NETWORKS=["192.0.2.0/24","2001:db8:1::/64"]
+RU_DNS_ADDRESSES=["192.0.2.54"]
+RU_PROVIDER_NETWORKS=["198.51.100.0/24"]
 ```
 
 Replace every `SET_TO_*` placeholder with real settings for the selected
@@ -165,15 +174,15 @@ failure, naming the step. Steps, in order:
 3. MTProxy deployment and check.
 4. Creation or reuse of the dedicated EU Outline key for the RU stage, kept in
    the operator-local secret store.
-5. EU firewall input preparation, firewall application (transactional, no
-   reset), read-only policy verification and the RKN blacklist updater check.
+5. No firewall operation runs in Phase 2A. The current implementation stops
+   after the EU service checks and RU-stage key are ready; RU deployment and
+   the post-firewall sequence remain pending.
 
-Not run, by design: the firewall rollback simulation, the invasive probe-based
-firewall check, test-run state, and every GCP or test-client operation. On
-success the log ends with "EU production stage completed on eu-server"; the RU
-stage is reported as not implemented pending tasks 301–328. This describes
-the current implementation; under the revised requirement, Phase 2A must not
-apply the EU firewall, and both firewalls are applied only after RU services
+Not run, by design: either firewall application during Phase 2A, the firewall
+rollback simulation, the invasive probe-based firewall check, test-run state,
+and every GCP or test-client operation. On success the EU service stage
+completes and the RU stage is reported as not implemented pending tasks
+301–328. When implemented, both firewalls are applied only after RU services
 pass their pre-firewall checks. The Outline load
 step fails closed until an approved digest is committed (see "Outline image
 artifact"); use `deploy-eu-squid` to run the Squid steps alone. The read-only
