@@ -1687,12 +1687,13 @@ runner, "ru-server-feasibility-probe")`), matching
 - **Verify:** No test-client runner or client access URL is created or passed.
 - **Result:** Added exclusion tests: connect_to_outline is never invoked and no test-client module is referenced.
 
-### 236. Excluding the test-client Outline connection check
+### 236. [x] Excluding the test-client Outline connection check
 
 - **Source step:** `check_outline_connection(client_runner, client_access_url)`.
 - **Production disposition:** Do not run this test-client connectivity check
   against production.
 - **Verify:** EU-stage orchestration never invokes the test-client check.
+- **Result:** Added exclusion tests: check_outline_connection is never invoked.
 
 ### 237. Excluding test-client Squid tunnel deployment
 
