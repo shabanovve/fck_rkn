@@ -1613,7 +1613,7 @@ runner, "ru-server-feasibility-probe")`), matching
   `check_eu_firewall_rollback`.
 - **Result:** Added test_production_exclusions.py: the stage never calls check_eu_firewall_rollback, only the validated candidate is sent to the apply, and the production sources do not reference the rollback check.
 
-### 229. Checking the EU RKN blacklist updater
+### 229. [x] Checking the EU RKN blacklist updater
 
 - **Source step:** `check_rkn_blacklist_updater(eu_runner, "eu")`.
 - **Check action:** `eu-server-test-agent firewall-blacklist`
@@ -1624,6 +1624,7 @@ runner, "ru-server-feasibility-probe")`), matching
   must not update, restart, or reset the firewall.
 - **Verify:** Test active/inactive timer, missing/empty sets, command failure
   and timeout without leaking remote output.
+- **Result:** The stage runs check_rkn_blacklist_updater(runner, 'eu') after the apply and read-only verification. Tests cover an active/inactive timer, a failed update, empty sets, failure and timeout without leaked output, and that the check never changes the updater or firewall.
 
 ### 230. Excluding the repeated final EU firewall check
 

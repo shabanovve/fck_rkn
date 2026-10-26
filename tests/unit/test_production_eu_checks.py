@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -12,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fck_rkn.agents.eu_server import MTPROXY_CONTAINER_NAME, apply_eu_firewall
+from fck_rkn.agents.firewall_common import firewall_blacklist_updater_check_command
 from fck_rkn.agents.outline import (
     OUTLINE_CONTAINER_NAME,
     OUTLINE_HEALTH_CHECK_COMMAND,
@@ -721,6 +723,98 @@ class FirewallVerificationTests(unittest.TestCase):
 
                 self.assertIn("EU firewall verification", logs.output[-1])
                 self.assertEqual(len(runner.commands), 13)
+
+
+class BlacklistUpdaterCheckTests(unittest.TestCase):
+    """Task 229."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.archive = Path(directory.name) / "outline-image.tar.gz"
+        self.archive.write_bytes(b"verified archive")
+
+    def run_script(self, timer_ok=True, result="success", elements=True):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        rules = root / "rules.nft"
+        rules.write_text("  set rkn_ipv4 {\n  set rkn_ipv6 {\n", encoding="utf-8")
+        tools = {
+            "sudo": '#!/bin/sh\nexec "$@"\n',
+            "systemctl": (
+                '#!/bin/sh\ncase "$1" in\n'
+                f'  is-enabled|is-active) exit {0 if timer_ok else 1};;\n'
+                f'  show) echo {result};;\n  *) exit 99;;\nesac\n'
+            ),
+            "nft": "#!/bin/sh\n"
+            + ("echo 'elements = { 192.0.2.0/24 }'" if elements else "echo 'set x {}'")
+            + "\n",
+        }
+        for name, body in tools.items():
+            (root / name).write_text(body, encoding="utf-8")
+            (root / name).chmod(0o755)
+        script = root / "check.sh"
+        script.write_text(
+            firewall_blacklist_updater_check_command("eu").replace("/etc/fck-rkn/eu-firewall.nft", str(rules)),
+            encoding="utf-8",
+        )
+        return subprocess.run(
+            ["bash", str(script)],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PATH": f"{root}:{os.environ['PATH']}"},
+        )
+
+    def test_check_runs_last_after_the_firewall_verification(self) -> None:
+        runner = ScriptedRunner()
+
+        self.assertEqual(run_stage(runner, self.archive), 0)
+
+        self.assertIn("blacklist-update.timer", runner.commands[13])
+        self.assertEqual(len(runner.commands), 14)
+        self.assertNotIn("update_rkn", runner.commands[13])
+
+    def test_populated_sets_and_active_timer_pass(self) -> None:
+        self.assertEqual(self.run_script().returncode, 0)
+
+    def test_inactive_timer_failed_update_or_empty_sets_fail(self) -> None:
+        for label, kwargs in (
+            ("timer", {"timer_ok": False}),
+            ("update", {"result": "failed"}),
+            ("sets", {"elements": False}),
+        ):
+            with self.subTest(case=label):
+                self.assertNotEqual(self.run_script(**kwargs).returncode, 0)
+
+    def test_check_never_changes_the_updater_or_firewall(self) -> None:
+        self.assertNotRegex(
+            firewall_blacklist_updater_check_command("eu"),
+            r"systemctl\s+(start|restart|stop|disable|reload)|nft\s+(-f|flush|delete)",
+        )
+
+    def test_failure_and_timeout_stop_the_stage_without_leaking_output(self) -> None:
+        for outcome in (
+            RemoteResult(1, stdout="secret-out", stderr="secret-err"),
+            RemoteTimeoutError(),
+        ):
+            with self.subTest(outcome=type(outcome).__name__):
+                runner = ScriptedRunner(
+                    [RemoteResult(0)] * 9
+                    + [RemoteResult(0, ACCESS_URL)]
+                    + [RemoteResult(0)] * 3
+                    + [outcome]
+                )
+                stdout, stderr = StringIO(), StringIO()
+                with (
+                    self.assertLogs(production_environment.logger, level="ERROR") as logs,
+                    redirect_stdout(stdout),
+                    redirect_stderr(stderr),
+                ):
+                    self.assertNotEqual(run_stage(runner, self.archive), 0)
+
+                self.assertIn("blacklist updater", logs.output[-1])
+                self.assertNotIn("secret-out", "\n".join(logs.output))
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ from fck_rkn.agents.eu_server_test import (
     check_squid_http,
     check_squid_startup,
 )
+from fck_rkn.agents.firewall_test_common import check_rkn_blacklist_updater
 from fck_rkn.orchestration.outline_artifact import (
     build_outline_artifact,
     retrieve_outline_artifact,
@@ -177,6 +178,10 @@ def firewall_steps(
         (
             "EU firewall verification",
             lambda: check_eu_firewall_readonly(runner, prepared["config"]),
+        ),
+        (
+            "EU RKN blacklist updater check",
+            lambda: check_rkn_blacklist_updater(runner, "eu"),
         ),
     ]
 
