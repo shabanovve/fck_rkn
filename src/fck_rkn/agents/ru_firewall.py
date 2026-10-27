@@ -22,7 +22,7 @@ from fck_rkn.agents.firewall_common import (
 TABLE_NAME = "fck_rkn_ru"
 RU_OUTLINE_ACCESS_PORT = 10001
 EU_SERVICE_PORTS = (3128, 8443)
-DEFAULT_SSH_PORT = 22
+DEFAULT_EU_SSH_PORT = 22
 SERVER_TO_GITHUB_PORTS = (80, 443)
 SNAPD_PORT = 443
 
@@ -58,7 +58,7 @@ def build_ru_firewall_rules(config_json: str) -> str:
         raise ValueError("eu_outline_port must be between 1 and 65535")
     if outline_port in EU_SERVICE_PORTS:
         raise ValueError("eu_outline_port conflicts with a direct EU service port")
-    ssh_port = config.get("ssh_port", DEFAULT_SSH_PORT)
+    ssh_port = config.get("ssh_port", DEFAULT_EU_SSH_PORT)
     if (
         isinstance(ssh_port, bool)
         or not isinstance(ssh_port, int)

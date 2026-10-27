@@ -41,7 +41,7 @@ def prepare_eu_firewall_input(
     config_json = json.dumps(
         {
             "ru_server_address": ru_server.compressed,
-            "ssh_port": settings.SSH_PORT,
+            "ssh_port": settings.EU_SSH_PORT,
             "rkn_ipv4": rkn_ipv4,
             "rkn_ipv6": rkn_ipv6,
             "vm_services": {
@@ -118,7 +118,7 @@ def prepare_ru_firewall_input(
             "eu_server_address": ipaddress.ip_address(settings.EU_SERVER_ADDRESS).compressed,
             "eu_outline_address": ipaddress.ip_address(outline_address).compressed,
             "eu_outline_port": outline_port,
-            "ssh_port": settings.SSH_PORT,
+            "ssh_port": settings.EU_SSH_PORT,
             "rkn_ipv4": rkn_ipv4,
             "rkn_ipv6": rkn_ipv6,
             "server_to_github_addresses": settings.RU_SERVER_TO_GITHUB_ADDRESSES,

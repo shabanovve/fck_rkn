@@ -65,9 +65,9 @@ RU_PROBE_KEY_SECRET = "ru-outline-access-url"
 def create_eu_runner(settings: EuProductionSettings) -> RemoteRunner:
     return SshRunner(
         host=settings.EU_SERVER_ADDRESS,
-        user=settings.SSH_USER,
-        key_path=settings.SSH_KEY_PATH,
-        port=settings.SSH_PORT,
+        user=settings.EU_SSH_USER,
+        key_path=settings.EU_SSH_KEY_PATH,
+        port=settings.EU_SSH_PORT,
     )
 
 

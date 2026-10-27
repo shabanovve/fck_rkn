@@ -16,7 +16,7 @@ from fck_rkn.agents.outline import OUTLINE_ACCESS_KEY_PORT
 
 
 TABLE_NAME = "fck_rkn_eu"
-DEFAULT_SSH_PORT = 22
+DEFAULT_EU_SSH_PORT = 22
 
 
 def _log(reason: str) -> str:
@@ -34,7 +34,7 @@ def build_eu_firewall_rules(config_json: str) -> str:
     """
     config = load_config(config_json)
     ru_server = parse_address(config.get("ru_server_address"), "ru_server_address")
-    ssh_port = config.get("ssh_port", DEFAULT_SSH_PORT)
+    ssh_port = config.get("ssh_port", DEFAULT_EU_SSH_PORT)
     if (
         isinstance(ssh_port, bool)
         or not isinstance(ssh_port, int)

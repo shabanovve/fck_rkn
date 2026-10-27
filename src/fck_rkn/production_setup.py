@@ -181,7 +181,7 @@ def _format(value: object) -> str:
 def _parse(name: str, raw: str) -> object:
     """Validate one operator-entered value with the loader's field rules."""
     raw = raw.strip()
-    if name in ("SSH_PORT", "RU_SSH_PORT"):
+    if name in ("EU_SSH_PORT", "RU_SSH_PORT"):
         if not raw.isdecimal() or not 1 <= int(raw) <= 65535:
             raise ValueError("must be a TCP port from 1 through 65535")
         return int(raw)
@@ -198,18 +198,18 @@ def _parse(name: str, raw: str) -> object:
         if name in ("EU_LOCAL_NETWORKS", "RU_LOCAL_NETWORKS", "RU_SERVER_TO_GITHUB_ADDRESSES"):
             return EuProductionSettings.validate_local_networks(items)
         return EuProductionSettings.validate_address_lists(items)
-    if name in ("SSH_USER", "RU_SSH_USER"):
+    if name in ("EU_SSH_USER", "RU_SSH_USER"):
         return EuProductionSettings.validate_ssh_user(raw)
-    if name in ("SSH_KEY_PATH", "RU_SSH_KEY_PATH"):
+    if name in ("EU_SSH_KEY_PATH", "RU_SSH_KEY_PATH"):
         return str(EuProductionSettings.validate_ssh_key_path(Path(raw)))
     return EuProductionSettings.validate_ip_address(raw)
 
 
 HINTS = {
     "EU_SERVER_ADDRESS": "IPv4 or IPv6 address of eu-server",
-    "SSH_USER": "SSH account on eu-server",
-    "SSH_KEY_PATH": "absolute path to the SSH private key on this machine",
-    "SSH_PORT": "SSH TCP port",
+    "EU_SSH_USER": "SSH account on eu-server",
+    "EU_SSH_KEY_PATH": "absolute path to the SSH private key on this machine",
+    "EU_SSH_PORT": "SSH TCP port",
     "RU_SERVER_ADDRESS": "IPv4 or IPv6 address of ru-server (cannot be detected)",
     "RU_SSH_USER": "SSH account on ru-server",
     "RU_SSH_KEY_PATH": "absolute path to the RU SSH private key on this machine",
@@ -313,17 +313,17 @@ def configure_interactively(
     values: dict[str, object] = {}
     for name, default in (
         ("EU_SERVER_ADDRESS", None),
-        ("SSH_USER", None),
-        ("SSH_KEY_PATH", None),
-        ("SSH_PORT", "22"),
+        ("EU_SSH_USER", None),
+        ("EU_SSH_KEY_PATH", None),
+        ("EU_SSH_PORT", "22"),
     ):
         values[name] = _ask(name, prompt, output, default=default)
 
     runner = runner_factory(
         str(values["EU_SERVER_ADDRESS"]),
-        str(values["SSH_USER"]),
-        Path(str(values["SSH_KEY_PATH"])),
-        int(values["SSH_PORT"]),  # type: ignore[call-overload]
+        str(values["EU_SSH_USER"]),
+        Path(str(values["EU_SSH_KEY_PATH"])),
+        int(values["EU_SSH_PORT"]),  # type: ignore[call-overload]
     )
     exit_code, _ = _query(runner, "true")
     if exit_code != 0:
@@ -335,14 +335,6 @@ def configure_interactively(
 
     output("Connected. Detecting settings on eu-server (read-only)...")
     detected = discover_eu_settings(runner)
-    for name, default in (
-        ("RU_SERVER_ADDRESS", None),
-        ("RU_SSH_USER", str(values["SSH_USER"])),
-        ("RU_SSH_KEY_PATH", str(values["SSH_KEY_PATH"])),
-        ("RU_SSH_PORT", str(values["SSH_PORT"])),
-    ):
-        values[name] = _ask(name, prompt, output, default=default)
-
     for name in (
         "EU_DNS_ADDRESSES",
         "EU_DHCP_SERVER_ADDRESS",
@@ -350,6 +342,14 @@ def configure_interactively(
         "EU_LOCAL_NETWORKS",
     ):
         values[name] = _ask(name, prompt, output, detected.get(name))
+
+    for name, default in (
+        ("RU_SERVER_ADDRESS", None),
+        ("RU_SSH_USER", str(values.get("EU_SSH_USER", ""))), 
+        ("RU_SSH_KEY_PATH", str(values.get("EU_SSH_KEY_PATH", ""))), 
+        ("RU_SSH_PORT", str(values.get("EU_SSH_PORT", "22"))),
+    ):
+        values[name] = _ask(name, prompt, output, default=default)
 
     ru_runner = runner_factory(
         str(values["RU_SERVER_ADDRESS"]),

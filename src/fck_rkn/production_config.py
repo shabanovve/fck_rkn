@@ -80,9 +80,9 @@ class EuProductionSettings(BaseSettings):
 
     EU_SERVER_ADDRESS: str = Field(min_length=1)
     RU_SERVER_ADDRESS: str | None = None
-    SSH_USER: str = Field(min_length=1)
-    SSH_KEY_PATH: Path
-    SSH_PORT: int = Field(default=22, ge=1, le=65535)
+    EU_SSH_USER: str = Field(min_length=1)
+    EU_SSH_KEY_PATH: Path
+    EU_SSH_PORT: int = Field(default=22, ge=1, le=65535)
     RU_SSH_USER: str | None = None
     RU_SSH_KEY_PATH: Path | None = None
     RU_SSH_PORT: int | None = None
@@ -99,7 +99,7 @@ class EuProductionSettings(BaseSettings):
     @field_validator(
         "EU_SERVER_ADDRESS",
         "RU_SERVER_ADDRESS",
-        "SSH_USER",
+        "EU_SSH_USER",
         "RU_SSH_USER",
         "EU_DHCP_SERVER_ADDRESS",
             "RU_DHCP_SERVER_ADDRESS",
@@ -128,7 +128,7 @@ class EuProductionSettings(BaseSettings):
         except ValueError as error:
             raise ValueError("must be an IPv4 or IPv6 address") from error
 
-    @field_validator("SSH_USER", "RU_SSH_USER")
+    @field_validator("EU_SSH_USER", "RU_SSH_USER")
     @classmethod
     def validate_ssh_user(cls, value: str | None) -> str | None:
         if value is None:
@@ -137,7 +137,7 @@ class EuProductionSettings(BaseSettings):
             raise ValueError("must be a valid SSH account name")
         return value
 
-    @field_validator("SSH_KEY_PATH", "RU_SSH_KEY_PATH")
+    @field_validator("EU_SSH_KEY_PATH", "RU_SSH_KEY_PATH")
     @classmethod
     def validate_ssh_key_path(cls, value: Path | None) -> Path | None:
         if value is None:

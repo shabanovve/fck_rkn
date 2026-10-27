@@ -19,9 +19,9 @@ from fck_rkn.production_config import (
 VALID = """\
 EU_SERVER_ADDRESS=192.0.2.10
 RU_SERVER_ADDRESS=192.0.2.20
-SSH_USER=deploy
-SSH_KEY_PATH=/run/secrets/fck-rkn/deploy_key
-SSH_PORT=2222
+EU_SSH_USER=deploy
+EU_SSH_KEY_PATH=/run/secrets/fck-rkn/deploy_key
+EU_SSH_PORT=2222
 EU_DNS_ADDRESSES=["192.0.2.53","2001:db8::53"]
 EU_DHCP_SERVER_ADDRESS=192.0.2.2
 EU_NTP_ADDRESSES=["192.0.2.123"]
@@ -80,7 +80,7 @@ class ProductionConfigTests(unittest.TestCase):
 
         self.assertIsInstance(settings, EuProductionSettings)
         self.assertEqual(settings.EU_SERVER_ADDRESS, "192.0.2.10")
-        self.assertEqual(settings.SSH_PORT, 2222)
+        self.assertEqual(settings.EU_SSH_PORT, 2222)
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "2001:db8::53"])
         self.assertEqual(settings.EU_LOCAL_NETWORKS, ["192.0.2.0/24", "2001:db8:1::/64"])
         self.assertIsNone(settings.RU_SERVER_TO_GITHUB_ADDRESSES)
@@ -165,10 +165,10 @@ RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]
     def test_defaults_ssh_port_to_22(self) -> None:
         self.config_path.parent.mkdir(parents=True)
         self.config_path.write_text(
-            VALID.replace("SSH_PORT=2222\n", ""), encoding="utf-8"
+            VALID.replace("EU_SSH_PORT=2222\n", ""), encoding="utf-8"
         )
 
-        self.assertEqual(load_eu_production_settings(self.config_path).SSH_PORT, 22)
+        self.assertEqual(load_eu_production_settings(self.config_path).EU_SSH_PORT, 22)
 
     def test_rejects_missing_required_values_without_exposing_values(self) -> None:
         self.config_path.parent.mkdir(parents=True)
@@ -179,8 +179,8 @@ RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]
         with self.assertRaises(ProductionConfigError) as raised:
             load_eu_production_settings(self.config_path)
 
-        self.assertIn("- SSH_USER: Field required", str(raised.exception))
-        self.assertIn("- SSH_KEY_PATH: Field required", str(raised.exception))
+        self.assertIn("- EU_SSH_USER: Field required", str(raised.exception))
+        self.assertIn("- EU_SSH_KEY_PATH: Field required", str(raised.exception))
         self.assertNotIn("secret-value", str(raised.exception))
 
     def test_reports_multiple_validation_errors_without_exposing_values(self) -> None:
@@ -305,7 +305,7 @@ RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]
             ("EU_DNS_ADDRESSES=[\"192.0.2.53\",\"2001:db8::53\"]", "EU_DNS_ADDRESSES=[]"),
             ("EU_NTP_ADDRESSES=[\"192.0.2.123\"]", "EU_NTP_ADDRESSES=[\"ntp.example\"]"),
             ("EU_LOCAL_NETWORKS=[\"192.0.2.0/24\",\"2001:db8:1::/64\"]", "EU_LOCAL_NETWORKS=[\"192.0.2.1/24\"]"),
-            ("SSH_PORT=2222", "SSH_PORT=70000"),
+            ("EU_SSH_PORT=2222", "EU_SSH_PORT=70000"),
         )
         for old, new in invalid_variants:
             with self.subTest(value=new):

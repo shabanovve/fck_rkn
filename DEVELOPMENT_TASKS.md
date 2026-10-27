@@ -2272,7 +2272,7 @@ remain absent from RU deployment:
 - **Verify:** Production tests must pass without referring to `RU_METADATA_ADDRESS`. The production environment configuration should no longer prompt for or require it.
 
 
-### 333. [ ] Group parameters separately in prod.env
+### 333. [x] Group parameters separately in prod.env
 
 - **Source step:** New requirement to group configuration parameters separately for `eu-server` and `ru-server`.
 - **Change:** Restructure `config/prod.env.example` and the file generation logic in `production_setup.py` so that `EU_` and `eu-server`-related variables (including its SSH credentials) are grouped in one block, and all `RU_` variables in another. Update relevant tests.

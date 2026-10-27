@@ -60,13 +60,11 @@ ANSWERS = [
     "deploy",
     "/keys/id",
     "",
+    "",
+    "",
+    "",
+    "",
     "192.0.2.20",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
     "",
     "",
     "",
@@ -170,15 +168,15 @@ class ProductionSetupTests(unittest.TestCase):
             "deploy",
             "/keys/id",
             "2222",
-            "192.0.2.20",
-            "",
-            "",
-            "",
             "bad",
             "192.0.2.53, 192.0.2.54",
             "192.0.2.2",
             "192.0.2.123",
             "192.0.2.0/24",
+            "192.0.2.20",
+            "",
+            "",
+            "",
             "192.0.2.54, 2001:db8::54",
             "192.0.2.3",
             "192.0.2.124",
@@ -189,7 +187,7 @@ class ProductionSetupTests(unittest.TestCase):
         session = self.run_setup(answers, runner)
 
         settings = load_eu_production_settings(self.path)
-        self.assertEqual(settings.SSH_PORT, 2222)
+        self.assertEqual(settings.EU_SSH_PORT, 2222)
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "192.0.2.54"])
         self.assertEqual(settings.RU_SERVER_TO_GITHUB_ADDRESSES, ["198.51.100.0/24", "2001:db8:abcd::/48"])
 
@@ -223,9 +221,9 @@ class ProductionSetupTests(unittest.TestCase):
     def test_ru_configuration_failure_does_not_prevent_otherwise_valid_eu_only_run(self) -> None:
         eu_only_content = (
             "EU_SERVER_ADDRESS=192.0.2.10\n"
-            "SSH_USER=deploy\n"
-            "SSH_KEY_PATH=/keys/id\n"
-            "SSH_PORT=22\n"
+            "EU_SSH_USER=deploy\n"
+            "EU_SSH_KEY_PATH=/keys/id\n"
+            "EU_SSH_PORT=22\n"
             "RU_SERVER_ADDRESS=192.0.2.20\n"
             'EU_DNS_ADDRESSES=["192.0.2.53"]\n'
             "EU_DHCP_SERVER_ADDRESS=192.0.2.2\n"

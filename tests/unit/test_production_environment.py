@@ -22,8 +22,8 @@ def settings() -> EuProductionSettings:
     return EuProductionSettings(
         EU_SERVER_ADDRESS="192.0.2.10",
         RU_SERVER_ADDRESS="192.0.2.20",
-        SSH_USER="deploy",
-        SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
+        EU_SSH_USER="deploy",
+        EU_SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
         EU_DNS_ADDRESSES=["192.0.2.53"],
         EU_DHCP_SERVER_ADDRESS="192.0.2.2",
         EU_NTP_ADDRESSES=["192.0.2.123"],
@@ -35,8 +35,8 @@ def ru_settings() -> EuProductionSettings:
     return EuProductionSettings(
         EU_SERVER_ADDRESS="192.0.2.10",
         RU_SERVER_ADDRESS="192.0.2.20",
-        SSH_USER="deploy",
-        SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
+        EU_SSH_USER="deploy",
+        EU_SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
         RU_SSH_USER="deploy",
         RU_SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
         RU_SSH_PORT=22,
