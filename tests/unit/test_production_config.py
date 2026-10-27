@@ -146,10 +146,10 @@ RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]
             "RU_DHCP_SERVER_ADDRESS",
             "RU_NTP_ADDRESSES",
             "RU_LOCAL_NETWORKS",
-            "RU_SERVER_TO_GITHUB_ADDRESSES",
         ):
             with self.subTest(name=name):
                 self.assertRegex(template, rf"(?m)^{name}=$")
+        self.assertRegex(template, r'(?m)^RU_SERVER_TO_GITHUB_ADDRESSES=\["140.82.112.0/20", .*\]$')
         self.assertNotIn("ss://", template)
         self.assertNotIn("PRIVATE KEY", template)
 
