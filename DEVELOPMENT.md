@@ -43,6 +43,7 @@
 - Name the production environment `fck_rkn`.
 - Keep test and production resources, credentials, and configuration
   separated.
+- Group parameters in `config/prod.env` and `config/prod.env.example` separately for `eu-server` and `ru-server` to keep environments clearly separated.
 - Divide development and deployment into two phases:
   1. **Test infrastructure:** build the infrastructure, deploy traffic
      filtering, and develop and verify changes only in the isolated test

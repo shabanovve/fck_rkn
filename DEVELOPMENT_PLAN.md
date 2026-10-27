@@ -140,7 +140,8 @@ decision.
 #### Production configuration decision
 
 `config/prod.env` is the production orchestrator's single source of
-operator-supplied production values. It is separate from `config/test.env`
+operator-supplied production values. Variable definitions in this file and its
+template must be grouped separately for `eu-server` and `ru-server`. It is separate from `config/test.env`
 and from `config/agents.env` (which remains the configuration used by direct
 agent CLI invocations). The production settings and template must be
 validated before any remote command runs. Do not add credentials themselves

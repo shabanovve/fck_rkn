@@ -2271,6 +2271,13 @@ remain absent from RU deployment:
 - **Change:** Remove `RU_METADATA_ADDRESS` from `config/prod.env.example`, the `ProductionSettings` models, production deployment scripts, production orchestration logic, and all production-related unit tests. Ensure it remains in test environment configurations.
 - **Verify:** Production tests must pass without referring to `RU_METADATA_ADDRESS`. The production environment configuration should no longer prompt for or require it.
 
+
+### 333. [ ] Group parameters separately in prod.env
+
+- **Source step:** New requirement to group configuration parameters separately for `eu-server` and `ru-server`.
+- **Change:** Restructure `config/prod.env.example` and the file generation logic in `production_setup.py` so that `EU_` and `eu-server`-related variables (including its SSH credentials) are grouped in one block, and all `RU_` variables in another. Update relevant tests.
+- **Verify:** Generating `config/prod.env` interactively yields a file with clear EU and RU sections. `prod.env.example` reflects the same structure. Tests pass.
+
 ## Decisions that block dependent tasks
 
 - GCP project ID, billing/account, region/zone, Ubuntu image, VM size/cost,
