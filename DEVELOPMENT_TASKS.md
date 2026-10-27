@@ -2278,6 +2278,15 @@ remain absent from RU deployment:
 - **Change:** Restructure `config/prod.env.example` and the file generation logic in `production_setup.py` so that `EU_` and `eu-server`-related variables (including its SSH credentials) are grouped in one block, and all `RU_` variables in another. Update relevant tests.
 - **Verify:** Generating `config/prod.env` interactively yields a file with clear EU and RU sections. `prod.env.example` reflects the same structure. Tests pass.
 
+### 334. [ ] Use prod.env.example values as defaults in interactive setup
+
+- **Source step:** `RU_SERVER_TO_GITHUB_ADDRESSES` and other constants have predefined values in `prod.env.example`. Placeholders like `SET_TO_*` are not user-friendly defaults.
+- **Change:** 
+  1. Remove all `SET_TO_*` placeholders from `config/prod.env.example` (leave the values empty).
+  2. Modify `production_setup.py` so that if a variable has a non-empty value defined in `prod.env.example` (e.g., `RU_SERVER_TO_GITHUB_ADDRESSES`), the interactive setup parses it and suggests it as the default value during the prompt.
+- **Verify:** `prod.env.example` has no `SET_TO_*` placeholders. Running interactive setup (`prod-env-host configure`) prompts for `RU_SERVER_TO_GITHUB_ADDRESSES` offering its predefined value from the example file as the default.
+
+
 ## Decisions that block dependent tasks
 
 - GCP project ID, billing/account, region/zone, Ubuntu image, VM size/cost,
