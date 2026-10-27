@@ -2288,7 +2288,7 @@ remain absent from RU deployment:
 
 
 
-### 335. [ ] Allow all traffic from ru-server on eu-server firewall
+### 335. [x] Allow all traffic from ru-server on eu-server firewall
 
 - **Source step:** Analysis of EU-server firewall logs (`journalctl -k`) revealed that ICMP and other non-Outline traffic from `ru-server` is being dropped, causing `outline_client_check.sh` and tunnel checks to fail with "Empty reply from server". The current EU firewall rules only allow TCP/UDP on port 10001 from `ru-server`.
 - **Change:** Modify `src/fck_rkn/agents/eu_firewall.py` to allow all incoming traffic (`ip saddr <RU_SERVER_ADDRESS> accept`) from `ru-server`.

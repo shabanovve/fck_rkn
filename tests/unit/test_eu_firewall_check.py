@@ -52,6 +52,7 @@ class EuFirewallCheckScriptTests(unittest.TestCase):
             "VPN port from ru-server",
             "VPN port from another host",
             "direct proxy port",
+            "an unlisted port from ru-server",
             "SSH from an RKN crawler range",
             "fck-rkn eu input crawler-v4:",
             "fck-rkn eu input denied:",

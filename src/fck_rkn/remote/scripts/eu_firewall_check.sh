@@ -157,9 +157,10 @@ expect_reachable "$ru_address" "$vpn_port" "VPN port from ru-server"
 expect_denied "$stranger_address" "$vpn_port" "VPN port from another host"
 for port in "${proxy_ports[@]}"; do
   expect_denied "$stranger_address" "$port" "direct proxy port $port from another host"
-  expect_denied "$ru_address" "$port" "direct proxy port $port from ru-server"
+  expect_reachable "$ru_address" "$port" "direct proxy port $port from ru-server"
 done
 expect_denied "$stranger_address" 9 "an unlisted port from another host"
+expect_reachable "$ru_address" 9 "an unlisted port from ru-server"
 expect_denied "$crawler_address" "$ssh_port" "SSH from an RKN crawler range"
 
 crawler_after=$(counter input "fck-rkn eu input crawler-v4:")

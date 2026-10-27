@@ -61,10 +61,10 @@ class EuFirewallRulesTests(unittest.TestCase):
 
     def test_vpn_is_allowed_only_from_ru_server(self) -> None:
         self.assertIn(
-            "ip saddr 10.0.0.24 meta l4proto { tcp, udp } th dport 10001 accept",
+            "ip saddr 10.0.0.24 accept",
             self.input,
         )
-        self.assertEqual(sum("10001" in rule for rule in self.input), 1)
+        self.assertEqual(sum("10001" in rule for rule in self.input), 0)
 
     def test_crawlers_are_logged_and_denied_before_allowed_services(self) -> None:
         crawler = self.index("@rkn_ipv4")
@@ -73,13 +73,13 @@ class EuFirewallRulesTests(unittest.TestCase):
         self.assertIn("2001:db8::/32", self.rules)
         self.assertLess(crawler, self.index("tcp dport 22"))
         self.assertLess(self.index("@rkn_ipv6"), self.index("tcp dport 22"))
-        self.assertLess(crawler, self.index("th dport 10001"))
+        self.assertLess(crawler, self.index("ip saddr 10.0.0.24 accept"))
 
     def test_rule_order(self) -> None:
         self.assertEqual(self.input[0], 'iifname "lo" accept')
         self.assertEqual(self.input[1], "ct state established,related accept")
         self.assertLess(self.index("udp dport 68"), self.index("@rkn_ipv4"))
-        self.assertLess(self.index("th dport 10001"), len(self.input) - 1)
+        self.assertLess(self.index("ip saddr 10.0.0.24 accept"), len(self.input) - 1)
 
     def test_everything_else_is_logged_and_denied_with_host_prefix(self) -> None:
         last = self.input[-1]

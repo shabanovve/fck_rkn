@@ -19,7 +19,7 @@ from fck_rkn.remote.ssh import SshRunner
 
 
 def settings() -> EuProductionSettings:
-    return EuProductionSettings(
+    return EuProductionSettings(_env_file=None, 
         EU_SERVER_ADDRESS="192.0.2.10",
         RU_SERVER_ADDRESS="192.0.2.20",
         EU_SSH_USER="deploy",
@@ -32,7 +32,7 @@ def settings() -> EuProductionSettings:
 
 
 def ru_settings() -> EuProductionSettings:
-    return EuProductionSettings(
+    return EuProductionSettings(_env_file=None, 
         EU_SERVER_ADDRESS="192.0.2.10",
         RU_SERVER_ADDRESS="192.0.2.20",
         EU_SSH_USER="deploy",
