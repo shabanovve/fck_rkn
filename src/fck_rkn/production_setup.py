@@ -10,6 +10,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
+from dotenv import dotenv_values
 from fck_rkn.production_config import (
     PROD_CONFIG_FILE,
     PROD_TEMPLATE_FILE,
@@ -310,14 +311,20 @@ def configure_interactively(
         if answer.strip().lower() not in ("y", "yes"):
             raise ProductionSetupError("Existing configuration was kept")
 
+    template_defaults = {}
+    if template_path.exists():
+        template_defaults = {k: v for k, v in dotenv_values(template_path).items() if v and not v.startswith("SET_TO_")}
+
     values: dict[str, object] = {}
-    for name, default in (
+    for name, fallback in (
         ("EU_SERVER_ADDRESS", None),
         ("EU_SSH_USER", None),
         ("EU_SSH_KEY_PATH", None),
         ("EU_SSH_PORT", "22"),
     ):
-        values[name] = _ask(name, prompt, output, default=default)
+        values[name] = _ask(
+            name, prompt, output, default=template_defaults.get(name, fallback)
+        )
 
     runner = runner_factory(
         str(values["EU_SERVER_ADDRESS"]),
@@ -341,15 +348,19 @@ def configure_interactively(
         "EU_NTP_ADDRESSES",
         "EU_LOCAL_NETWORKS",
     ):
-        values[name] = _ask(name, prompt, output, detected.get(name))
+        values[name] = _ask(
+            name, prompt, output, detected=detected.get(name), default=template_defaults.get(name)
+        )
 
-    for name, default in (
+    for name, fallback in (
         ("RU_SERVER_ADDRESS", None),
         ("RU_SSH_USER", str(values.get("EU_SSH_USER", ""))), 
         ("RU_SSH_KEY_PATH", str(values.get("EU_SSH_KEY_PATH", ""))), 
         ("RU_SSH_PORT", str(values.get("EU_SSH_PORT", "22"))),
     ):
-        values[name] = _ask(name, prompt, output, default=default)
+        values[name] = _ask(
+            name, prompt, output, default=template_defaults.get(name, fallback)
+        )
 
     ru_runner = runner_factory(
         str(values["RU_SERVER_ADDRESS"]),
@@ -373,8 +384,12 @@ def configure_interactively(
         "RU_NTP_ADDRESSES",
         "RU_LOCAL_NETWORKS",
     ):
-        values[name] = _ask(name, prompt, output, detected_ru.get(name))
-    values["RU_SERVER_TO_GITHUB_ADDRESSES"] = _ask("RU_SERVER_TO_GITHUB_ADDRESSES", prompt, output)
+        values[name] = _ask(
+            name, prompt, output, detected=detected_ru.get(name), default=template_defaults.get(name)
+        )
+    values["RU_SERVER_TO_GITHUB_ADDRESSES"] = _ask(
+        "RU_SERVER_TO_GITHUB_ADDRESSES", prompt, output, default=template_defaults.get("RU_SERVER_TO_GITHUB_ADDRESSES")
+    )
 
     output("\nConfiguration to write:")
     for name, value in values.items():
