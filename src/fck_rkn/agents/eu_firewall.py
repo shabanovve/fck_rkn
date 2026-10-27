@@ -53,6 +53,7 @@ def build_eu_firewall_rules(config_json: str) -> str:
     ]
     forward_rules = [
         "ct state established,related accept",
+        f"{address_match('saddr', ru_server)} accept",
         f"ct status dnat {_log('forward direct-service')} drop",
     ]
 
