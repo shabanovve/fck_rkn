@@ -78,6 +78,15 @@ ANSWERS = [
 
 
 class ProductionSetupTests(unittest.TestCase):
+    def test_parse_json_array_for_address_lists(self) -> None:
+        json_array = '["140.82.112.0/20", "143.55.64.0/20", "185.199.108.0/22", "192.30.252.0/22", "2606:50c0::/32", "2a0a:a440::/29"]'
+        result = setup._parse("RU_SERVER_TO_GITHUB_ADDRESSES", json_array)
+        self.assertEqual(result, ["140.82.112.0/20", "143.55.64.0/20", "185.199.108.0/22", "192.30.252.0/22", "2606:50c0::/32", "2a0a:a440::/29"])
+
+        with self.assertRaises(ValueError) as ctx:
+            setup._parse("RU_SERVER_TO_GITHUB_ADDRESSES", '["140.82.112.0/20", bad]')
+        self.assertEqual(str(ctx.exception), "invalid JSON array")
+
     def setUp(self) -> None:
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

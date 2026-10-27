@@ -195,7 +195,16 @@ def _parse(name: str, raw: str) -> object:
         "RU_LOCAL_NETWORKS",
         "RU_SERVER_TO_GITHUB_ADDRESSES",
     ):
-        items = [item for item in re.split(r"[,\s]+", raw) if item]
+        if raw.startswith("[") and raw.endswith("]"):
+            try:
+                items = json.loads(raw)
+            except json.JSONDecodeError:
+                raise ValueError("invalid JSON array")
+            if not isinstance(items, list):
+                raise ValueError("must be a JSON array")
+            items = [str(item) for item in items]
+        else:
+            items = [item for item in re.split(r"[,\s]+", raw) if item]
         if name in ("EU_LOCAL_NETWORKS", "RU_LOCAL_NETWORKS", "RU_SERVER_TO_GITHUB_ADDRESSES"):
             return EuProductionSettings.validate_local_networks(items)
         return EuProductionSettings.validate_address_lists(items)
