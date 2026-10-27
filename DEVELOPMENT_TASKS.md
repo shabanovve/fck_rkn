@@ -1798,7 +1798,7 @@ runner, "ru-server-feasibility-probe")`), matching
   `SSH_KEY_PATH`, `SSH_PORT`), establishes the SSH connection, and then
   automatically discovers every other setting readable from `eu-server`
   (`EU_LOCAL_NETWORKS`, `EU_DNS_ADDRESSES`, `EU_DHCP_SERVER_ADDRESS`,
-  `EU_NTP_ADDRESSES`, and `EU_METADATA_ADDRESS` by probing) using
+  `EU_NTP_ADDRESSES` by probing) using
   read-only commands. Settings that cannot be discovered (such as
   `RU_SERVER_ADDRESS`) or whose discovery fails, is ambiguous or finds nothing (for example, no
   metadata endpoint) must be
@@ -2257,6 +2257,19 @@ remain absent from RU deployment:
 - **Source step:** New requirement to clarify that the addresses used for egress traffic to the provider actually represent GitHub addresses.
 - **Change:** Rename the constant `RU_SERVER_TO_GITHUB_ADDRESSES` to `RU_SERVER_TO_GITHUB_ADDRESSES` across all files, including `prod.env.example`, `production_config.py`, `production_setup.py`, `production_environment.py`, and `ru_firewall.py`. Update relevant test configurations and Markdown documentation (`DEVELOPMENT.md`, `DEVELOPMENT_PLAN.md`, `PROD_ENV_HOST.md`).
 - **Verify:** Tests must pass and interactively generating the environment file should prompt for the new constant name.
+
+
+### 331. [ ] Remove EU_METADATA_ADDRESS from production configuration
+
+- **Source step:** Clarification that `EU_METADATA_ADDRESS` must not be used in production. Its use is only justified in the test environment.
+- **Change:** Remove `EU_METADATA_ADDRESS` from `config/prod.env.example`, the `ProductionSettings` models, production deployment scripts, production orchestration logic, and all production-related unit tests. Ensure it remains in test environment configurations.
+- **Verify:** Production tests must pass without referring to `EU_METADATA_ADDRESS`. The production environment configuration should no longer prompt for or require it.
+
+### 332. [ ] Remove RU_METADATA_ADDRESS from production configuration
+
+- **Source step:** Clarification that `RU_METADATA_ADDRESS` must not be used in production. Its use is only justified in the test environment.
+- **Change:** Remove `RU_METADATA_ADDRESS` from `config/prod.env.example`, the `ProductionSettings` models, production deployment scripts, production orchestration logic, and all production-related unit tests. Ensure it remains in test environment configurations.
+- **Verify:** Production tests must pass without referring to `RU_METADATA_ADDRESS`. The production environment configuration should no longer prompt for or require it.
 
 ## Decisions that block dependent tasks
 

@@ -55,7 +55,7 @@ Required Phase 2A settings:
 | `SSH_USER` | SSH account on `eu-server`. |
 | `SSH_KEY_PATH` | Absolute path on the controller to the SSH key; do not put the key itself in `prod.env`. |
 | `SSH_PORT` | SSH TCP port; defaults to `22`. |
-| `EU_METADATA_ADDRESS`, `EU_DHCP_SERVER_ADDRESS` | IPv4 or IPv6 addresses of the EU network's metadata and DHCP services. |
+| `EU_DHCP_SERVER_ADDRESS` | IPv4 or IPv6 address of the EU network's DHCP service. |
 | `EU_DNS_ADDRESSES`, `EU_NTP_ADDRESSES` | Non-empty JSON arrays of IPv4/IPv6 addresses for EU DNS and NTP services. |
 | `EU_LOCAL_NETWORKS` | Non-empty JSON array of EU networks in strict CIDR notation. |
 

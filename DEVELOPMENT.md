@@ -229,8 +229,7 @@ provider APIs. nftables filters by address, not by name, so they are allowed
 by network ranges that the orchestrator or `agents.env` passes to the agent
 as a parameter. Agents and remote scripts do not name the provider. In the
 test environment the provider is Google and the ranges come from Google's
-published list (`goog.json`) plus the metadata address; in production the
-provider's own ranges are supplied the same way. snapd (the Ubuntu snap store,
+published list (`goog.json`) plus the metadata address (explicit metadata addresses like `EU_METADATA_ADDRESS` and `RU_METADATA_ADDRESS` are justified and used in the test environment). In production, these explicit metadata addresses must not be used; instead, the provider's own ranges are supplied without them. snapd (the Ubuntu snap store,
 `api.snapcraft.io` and its CDN) is allowed through the Canonical ranges taken
 from RIPEstat for AS41231. Neither list may overlap an RKN crawler range, so
 no crawler source can match these rules; the lists are re-checked against the
