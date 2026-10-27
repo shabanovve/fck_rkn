@@ -2252,6 +2252,12 @@ remain absent from RU deployment:
 - **Change:** Add these variables to `config/prod.env.example` and `EuProductionSettings` model. Use them to instantiate the `SshRunner` for `ru-server` instead of sharing `eu-server` credentials.
 - **Verify:** The interactive configuration prompts for them and correctly builds the env file. `prod-env-host` parses them and constructs the correct `ru-runner`.
 
+### 330. [ ] Rename RU_PROVIDER_NETWORKS to RU_SERVER_TO_GITHUB_ADDRESSES
+
+- **Source step:** New requirement to clarify that the addresses used for egress traffic to the provider actually represent GitHub addresses.
+- **Change:** Rename the constant `RU_PROVIDER_NETWORKS` to `RU_SERVER_TO_GITHUB_ADDRESSES` across all files, including `prod.env.example`, `production_config.py`, `production_setup.py`, `production_environment.py`, and `ru_firewall.py`. Update relevant test configurations and Markdown documentation (`DEVELOPMENT.md`, `DEVELOPMENT_PLAN.md`, `PROD_ENV_HOST.md`).
+- **Verify:** Tests must pass and interactively generating the environment file should prompt for the new constant name.
+
 ## Decisions that block dependent tasks
 
 - GCP project ID, billing/account, region/zone, Ubuntu image, VM size/cost,
