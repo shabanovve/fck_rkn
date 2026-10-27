@@ -331,7 +331,7 @@ is reported accurately.
   restarting it.
 - Restrict access to the test network and explicitly approved test-client
   sources. Do not create a public open proxy.
-- Configure the required host firewall rules inside the Ubuntu VM. GCP
+- Configure the required host firewall rules inside the Ubuntu VM. Specifically, the EU firewall must allow all incoming traffic from the `RU_SERVER_ADDRESS` so that tunnel checks (like ICMP) from `ru-server` are not dropped. GCP
   firewall rules may provide an additional boundary, but must not be the sole
   enforcement of the service's network policy.
 - Create `eu-server-test-agent` to check TCP port 3128 and issue an HTTP

@@ -2287,6 +2287,13 @@ remain absent from RU deployment:
 - **Verify:** `prod.env.example` has no `SET_TO_*` placeholders. Running interactive setup (`prod-env-host configure`) prompts for `RU_SERVER_TO_GITHUB_ADDRESSES` offering its predefined value from the example file as the default.
 
 
+
+### 335. [ ] Allow all traffic from ru-server on eu-server firewall
+
+- **Source step:** Analysis of EU-server firewall logs (`journalctl -k`) revealed that ICMP and other non-Outline traffic from `ru-server` is being dropped, causing `outline_client_check.sh` and tunnel checks to fail with "Empty reply from server". The current EU firewall rules only allow TCP/UDP on port 10001 from `ru-server`.
+- **Change:** Modify `src/fck_rkn/agents/eu_firewall.py` to allow all incoming traffic (`ip saddr <RU_SERVER_ADDRESS> accept`) from `ru-server`.
+- **Verify:** Generating and applying the EU firewall allows all packets from `RU_SERVER_ADDRESS`. Tests pass and remote connections from `ru-server` are not dropped.
+
 ## Decisions that block dependent tasks
 
 - GCP project ID, billing/account, region/zone, Ubuntu image, VM size/cost,
