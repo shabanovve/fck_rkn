@@ -297,7 +297,7 @@ class RuServerFirewallTests(unittest.TestCase):
                 "eu_outline_port": 10001,
                 "rkn_ipv4": ["192.0.2.0/24"],
                 "rkn_ipv6": ["2001:db8::/32"],
-                "provider_networks": ["198.51.100.0/24"],
+                "server_to_github_addresses": ["198.51.100.0/24"],
                 "snapd_networks": ["203.0.113.0/24"],
                 "github_networks": ["198.51.100.0/24", "2001:db9:2::/48"],
                 "vm_services": {

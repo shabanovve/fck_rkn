@@ -217,7 +217,7 @@ keeps these services working, with the narrowest possible scope.
 | Established/related replies | in/out | any | connection tracking |
 | DNS | out | UDP/TCP 53 | provider DNS resolver |
 | DHCP | out/in | UDP 67/68 | provider DHCP server |
-| Provider services (`ru-server` only) | out | TCP 80 and 443 | provider service network ranges, including the provider metadata address |
+| GitHub services (`ru-server` only) | out | TCP 80 and 443 | GitHub service network ranges |
 | snapd (`ru-server` only) | out | TCP 443 | Canonical network ranges (AS41231) |
 | Crawler blacklist refresh (`ru-server` only) | out | TCP 443 | GitHub API and web ranges from the published metadata endpoint |
 | NTP | out | UDP 123 | provider/approved time source |

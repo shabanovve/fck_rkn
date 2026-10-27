@@ -68,7 +68,7 @@ Required Phase 2B settings (optional for Phase 2A):
 | `RU_METADATA_ADDRESS`, `RU_DHCP_SERVER_ADDRESS` | IPv4 or IPv6 addresses of RU's metadata and DHCP services. |
 | `RU_DNS_ADDRESSES`, `RU_NTP_ADDRESSES` | Non-empty JSON arrays of RU DNS and NTP service addresses. |
 | `RU_LOCAL_NETWORKS` | Non-empty JSON array of RU local networks in strict CIDR notation. |
-| `RU_PROVIDER_NETWORKS` | Non-empty JSON array of production provider egress CIDRs, validated against the crawler blacklist. |
+| `RU_SERVER_TO_GITHUB_ADDRESSES` | Non-empty JSON array of GitHub egress CIDRs, validated against the crawler blacklist. |
 
 Server addresses are validated as IP addresses. `EU_SERVER_ADDRESS` must be
 the SSH-reachable address assigned to `eu-server`; DNS names are not accepted.
@@ -83,7 +83,7 @@ EU_DNS_ADDRESSES=["192.0.2.53","2001:db8::53"]
 EU_NTP_ADDRESSES=["192.0.2.123"]
 EU_LOCAL_NETWORKS=["192.0.2.0/24","2001:db8:1::/64"]
 RU_DNS_ADDRESSES=["192.0.2.54"]
-RU_PROVIDER_NETWORKS=["198.51.100.0/24"]
+RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]
 ```
 
 Replace every `SET_TO_*` placeholder with real settings for the selected
@@ -121,7 +121,7 @@ the loader checks the final file either way:
    SSH credentials, discovering read-only RU host settings (`RU_METADATA_ADDRESS`,
    `RU_DNS_ADDRESSES`, `RU_DHCP_SERVER_ADDRESS`, `RU_NTP_ADDRESSES`,
    `RU_LOCAL_NETWORKS`). Settings that cannot be determined automatically or whose
-   discovery failed (including `RU_PROVIDER_NETWORKS`) are requested from the
+   discovery failed (including `RU_SERVER_TO_GITHUB_ADDRESSES`) are requested from the
    operator explicitly, one by one, with the allowed form described in the
    prompt.
 4. Discovered and entered values are validated with the same rules as the

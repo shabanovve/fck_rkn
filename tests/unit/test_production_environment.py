@@ -38,6 +38,9 @@ def ru_settings() -> EuProductionSettings:
         RU_SERVER_ADDRESS="192.0.2.20",
         SSH_USER="deploy",
         SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
+        RU_SSH_USER="deploy",
+        RU_SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
+        RU_SSH_PORT=22,
         EU_METADATA_ADDRESS="192.0.2.1",
         EU_DNS_ADDRESSES=["192.0.2.53"],
         EU_DHCP_SERVER_ADDRESS="192.0.2.2",
@@ -48,7 +51,7 @@ def ru_settings() -> EuProductionSettings:
         RU_DHCP_SERVER_ADDRESS="192.0.2.3",
         RU_NTP_ADDRESSES=["192.0.2.124"],
         RU_LOCAL_NETWORKS=["192.0.3.0/24"],
-        RU_PROVIDER_NETWORKS=["198.51.100.0/24"],
+        RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"],
     )
 
 
@@ -84,7 +87,7 @@ class ProductionEnvironmentTests(unittest.TestCase):
     ) -> None:
         with self.assertRaises(ProductionConfigError) as ctx:
             production_environment.create_ru_runner(settings())
-        self.assertIn("RU_PROVIDER_NETWORKS", str(ctx.exception))
+        self.assertIn("RU_SERVER_TO_GITHUB_ADDRESSES", str(ctx.exception))
         self.assertIn("RU_DNS_ADDRESSES", str(ctx.exception))
 
     def test_load_ru_outline_image_loads_verified_artifact(self) -> None:
@@ -720,6 +723,7 @@ class ProductionDeployRuStageTests(unittest.TestCase):
         error = ProductionConfigError("Invalid production configuration")
         with (
             patch.object(production_environment.sys.stdin, "isatty", return_value=True),
+            patch("pathlib.Path.exists", return_value=True),
             patch.object(production_environment, "ensure_prod_config"),
             patch.object(
                 production_environment,

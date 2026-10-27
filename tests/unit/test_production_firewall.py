@@ -31,7 +31,7 @@ def settings(**overrides: object) -> EuProductionSettings:
         RU_DHCP_SERVER_ADDRESS="198.51.100.2",
         RU_NTP_ADDRESSES=["198.51.100.123"],
         RU_LOCAL_NETWORKS=["198.51.100.0/24"],
-        RU_PROVIDER_NETWORKS=["203.0.113.128/25"],
+        RU_SERVER_TO_GITHUB_ADDRESSES=["203.0.113.128/25"],
     )
     values.update(overrides)
     return EuProductionSettings(**values)
@@ -73,7 +73,7 @@ class PrepareEuFirewallInputTests(unittest.TestCase):
             "169.254.169.254",
             "crawler_source",
             "test_client",
-            "provider_networks",
+            "server_to_github_addresses",
             "snapd",
             "github",
         ):
@@ -138,7 +138,7 @@ class PrepareRuFirewallInputTests(unittest.TestCase):
         self.assertEqual(config["ssh_port"], 2222)
         self.assertEqual(config["rkn_ipv4"], ["203.0.113.0/25"])
         self.assertEqual(config["rkn_ipv6"], ["2001:db8:dead::/48"])
-        self.assertEqual(config["provider_networks"], ["203.0.113.128/25"])
+        self.assertEqual(config["server_to_github_addresses"], ["203.0.113.128/25"])
         self.assertEqual(config["github_networks"], ["198.51.100.128/25"])
         self.assertEqual(config["snapd_networks"], ["198.51.100.0/25"])
         self.assertEqual(

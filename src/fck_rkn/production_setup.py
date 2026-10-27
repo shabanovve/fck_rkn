@@ -198,10 +198,10 @@ def _parse(name: str, raw: str) -> object:
         "RU_DNS_ADDRESSES",
         "RU_NTP_ADDRESSES",
         "RU_LOCAL_NETWORKS",
-        "RU_PROVIDER_NETWORKS",
+        "RU_SERVER_TO_GITHUB_ADDRESSES",
     ):
         items = [item for item in re.split(r"[,\s]+", raw) if item]
-        if name in ("EU_LOCAL_NETWORKS", "RU_LOCAL_NETWORKS", "RU_PROVIDER_NETWORKS"):
+        if name in ("EU_LOCAL_NETWORKS", "RU_LOCAL_NETWORKS", "RU_SERVER_TO_GITHUB_ADDRESSES"):
             return EuProductionSettings.validate_local_networks(items)
         return EuProductionSettings.validate_address_lists(items)
     if name in ("SSH_USER", "RU_SSH_USER"):
@@ -230,7 +230,7 @@ HINTS = {
     "RU_DHCP_SERVER_ADDRESS": "IPv4 or IPv6 address of the RU DHCP server",
     "RU_NTP_ADDRESSES": "RU IPv4/IPv6 NTP server addresses, comma-separated",
     "RU_LOCAL_NETWORKS": "CIDR networks local to ru-server, comma-separated",
-    "RU_PROVIDER_NETWORKS": "production provider egress CIDRs, comma-separated",
+    "RU_SERVER_TO_GITHUB_ADDRESSES": "GitHub egress CIDRs, comma-separated",
 }
 
 
@@ -384,7 +384,7 @@ def configure_interactively(
         "RU_LOCAL_NETWORKS",
     ):
         values[name] = _ask(name, prompt, output, detected_ru.get(name))
-    values["RU_PROVIDER_NETWORKS"] = _ask("RU_PROVIDER_NETWORKS", prompt, output)
+    values["RU_SERVER_TO_GITHUB_ADDRESSES"] = _ask("RU_SERVER_TO_GITHUB_ADDRESSES", prompt, output)
 
     output("\nConfiguration to write:")
     for name, value in values.items():

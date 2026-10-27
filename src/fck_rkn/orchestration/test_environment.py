@@ -118,7 +118,7 @@ CANONICAL_RANGES_URL = (
     "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS41231"
 )
 SERVICE_RANGES_TIMEOUT_SECONDS = 30
-PROVIDER_CHECK_HOSTS = ("www.googleapis.com",)
+SERVER_TO_GITHUB_CHECK_HOSTS = ("www.googleapis.com",)
 OTHER_HOST_TEST_ADDRESS = "1.1.1.1"
 
 
@@ -246,8 +246,8 @@ def build_ru_firewall_configuration(
     other_host_address: str,
     rkn_ipv4: list[str],
     rkn_ipv6: list[str],
-    provider_networks: list[str],
-    provider_check_hosts: list[str],
+    server_to_github_addresses: list[str],
+    server_to_github_check_hosts: list[str],
     snapd_networks: list[str],
     github_networks: list[str],
     subnet_cidr: str,
@@ -267,8 +267,8 @@ def build_ru_firewall_configuration(
             ).compressed,
             "rkn_ipv4": rkn_ipv4,
             "rkn_ipv6": rkn_ipv6,
-            "provider_networks": provider_networks,
-            "provider_check_hosts": provider_check_hosts,
+            "server_to_github_addresses": server_to_github_addresses,
+            "server_to_github_check_hosts": server_to_github_check_hosts,
             "snapd_networks": snapd_networks,
             "github_networks": github_networks,
             "vm_services": _gcp_vm_services(subnet_cidr),
@@ -948,8 +948,8 @@ def _run(image_directory: Path) -> int:
             other_host_address=OTHER_HOST_TEST_ADDRESS,
             rkn_ipv4=rkn_ipv4,
             rkn_ipv6=rkn_ipv6,
-            provider_networks=google_networks,
-            provider_check_hosts=list(PROVIDER_CHECK_HOSTS),
+            server_to_github_addresses=google_networks,
+            server_to_github_check_hosts=list(SERVER_TO_GITHUB_CHECK_HOSTS),
             snapd_networks=snapd_networks,
             github_networks=github_networks,
             subnet_cidr=settings.GCP_SUBNET_CIDR,

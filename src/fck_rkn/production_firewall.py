@@ -77,7 +77,7 @@ def prepare_ru_firewall_input(
             "RU_DNS_ADDRESSES",
             "RU_NTP_ADDRESSES",
             "RU_LOCAL_NETWORKS",
-            "RU_PROVIDER_NETWORKS",
+            "RU_SERVER_TO_GITHUB_ADDRESSES",
         )
         if getattr(settings, name) is None
     ]
@@ -123,7 +123,7 @@ def prepare_ru_firewall_input(
             "ssh_port": settings.SSH_PORT,
             "rkn_ipv4": rkn_ipv4,
             "rkn_ipv6": rkn_ipv6,
-            "provider_networks": settings.RU_PROVIDER_NETWORKS,
+            "server_to_github_addresses": settings.RU_SERVER_TO_GITHUB_ADDRESSES,
             "snapd_networks": snapd_networks,
             "github_networks": github_networks,
             "vm_services": {

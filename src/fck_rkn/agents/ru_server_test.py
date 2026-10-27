@@ -206,19 +206,19 @@ def _load_firewall_test_config(config_json: str) -> dict:
     return config
 
 
-def _provider_check_hosts(config: dict) -> list[str]:
-    hosts = config.get("provider_check_hosts")
+def _server_to_github_check_hosts(config: dict) -> list[str]:
+    hosts = config.get("server_to_github_check_hosts")
     if not isinstance(hosts, list) or not hosts or not all(
         isinstance(host, str) and host.strip() for host in hosts
     ):
-        raise ValueError("provider_check_hosts must be a non-empty list of host names")
+        raise ValueError("server_to_github_check_hosts must be a non-empty list of host names")
     return hosts
 
 
 def _service_sets(config: dict) -> list[str]:
     """Name the address sets the generator creates for the supplied ranges."""
     names = []
-    for key, prefix in (("provider_networks", "provider"), ("snapd_networks", "snapd")):
+    for key, prefix in (("server_to_github_addresses", "server_to_github"), ("snapd_networks", "snapd")):
         versions = {ipaddress.ip_network(item).version for item in config[key]}
         names.extend(f"{prefix}_ipv{version}" for version in sorted(versions))
     return names
@@ -243,7 +243,7 @@ def build_firewall_check_input(config_json: str) -> str:
                 [services.metadata_address.compressed], "vm_service_address"
             ),
             "service_sets": _service_sets(config),
-            "service_hosts": [*_provider_check_hosts(config), SNAPD_CHECK_HOST],
+            "service_hosts": [*_server_to_github_check_hosts(config), SNAPD_CHECK_HOST],
             "ntp_address": _first_ipv4(
                 [address.compressed for address in services.ntp_addresses],
                 "ntp_addresses",

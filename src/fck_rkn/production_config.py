@@ -27,7 +27,7 @@ JSON_LIST_FIELDS = {
     "RU_DNS_ADDRESSES": "a JSON array of IPv4/IPv6 addresses",
     "RU_NTP_ADDRESSES": "a JSON array of IPv4/IPv6 addresses",
     "RU_LOCAL_NETWORKS": "a JSON array of CIDR networks",
-    "RU_PROVIDER_NETWORKS": "a JSON array of CIDR networks",
+    "RU_SERVER_TO_GITHUB_ADDRESSES": "a JSON array of CIDR networks",
 }
 OPTIONAL_RU_FIELDS = (
     "RU_SERVER_ADDRESS",
@@ -39,7 +39,7 @@ OPTIONAL_RU_FIELDS = (
     "RU_DHCP_SERVER_ADDRESS",
     "RU_NTP_ADDRESSES",
     "RU_LOCAL_NETWORKS",
-    "RU_PROVIDER_NETWORKS",
+    "RU_SERVER_TO_GITHUB_ADDRESSES",
 )
 
 
@@ -97,7 +97,7 @@ class EuProductionSettings(BaseSettings):
     RU_DHCP_SERVER_ADDRESS: str | None = None
     RU_NTP_ADDRESSES: list[str] | None = None
     RU_LOCAL_NETWORKS: list[str] | None = None
-    RU_PROVIDER_NETWORKS: list[str] | None = None
+    RU_SERVER_TO_GITHUB_ADDRESSES: list[str] | None = None
 
     @field_validator(
         "EU_SERVER_ADDRESS",
@@ -179,7 +179,7 @@ class EuProductionSettings(BaseSettings):
                 ) from error
         return result
 
-    @field_validator("EU_LOCAL_NETWORKS", "RU_LOCAL_NETWORKS", "RU_PROVIDER_NETWORKS")
+    @field_validator("EU_LOCAL_NETWORKS", "RU_LOCAL_NETWORKS", "RU_SERVER_TO_GITHUB_ADDRESSES")
     @classmethod
     def validate_local_networks(
         cls, values: list[str] | None

@@ -85,7 +85,7 @@ class ProductionConfigTests(unittest.TestCase):
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "2001:db8::53"])
         self.assertEqual(settings.EU_LOCAL_NETWORKS, ["192.0.2.0/24", "2001:db8:1::/64"])
         self.assertIsNone(settings.RU_METADATA_ADDRESS)
-        self.assertIsNone(settings.RU_PROVIDER_NETWORKS)
+        self.assertIsNone(settings.RU_SERVER_TO_GITHUB_ADDRESSES)
 
     def test_eu_only_configuration_does_not_require_ru_settings(self) -> None:
         self.config_path.parent.mkdir(parents=True)
@@ -98,7 +98,7 @@ class ProductionConfigTests(unittest.TestCase):
 
         self.assertIsNone(settings.RU_SERVER_ADDRESS)
         self.assertIsNone(settings.RU_DNS_ADDRESSES)
-        self.assertIsNone(settings.RU_PROVIDER_NETWORKS)
+        self.assertIsNone(settings.RU_SERVER_TO_GITHUB_ADDRESSES)
 
     def test_loads_and_normalizes_all_ru_settings(self) -> None:
         self.config_path.parent.mkdir(parents=True)
@@ -108,7 +108,7 @@ RU_DNS_ADDRESSES=["192.0.2.54","2001:db8::54"]
 RU_DHCP_SERVER_ADDRESS=192.0.2.3
 RU_NTP_ADDRESSES=["192.0.2.124"]
 RU_LOCAL_NETWORKS=["192.0.3.0/24","2001:db8:2::/64"]
-RU_PROVIDER_NETWORKS=["198.51.100.0/24","2001:db8:abcd::/48"]
+RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24","2001:db8:abcd::/48"]
 """
         self.config_path.write_text(complete, encoding="utf-8")
 
@@ -120,7 +120,7 @@ RU_PROVIDER_NETWORKS=["198.51.100.0/24","2001:db8:abcd::/48"]
         self.assertEqual(settings.RU_NTP_ADDRESSES, ["192.0.2.124"])
         self.assertEqual(settings.RU_LOCAL_NETWORKS, ["192.0.3.0/24", "2001:db8:2::/64"])
         self.assertEqual(
-            settings.RU_PROVIDER_NETWORKS,
+            settings.RU_SERVER_TO_GITHUB_ADDRESSES,
             ["198.51.100.0/24", "2001:db8:abcd::/48"],
         )
 
@@ -130,12 +130,12 @@ RU_PROVIDER_NETWORKS=["198.51.100.0/24","2001:db8:abcd::/48"]
             ("RU_SERVER_ADDRESS=192.0.2.20", "RU_SERVER_ADDRESS=ru.example.com"),
             ("RU_METADATA_ADDRESS=192.0.2.1", "RU_METADATA_ADDRESS=not-an-ip-secret"),
             ('RU_DNS_ADDRESSES=["192.0.2.54"]', "RU_DNS_ADDRESSES=not-json-secret"),
-            ('RU_PROVIDER_NETWORKS=["198.51.100.0/24"]', 'RU_PROVIDER_NETWORKS=["198.51.100.5/24"]'),
+            ('RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]', 'RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.5/24"]'),
         )
         valid = VALID + """\
 RU_METADATA_ADDRESS=192.0.2.1
 RU_DNS_ADDRESSES=["192.0.2.54"]
-RU_PROVIDER_NETWORKS=["198.51.100.0/24"]
+RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]
 """
         for old, new in invalid_variants:
             with self.subTest(value=new):
@@ -153,7 +153,7 @@ RU_PROVIDER_NETWORKS=["198.51.100.0/24"]
             "RU_DHCP_SERVER_ADDRESS",
             "RU_NTP_ADDRESSES",
             "RU_LOCAL_NETWORKS",
-            "RU_PROVIDER_NETWORKS",
+            "RU_SERVER_TO_GITHUB_ADDRESSES",
         ):
             with self.subTest(name=name):
                 self.assertRegex(template, rf"(?m)^{name}=$")

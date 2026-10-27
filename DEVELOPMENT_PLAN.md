@@ -173,7 +173,7 @@ The full planned schema, split by rollout stage, is:
 | Phase 2B: `RU_SERVER_ADDRESS` | Required single RU server IP address for RU SSH, Outline service binding, and RU firewall policy. It is optional for the EU-only stage. |
 | Phase 2B: `RU_SSH_USER`, `RU_SSH_KEY_PATH`, `RU_SSH_PORT` | Separate SSH connection settings for the RU server. The username and private keys can be different from the EU server. These are required for Phase 2B but optional for Phase 2A. |
 | Phase 2B: `RU_METADATA_ADDRESS`, `RU_DNS_ADDRESSES`, `RU_DHCP_SERVER_ADDRESS`, `RU_NTP_ADDRESSES`, `RU_LOCAL_NETWORKS` | Required RU host service values; keep them separate from EU values because the hosts may use different networks. These fields are optional for the EU-only stage. |
-| Phase 2B: `RU_PROVIDER_NETWORKS` | Required IPv4/IPv6 CIDR list for the production provider services that `ru-server` must reach on TCP/80 and TCP/443. Source it from the selected provider's published ranges and validate it against the crawler blacklist. Optional for the EU-only stage. |
+| Phase 2B: `RU_SERVER_TO_GITHUB_ADDRESSES` | Required IPv4/IPv6 CIDR list for the GitHub services that `ru-server` must reach on TCP/80 and TCP/443. Source it from the GitHub's published ranges and validate it against the crawler blacklist. Optional for the EU-only stage. |
 
 Address-list and network-list values must have a documented, unambiguous
 encoding (JSON arrays are preferred), strict validation, and a non-empty

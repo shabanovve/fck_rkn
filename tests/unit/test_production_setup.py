@@ -145,7 +145,7 @@ class ProductionSetupTests(unittest.TestCase):
         self.assertEqual(settings.RU_DNS_ADDRESSES, ["192.0.2.53", "2001:db8::53"])
         self.assertEqual(settings.RU_DHCP_SERVER_ADDRESS, "192.0.2.2")
         self.assertEqual(settings.RU_NTP_ADDRESSES, ["192.0.2.123"])
-        self.assertEqual(settings.RU_PROVIDER_NETWORKS, ["198.51.100.0/24"])
+        self.assertEqual(settings.RU_SERVER_TO_GITHUB_ADDRESSES, ["198.51.100.0/24"])
         self.assertEqual(settings.EU_LOCAL_NETWORKS, ["192.0.2.0/24"])
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "2001:db8::53"])
         self.assertEqual(settings.EU_DHCP_SERVER_ADDRESS, "192.0.2.2")
@@ -154,7 +154,7 @@ class ProductionSetupTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
         self.assertIn("# IPv4 or IPv6 address assigned to eu-server", self.path.read_text())
         self.assertTrue(any("detected" in prompt for prompt in session.prompts))
-        self.assertTrue(any("RU_PROVIDER_NETWORKS" in prompt for prompt in session.prompts))
+        self.assertTrue(any("RU_SERVER_TO_GITHUB_ADDRESSES" in prompt for prompt in session.prompts))
 
     def test_discovery_only_runs_read_only_queries(self) -> None:
         runner = ScriptedRunner(FULL)
@@ -194,7 +194,7 @@ class ProductionSetupTests(unittest.TestCase):
         settings = load_eu_production_settings(self.path)
         self.assertEqual(settings.SSH_PORT, 2222)
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "192.0.2.54"])
-        self.assertEqual(settings.RU_PROVIDER_NETWORKS, ["198.51.100.0/24", "2001:db8:abcd::/48"])
+        self.assertEqual(settings.RU_SERVER_TO_GITHUB_ADDRESSES, ["198.51.100.0/24", "2001:db8:abcd::/48"])
         self.assertTrue(any("EU_METADATA_ADDRESS" in l for l in session.lines))
 
     def test_ssh_failure_writes_nothing(self) -> None:

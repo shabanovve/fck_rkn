@@ -105,8 +105,8 @@ class RuFirewallCheckTests(unittest.TestCase):
                 "eu_outline_address": "10.0.0.2",
                 "eu_outline_port": 10001,
                 "other_host_address": "10.0.0.4",
-                "provider_networks": ["198.51.100.0/24", "2001:db9:1::/48"],
-                "provider_check_hosts": ["provider-api.example"],
+                "server_to_github_addresses": ["198.51.100.0/24", "2001:db9:1::/48"],
+                "server_to_github_check_hosts": ["github-api.example"],
                 "snapd_networks": ["203.0.113.0/24"],
                 "vm_services": {
                     "metadata_address": "10.0.0.250",
@@ -128,14 +128,14 @@ class RuFirewallCheckTests(unittest.TestCase):
         self.assertIn('DST=$service_ip ', script)
         self.assertIn("No denial is logged for the allowed service addresses", script)
 
-    def test_policy_input_requires_provider_check_hosts(self) -> None:
+    def test_policy_input_requires_server_to_github_check_hosts(self) -> None:
         for value in (None, [], [""], "host", [5]):
             with self.subTest(value=value):
                 config = json.loads(self.config())
                 if value is None:
-                    del config["provider_check_hosts"]
+                    del config["server_to_github_check_hosts"]
                 else:
-                    config["provider_check_hosts"] = value
+                    config["server_to_github_check_hosts"] = value
                 with self.assertRaises(ValueError):
                     build_firewall_check_input(json.dumps(config))
 
@@ -179,10 +179,10 @@ class RuFirewallCheckTests(unittest.TestCase):
         self.assertEqual(data["ntp_address"], "10.0.0.253")
         self.assertEqual(data["ssh_port"], 22)
         self.assertEqual(
-            data["service_sets"], ["provider_ipv4", "provider_ipv6", "snapd_ipv4"]
+            data["service_sets"], ["server_to_github_ipv4", "server_to_github_ipv6", "snapd_ipv4"]
         )
         self.assertEqual(
-            data["service_hosts"], ["provider-api.example", "api.snapcraft.io"]
+            data["service_hosts"], ["github-api.example", "api.snapcraft.io"]
         )
         self.assertEqual(data["eu_outline_port"], 10001)
         self.assertNotIn("test_client_address", data)

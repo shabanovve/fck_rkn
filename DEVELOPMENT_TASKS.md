@@ -1860,7 +1860,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   as the single RU server address for both controller SSH and server-side
   service/firewall configuration.
   Add `RU_METADATA_ADDRESS`, `RU_DNS_ADDRESSES`, `RU_DHCP_SERVER_ADDRESS`,
-  `RU_NTP_ADDRESSES`, `RU_LOCAL_NETWORKS`, and `RU_PROVIDER_NETWORKS`. Introduce separate SSH connection settings (`RU_SSH_USER`, `RU_SSH_KEY_PATH`, `RU_SSH_PORT`) for `ru-server`. Keep every RU-only field optional for the
+  `RU_NTP_ADDRESSES`, `RU_LOCAL_NETWORKS`, and `RU_SERVER_TO_GITHUB_ADDRESSES`. Introduce separate SSH connection settings (`RU_SSH_USER`, `RU_SSH_KEY_PATH`, `RU_SSH_PORT`) for `ru-server`. Keep every RU-only field optional for the
   EU-only stage.
 - **Verify:** Cover valid/missing/placeholder/malformed values, strict IP,
   CIDR and JSON-list validation, and provider CIDR validation. Prove EU-only
@@ -1890,7 +1890,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   prevent an otherwise valid EU-only run.
 - **Result:** `fck_rkn/production_setup.py` supports read-only SSH discovery
   for RU host settings, prompting for undiscoverable or ambiguous values
-  including `RU_PROVIDER_NETWORKS`. Validated entries are written atomically
+  including `RU_SERVER_TO_GITHUB_ADDRESSES`. Validated entries are written atomically
   with mode 0600. Tests cover discovery, fallback prompts, input validation,
   declined/canceled runs, SSH failure, and existing valid EU configurations.
 
@@ -2058,7 +2058,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Production adaptation:** Build a validated RU firewall input only after
   RU services and forwarding checks pass. Use `RU_SERVER_ADDRESS`, the
   protected EU key's endpoint/port, RU service settings and
-  `RU_PROVIDER_NETWORKS`; obtain and validate the live RKN, GitHub and
+  `RU_SERVER_TO_GITHUB_ADDRESSES`; obtain and validate the live RKN, GitHub and
   Canonical ranges through provider-independent shared helpers. Do not use
   GCP VM service values, Google test ranges, `OTHER_HOST_TEST_ADDRESS`,
   crawler-probe addresses, `config/last_run/` or test-client keys.
@@ -2252,10 +2252,10 @@ remain absent from RU deployment:
 - **Change:** Add these variables to `config/prod.env.example` and `EuProductionSettings` model. Use them to instantiate the `SshRunner` for `ru-server` instead of sharing `eu-server` credentials.
 - **Verify:** The interactive configuration prompts for them and correctly builds the env file. `prod-env-host` parses them and constructs the correct `ru-runner`.
 
-### 330. [ ] Rename RU_PROVIDER_NETWORKS to RU_SERVER_TO_GITHUB_ADDRESSES
+### 330. [x] Rename RU_PROVIDER_NETWORKS to RU_SERVER_TO_GITHUB_ADDRESSES
 
 - **Source step:** New requirement to clarify that the addresses used for egress traffic to the provider actually represent GitHub addresses.
-- **Change:** Rename the constant `RU_PROVIDER_NETWORKS` to `RU_SERVER_TO_GITHUB_ADDRESSES` across all files, including `prod.env.example`, `production_config.py`, `production_setup.py`, `production_environment.py`, and `ru_firewall.py`. Update relevant test configurations and Markdown documentation (`DEVELOPMENT.md`, `DEVELOPMENT_PLAN.md`, `PROD_ENV_HOST.md`).
+- **Change:** Rename the constant `RU_SERVER_TO_GITHUB_ADDRESSES` to `RU_SERVER_TO_GITHUB_ADDRESSES` across all files, including `prod.env.example`, `production_config.py`, `production_setup.py`, `production_environment.py`, and `ru_firewall.py`. Update relevant test configurations and Markdown documentation (`DEVELOPMENT.md`, `DEVELOPMENT_PLAN.md`, `PROD_ENV_HOST.md`).
 - **Verify:** Tests must pass and interactively generating the environment file should prompt for the new constant name.
 
 ## Decisions that block dependent tasks

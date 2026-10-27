@@ -85,7 +85,7 @@ def validate_ru_settings(settings: EuProductionSettings) -> None:
             "RU_DNS_ADDRESSES",
             "RU_NTP_ADDRESSES",
             "RU_LOCAL_NETWORKS",
-            "RU_PROVIDER_NETWORKS",
+            "RU_SERVER_TO_GITHUB_ADDRESSES",
         )
         if getattr(settings, field) is None
     ]

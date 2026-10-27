@@ -23,7 +23,7 @@ TABLE_NAME = "fck_rkn_ru"
 RU_OUTLINE_ACCESS_PORT = 10001
 EU_SERVICE_PORTS = (3128, 8443)
 DEFAULT_SSH_PORT = 22
-PROVIDER_SERVICE_PORTS = (80, 443)
+SERVER_TO_GITHUB_PORTS = (80, 443)
 SNAPD_PORT = 443
 
 
@@ -67,12 +67,12 @@ def build_ru_firewall_rules(config_json: str) -> str:
         raise ValueError("ssh_port must be between 1 and 65535")
     rkn_sets = rkn_sets_block(config)
     crawlers = rkn_networks(config)
-    provider_sets = service_sets_block(config, "provider_networks", "provider", crawlers)
+    server_to_github_sets = service_sets_block(config, "server_to_github_addresses", "server_to_github", crawlers)
     snapd_sets = service_sets_block(config, "snapd_networks", "snapd", crawlers)
     github_sets = service_sets_block(config, "github_networks", "github", crawlers)
     service_networks = [
         ipaddress.ip_network(item)
-        for key in ("provider_networks", "snapd_networks", "github_networks")
+        for key in ("server_to_github_addresses", "snapd_networks", "github_networks")
         for item in config[key]
     ]
     for protected in (eu_server, outline_server):
@@ -89,13 +89,13 @@ def build_ru_firewall_rules(config_json: str) -> str:
     direct_eu_match = (
         f"{address_match('daddr', eu_server)} tcp dport {{ {eu_service_ports} }}"
     )
-    provider_ports = ", ".join(map(str, PROVIDER_SERVICE_PORTS))
+    server_to_github_ports = ", ".join(map(str, SERVER_TO_GITHUB_PORTS))
     service_output_rules = []
     for family in ("ipv4", "ipv6"):
         match = "ip" if family == "ipv4" else "ip6"
-        if f"set provider_{family} " in provider_sets:
+        if f"set server_to_github_{family} " in server_to_github_sets:
             service_output_rules.append(
-                f"{match} daddr @provider_{family} tcp dport {{ {provider_ports} }} accept"
+                f"{match} daddr @server_to_github_{family} tcp dport {{ {server_to_github_ports} }} accept"
             )
         if f"set snapd_{family} " in snapd_sets:
             service_output_rules.append(
@@ -134,7 +134,7 @@ def build_ru_firewall_rules(config_json: str) -> str:
     return f"""destroy table inet {TABLE_NAME}
 table inet {TABLE_NAME} {{
 {rkn_sets}
-{provider_sets}
+{server_to_github_sets}
 {snapd_sets}
 {github_sets}
   chain input {{

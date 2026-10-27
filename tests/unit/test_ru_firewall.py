@@ -18,7 +18,7 @@ def valid_config(**overrides: object) -> str:
         "eu_outline_port": 10001,
         "rkn_ipv4": ["192.0.2.0/24"],
         "rkn_ipv6": ["2001:db8::/32"],
-        "provider_networks": ["198.51.100.0/24", "2001:db9:1::/48"],
+        "server_to_github_addresses": ["198.51.100.0/24", "2001:db9:1::/48"],
         "snapd_networks": ["203.0.113.0/24"],
         "github_networks": ["198.51.100.0/24", "2001:db9:2::/48"],
         "vm_services": {
@@ -42,29 +42,29 @@ class RuServiceRuleTests(unittest.TestCase):
     def test_provider_and_snapd_are_allowed_outward_after_minimal_rules(self) -> None:
         output = chain(build_ru_firewall_rules(valid_config()), "output")
 
-        self.assertIn("ip daddr @provider_ipv4 tcp dport { 80, 443 } accept", output)
-        self.assertIn("ip6 daddr @provider_ipv6 tcp dport { 80, 443 } accept", output)
+        self.assertIn("ip daddr @server_to_github_ipv4 tcp dport { 80, 443 } accept", output)
+        self.assertIn("ip6 daddr @server_to_github_ipv6 tcp dport { 80, 443 } accept", output)
         self.assertIn("ip daddr @snapd_ipv4 tcp dport 443 accept", output)
         self.assertIn("ip daddr @github_ipv4 tcp dport 443 accept", output)
         self.assertIn("ip6 daddr @github_ipv6 tcp dport 443 accept", output)
         self.assertNotIn("@snapd_ipv6", output)
         self.assertLess(
             output.index("169.254.169.254 tcp dport { 80, 443 } accept"),
-            output.index("@provider_ipv4"),
+            output.index("@server_to_github_ipv4"),
         )
         self.assertLess(
             output.index("@snapd_ipv4"), output.index("fck-rkn ru output denied")
         )
         self.assertLess(
-            output.index("@provider_ipv4"), output.index("direct-eu-service")
+            output.index("@server_to_github_ipv4"), output.index("direct-eu-service")
         )
 
     def test_service_sets_contain_the_supplied_ranges(self) -> None:
         rules = build_ru_firewall_rules(valid_config())
 
-        self.assertIn("set provider_ipv4", rules)
+        self.assertIn("set server_to_github_ipv4", rules)
         self.assertIn("198.51.100.0/24", rules)
-        self.assertIn("set provider_ipv6", rules)
+        self.assertIn("set server_to_github_ipv6", rules)
         self.assertIn("set snapd_ipv4", rules)
         self.assertNotIn("set snapd_ipv6", rules)
         self.assertIn("set github_ipv4", rules)
@@ -72,13 +72,13 @@ class RuServiceRuleTests(unittest.TestCase):
 
     def test_invalid_service_ranges_are_rejected(self) -> None:
         cases = {
-            "missing": {"provider_networks": None},
+            "missing": {"server_to_github_addresses": None},
             "empty": {"snapd_networks": []},
-            "invalid": {"provider_networks": ["not-a-network"]},
+            "invalid": {"server_to_github_addresses": ["not-a-network"]},
             "non-string": {"snapd_networks": [5]},
-            "crawler overlap": {"provider_networks": ["192.0.2.128/25"]},
+            "crawler overlap": {"server_to_github_addresses": ["192.0.2.128/25"]},
             "ipv6 crawler overlap": {"snapd_networks": ["2001:db8:5::/48"]},
-            "covers eu": {"provider_networks": ["10.0.0.0/24"]},
+            "covers eu": {"server_to_github_addresses": ["10.0.0.0/24"]},
             "too many": {
                 "snapd_networks": [f"203.0.{i // 256}.{i % 256}/32" for i in range(2001)]
             },
