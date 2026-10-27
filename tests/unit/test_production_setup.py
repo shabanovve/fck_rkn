@@ -150,7 +150,6 @@ class ProductionSetupTests(unittest.TestCase):
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "2001:db8::53"])
         self.assertEqual(settings.EU_DHCP_SERVER_ADDRESS, "192.0.2.2")
         self.assertEqual(settings.EU_NTP_ADDRESSES, ["192.0.2.123"])
-        self.assertEqual(settings.EU_METADATA_ADDRESS, "169.254.169.254")
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
         self.assertIn("# IPv4 or IPv6 address assigned to eu-server", self.path.read_text())
         self.assertTrue(any("detected" in prompt for prompt in session.prompts))
@@ -176,12 +175,10 @@ class ProductionSetupTests(unittest.TestCase):
             "",
             "",
             "bad",
-            "192.0.2.1",
             "192.0.2.53, 192.0.2.54",
             "192.0.2.2",
             "192.0.2.123",
             "192.0.2.0/24",
-            "192.0.2.1",
             "192.0.2.54, 2001:db8::54",
             "192.0.2.3",
             "192.0.2.124",
@@ -195,7 +192,6 @@ class ProductionSetupTests(unittest.TestCase):
         self.assertEqual(settings.SSH_PORT, 2222)
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "192.0.2.54"])
         self.assertEqual(settings.RU_SERVER_TO_GITHUB_ADDRESSES, ["198.51.100.0/24", "2001:db8:abcd::/48"])
-        self.assertTrue(any("EU_METADATA_ADDRESS" in l for l in session.lines))
 
     def test_ssh_failure_writes_nothing(self) -> None:
         runner = ScriptedRunner(FULL, connect=255)
@@ -231,7 +227,6 @@ class ProductionSetupTests(unittest.TestCase):
             "SSH_KEY_PATH=/keys/id\n"
             "SSH_PORT=22\n"
             "RU_SERVER_ADDRESS=192.0.2.20\n"
-            "EU_METADATA_ADDRESS=192.0.2.1\n"
             'EU_DNS_ADDRESSES=["192.0.2.53"]\n'
             "EU_DHCP_SERVER_ADDRESS=192.0.2.2\n"
             'EU_NTP_ADDRESSES=["192.0.2.123"]\n'

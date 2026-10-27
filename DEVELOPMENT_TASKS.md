@@ -2259,13 +2259,13 @@ remain absent from RU deployment:
 - **Verify:** Tests must pass and interactively generating the environment file should prompt for the new constant name.
 
 
-### 331. [ ] Remove EU_METADATA_ADDRESS from production configuration
+### 331. [x] Remove EU_METADATA_ADDRESS from production configuration
 
 - **Source step:** Clarification that `EU_METADATA_ADDRESS` must not be used in production. Its use is only justified in the test environment.
 - **Change:** Remove `EU_METADATA_ADDRESS` from `config/prod.env.example`, the `ProductionSettings` models, production deployment scripts, production orchestration logic, and all production-related unit tests. Ensure it remains in test environment configurations.
 - **Verify:** Production tests must pass without referring to `EU_METADATA_ADDRESS`. The production environment configuration should no longer prompt for or require it.
 
-### 332. [ ] Remove RU_METADATA_ADDRESS from production configuration
+### 332. [x] Remove RU_METADATA_ADDRESS from production configuration
 
 - **Source step:** Clarification that `RU_METADATA_ADDRESS` must not be used in production. Its use is only justified in the test environment.
 - **Change:** Remove `RU_METADATA_ADDRESS` from `config/prod.env.example`, the `ProductionSettings` models, production deployment scripts, production orchestration logic, and all production-related unit tests. Ensure it remains in test environment configurations.

@@ -34,7 +34,6 @@ OPTIONAL_RU_FIELDS = (
     "RU_SSH_USER",
     "RU_SSH_KEY_PATH",
     "RU_SSH_PORT",
-    "RU_METADATA_ADDRESS",
     "RU_DNS_ADDRESSES",
     "RU_DHCP_SERVER_ADDRESS",
     "RU_NTP_ADDRESSES",
@@ -87,12 +86,10 @@ class EuProductionSettings(BaseSettings):
     RU_SSH_USER: str | None = None
     RU_SSH_KEY_PATH: Path | None = None
     RU_SSH_PORT: int | None = None
-    EU_METADATA_ADDRESS: str = Field(min_length=1)
     EU_DNS_ADDRESSES: list[str]
     EU_DHCP_SERVER_ADDRESS: str = Field(min_length=1)
     EU_NTP_ADDRESSES: list[str]
     EU_LOCAL_NETWORKS: list[str]
-    RU_METADATA_ADDRESS: str | None = None
     RU_DNS_ADDRESSES: list[str] | None = None
     RU_DHCP_SERVER_ADDRESS: str | None = None
     RU_NTP_ADDRESSES: list[str] | None = None
@@ -104,10 +101,8 @@ class EuProductionSettings(BaseSettings):
         "RU_SERVER_ADDRESS",
         "SSH_USER",
         "RU_SSH_USER",
-        "EU_METADATA_ADDRESS",
         "EU_DHCP_SERVER_ADDRESS",
-        "RU_METADATA_ADDRESS",
-        "RU_DHCP_SERVER_ADDRESS",
+            "RU_DHCP_SERVER_ADDRESS",
         mode="before",
     )
     @classmethod
@@ -121,10 +116,8 @@ class EuProductionSettings(BaseSettings):
     @field_validator(
         "EU_SERVER_ADDRESS",
         "RU_SERVER_ADDRESS",
-        "EU_METADATA_ADDRESS",
         "EU_DHCP_SERVER_ADDRESS",
-        "RU_METADATA_ADDRESS",
-        "RU_DHCP_SERVER_ADDRESS",
+            "RU_DHCP_SERVER_ADDRESS",
     )
     @classmethod
     def validate_ip_address(cls, value: str | None) -> str | None:

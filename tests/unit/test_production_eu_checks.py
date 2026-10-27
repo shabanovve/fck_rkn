@@ -69,7 +69,6 @@ def stage_settings() -> EuProductionSettings:
         RU_SERVER_ADDRESS="192.0.2.20",
         SSH_USER="deploy",
         SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
-        EU_METADATA_ADDRESS="192.0.2.1",
         EU_DNS_ADDRESSES=["192.0.2.53"],
         EU_DHCP_SERVER_ADDRESS="192.0.2.2",
         EU_NTP_ADDRESSES=["192.0.2.123"],

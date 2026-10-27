@@ -80,7 +80,6 @@ def validate_ru_settings(settings: EuProductionSettings) -> None:
             "RU_SSH_USER",
             "RU_SSH_KEY_PATH",
             "RU_SSH_PORT",
-            "RU_METADATA_ADDRESS",
             "RU_DHCP_SERVER_ADDRESS",
             "RU_DNS_ADDRESSES",
             "RU_NTP_ADDRESSES",

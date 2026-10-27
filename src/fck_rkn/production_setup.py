@@ -152,9 +152,6 @@ def discover_eu_settings(runner: RemoteRunner) -> dict[str, object]:
         if not values:
             continue
         found[name] = values[0] if name == "EU_DHCP_SERVER_ADDRESS" else values
-    exit_code, _ = _query(runner, METADATA_COMMAND)
-    if exit_code == 0:
-        found["EU_METADATA_ADDRESS"] = METADATA_CANDIDATE
     return found
 
 
@@ -174,9 +171,6 @@ def discover_ru_settings(runner: RemoteRunner) -> dict[str, object]:
             found[name] = (
                 values[0] if name == "RU_DHCP_SERVER_ADDRESS" else values
             )
-    exit_code, _ = _query(runner, METADATA_COMMAND)
-    if exit_code == 0:
-        found["RU_METADATA_ADDRESS"] = METADATA_CANDIDATE
     return found
 
 
@@ -220,12 +214,10 @@ HINTS = {
     "RU_SSH_USER": "SSH account on ru-server",
     "RU_SSH_KEY_PATH": "absolute path to the RU SSH private key on this machine",
     "RU_SSH_PORT": "RU SSH TCP port",
-    "EU_METADATA_ADDRESS": "IPv4 or IPv6 address of the provider metadata service",
     "EU_DNS_ADDRESSES": "IPv4/IPv6 resolver addresses, comma-separated",
     "EU_DHCP_SERVER_ADDRESS": "IPv4 address of the DHCP server",
     "EU_NTP_ADDRESSES": "IPv4/IPv6 NTP server addresses, comma-separated",
     "EU_LOCAL_NETWORKS": "CIDR networks local to eu-server, comma-separated",
-    "RU_METADATA_ADDRESS": "IPv4 or IPv6 address of the RU provider metadata service",
     "RU_DNS_ADDRESSES": "RU IPv4/IPv6 resolver addresses, comma-separated",
     "RU_DHCP_SERVER_ADDRESS": "IPv4 or IPv6 address of the RU DHCP server",
     "RU_NTP_ADDRESSES": "RU IPv4/IPv6 NTP server addresses, comma-separated",
@@ -352,7 +344,6 @@ def configure_interactively(
         values[name] = _ask(name, prompt, output, default=default)
 
     for name in (
-        "EU_METADATA_ADDRESS",
         "EU_DNS_ADDRESSES",
         "EU_DHCP_SERVER_ADDRESS",
         "EU_NTP_ADDRESSES",
@@ -377,7 +368,6 @@ def configure_interactively(
     output("Connected. Detecting settings on ru-server (read-only)...")
     detected_ru = discover_ru_settings(ru_runner)
     for name in (
-        "RU_METADATA_ADDRESS",
         "RU_DNS_ADDRESSES",
         "RU_DHCP_SERVER_ADDRESS",
         "RU_NTP_ADDRESSES",

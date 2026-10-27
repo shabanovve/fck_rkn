@@ -21,12 +21,10 @@ def settings(**overrides: object) -> EuProductionSettings:
         SSH_USER="deploy",
         SSH_KEY_PATH=Path("/run/secrets/deploy_key"),
         SSH_PORT=2222,
-        EU_METADATA_ADDRESS="192.0.2.1",
         EU_DNS_ADDRESSES=["192.0.2.53", "2001:db8::53"],
         EU_DHCP_SERVER_ADDRESS="192.0.2.2",
         EU_NTP_ADDRESSES=["192.0.2.123"],
         EU_LOCAL_NETWORKS=["192.0.2.0/24"],
-        RU_METADATA_ADDRESS="198.51.100.1",
         RU_DNS_ADDRESSES=["198.51.100.53"],
         RU_DHCP_SERVER_ADDRESS="198.51.100.2",
         RU_NTP_ADDRESSES=["198.51.100.123"],
@@ -52,7 +50,6 @@ class PrepareEuFirewallInputTests(unittest.TestCase):
         self.assertEqual(
             config["vm_services"],
             {
-                "metadata_address": "192.0.2.1",
                 "dns_addresses": ["192.0.2.53", "2001:db8::53"],
                 "dhcp_server_address": "192.0.2.2",
                 "ntp_addresses": ["192.0.2.123"],
@@ -144,7 +141,6 @@ class PrepareRuFirewallInputTests(unittest.TestCase):
         self.assertEqual(
             config["vm_services"],
             {
-                "metadata_address": "198.51.100.1",
                 "dns_addresses": ["198.51.100.53"],
                 "dhcp_server_address": "198.51.100.2",
                 "ntp_addresses": ["198.51.100.123"],

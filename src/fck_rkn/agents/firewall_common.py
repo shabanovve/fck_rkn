@@ -61,7 +61,7 @@ def _address_set(addresses: list[IPAddress], prefix: str) -> list[str]:
 class MinimalVmServices:
     """Provider-specific addresses of the services a VM needs to stay healthy."""
 
-    metadata_address: IPAddress
+    metadata_address: IPAddress | None
     dns_addresses: list[IPAddress]
     dhcp_server_address: ipaddress.IPv4Address
     ntp_addresses: list[IPAddress]
@@ -87,9 +87,7 @@ def parse_minimal_vm_services(config: object) -> MinimalVmServices:
         except ValueError as error:
             raise ValueError("local_networks contains an invalid network") from error
     return MinimalVmServices(
-        metadata_address=parse_address(
-            config.get("metadata_address"), "metadata_address"
-        ),
+        metadata_address=parse_address(config.get("metadata_address"), "metadata_address") if config.get("metadata_address") else None,
         dns_addresses=_address_list(config.get("dns_addresses"), "dns_addresses"),
         dhcp_server_address=dhcp,
         ntp_addresses=_address_list(config.get("ntp_addresses"), "ntp_addresses"),
@@ -127,8 +125,9 @@ def minimal_output_rules(services: MinimalVmServices) -> list[str]:
         f"{match} meta l4proto {{ tcp, udp }} th dport 53 accept"
         for match in _address_set(services.dns_addresses, "daddr")
     ]
+    if metadata:
+        rules.append(f"{address_match('daddr', metadata)} tcp dport {{ 80, 443 }} accept")
     rules += [
-        f"{address_match('daddr', metadata)} tcp dport {{ 80, 443 }} accept",
         f"ip daddr {{ {services.dhcp_server_address.compressed}, "
         f"{DHCPV4_BROADCAST} }} udp sport 68 udp dport 67 accept",
         f"ip6 daddr {DHCPV6_SERVERS} udp sport 546 udp dport 547 accept",

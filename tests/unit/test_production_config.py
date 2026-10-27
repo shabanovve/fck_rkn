@@ -22,7 +22,6 @@ RU_SERVER_ADDRESS=192.0.2.20
 SSH_USER=deploy
 SSH_KEY_PATH=/run/secrets/fck-rkn/deploy_key
 SSH_PORT=2222
-EU_METADATA_ADDRESS=192.0.2.1
 EU_DNS_ADDRESSES=["192.0.2.53","2001:db8::53"]
 EU_DHCP_SERVER_ADDRESS=192.0.2.2
 EU_NTP_ADDRESSES=["192.0.2.123"]
@@ -84,7 +83,6 @@ class ProductionConfigTests(unittest.TestCase):
         self.assertEqual(settings.SSH_PORT, 2222)
         self.assertEqual(settings.EU_DNS_ADDRESSES, ["192.0.2.53", "2001:db8::53"])
         self.assertEqual(settings.EU_LOCAL_NETWORKS, ["192.0.2.0/24", "2001:db8:1::/64"])
-        self.assertIsNone(settings.RU_METADATA_ADDRESS)
         self.assertIsNone(settings.RU_SERVER_TO_GITHUB_ADDRESSES)
 
     def test_eu_only_configuration_does_not_require_ru_settings(self) -> None:
@@ -103,7 +101,6 @@ class ProductionConfigTests(unittest.TestCase):
     def test_loads_and_normalizes_all_ru_settings(self) -> None:
         self.config_path.parent.mkdir(parents=True)
         complete = VALID + """\
-RU_METADATA_ADDRESS=2001:0db8::1
 RU_DNS_ADDRESSES=["192.0.2.54","2001:db8::54"]
 RU_DHCP_SERVER_ADDRESS=192.0.2.3
 RU_NTP_ADDRESSES=["192.0.2.124"]
@@ -114,7 +111,6 @@ RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24","2001:db8:abcd::/48"]
 
         settings = load_eu_production_settings(self.config_path)
 
-        self.assertEqual(settings.RU_METADATA_ADDRESS, "2001:db8::1")
         self.assertEqual(settings.RU_DNS_ADDRESSES, ["192.0.2.54", "2001:db8::54"])
         self.assertEqual(settings.RU_DHCP_SERVER_ADDRESS, "192.0.2.3")
         self.assertEqual(settings.RU_NTP_ADDRESSES, ["192.0.2.124"])
@@ -128,12 +124,10 @@ RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24","2001:db8:abcd::/48"]
         self.config_path.parent.mkdir(parents=True)
         invalid_variants = (
             ("RU_SERVER_ADDRESS=192.0.2.20", "RU_SERVER_ADDRESS=ru.example.com"),
-            ("RU_METADATA_ADDRESS=192.0.2.1", "RU_METADATA_ADDRESS=not-an-ip-secret"),
             ('RU_DNS_ADDRESSES=["192.0.2.54"]', "RU_DNS_ADDRESSES=not-json-secret"),
             ('RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]', 'RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.5/24"]'),
         )
         valid = VALID + """\
-RU_METADATA_ADDRESS=192.0.2.1
 RU_DNS_ADDRESSES=["192.0.2.54"]
 RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]
 """
@@ -148,7 +142,6 @@ RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]
         template = PROD_TEMPLATE_FILE.read_text(encoding="utf-8")
         for name in (
             "RU_SERVER_ADDRESS",
-            "RU_METADATA_ADDRESS",
             "RU_DNS_ADDRESSES",
             "RU_DHCP_SERVER_ADDRESS",
             "RU_NTP_ADDRESSES",
@@ -331,8 +324,8 @@ RU_SERVER_TO_GITHUB_ADDRESSES=["198.51.100.0/24"]
         with self.assertRaises(ProductionDotenvSyntaxError) as raised:
             load_eu_production_settings(self.config_path)
 
-        self.assertEqual(raised.exception.line, 12)
-        self.assertIn("prod.env at line 12", str(raised.exception))
+        self.assertEqual(raised.exception.line, 11)
+        self.assertIn("prod.env at line 11", str(raised.exception))
         self.assertNotIn("super-secret-value", str(raised.exception))
 
 

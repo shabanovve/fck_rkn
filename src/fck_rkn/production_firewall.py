@@ -45,7 +45,6 @@ def prepare_eu_firewall_input(
             "rkn_ipv4": rkn_ipv4,
             "rkn_ipv6": rkn_ipv6,
             "vm_services": {
-                "metadata_address": settings.EU_METADATA_ADDRESS,
                 "dns_addresses": settings.EU_DNS_ADDRESSES,
                 "dhcp_server_address": settings.EU_DHCP_SERVER_ADDRESS,
                 "ntp_addresses": settings.EU_NTP_ADDRESSES,
@@ -72,7 +71,6 @@ def prepare_ru_firewall_input(
         name
         for name in (
             "RU_SERVER_ADDRESS",
-            "RU_METADATA_ADDRESS",
             "RU_DHCP_SERVER_ADDRESS",
             "RU_DNS_ADDRESSES",
             "RU_NTP_ADDRESSES",
@@ -127,7 +125,6 @@ def prepare_ru_firewall_input(
             "snapd_networks": snapd_networks,
             "github_networks": github_networks,
             "vm_services": {
-                "metadata_address": settings.RU_METADATA_ADDRESS,
                 "dns_addresses": settings.RU_DNS_ADDRESSES,
                 "dhcp_server_address": settings.RU_DHCP_SERVER_ADDRESS,
                 "ntp_addresses": settings.RU_NTP_ADDRESSES,
