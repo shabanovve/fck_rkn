@@ -77,6 +77,9 @@ def validate_ru_settings(settings: EuProductionSettings) -> None:
         field
         for field in (
             "RU_SERVER_ADDRESS",
+            "RU_SSH_USER",
+            "RU_SSH_KEY_PATH",
+            "RU_SSH_PORT",
             "RU_METADATA_ADDRESS",
             "RU_DHCP_SERVER_ADDRESS",
             "RU_DNS_ADDRESSES",
@@ -99,11 +102,14 @@ def create_ru_runner(settings: EuProductionSettings) -> RemoteRunner:
     """Construct an SshRunner for ru-server after validating RU settings."""
     validate_ru_settings(settings)
     assert settings.RU_SERVER_ADDRESS is not None
+    assert settings.RU_SSH_USER is not None
+    assert settings.RU_SSH_KEY_PATH is not None
+    assert settings.RU_SSH_PORT is not None
     return SshRunner(
         host=settings.RU_SERVER_ADDRESS,
-        user=settings.SSH_USER,
-        key_path=settings.SSH_KEY_PATH,
-        port=settings.SSH_PORT,
+        user=settings.RU_SSH_USER,
+        key_path=settings.RU_SSH_KEY_PATH,
+        port=settings.RU_SSH_PORT,
     )
 
 

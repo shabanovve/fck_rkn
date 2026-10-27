@@ -1858,12 +1858,9 @@ production settings and `SshRunner`, never the standalone CLIs that read
 - **Change:** Extend the production configuration schema and
   `config/prod.env.example` for Phase 2B. Use the existing `RU_SERVER_ADDRESS`
   as the single RU server address for both controller SSH and server-side
-  service/firewall configuration; do not add any separate RU SSH-host or
-  private-address setting.
+  service/firewall configuration.
   Add `RU_METADATA_ADDRESS`, `RU_DNS_ADDRESSES`, `RU_DHCP_SERVER_ADDRESS`,
-  `RU_NTP_ADDRESSES`, `RU_LOCAL_NETWORKS`, and `RU_PROVIDER_NETWORKS`. Reuse
-  the existing shared SSH user, key path and port unless an approved access
-  design requires otherwise. Keep every RU-only field optional for the
+  `RU_NTP_ADDRESSES`, `RU_LOCAL_NETWORKS`, and `RU_PROVIDER_NETWORKS`. Introduce separate SSH connection settings (`RU_SSH_USER`, `RU_SSH_KEY_PATH`, `RU_SSH_PORT`) for `ru-server`. Keep every RU-only field optional for the
   EU-only stage.
 - **Verify:** Cover valid/missing/placeholder/malformed values, strict IP,
   CIDR and JSON-list validation, and provider CIDR validation. Prove EU-only
@@ -1911,7 +1908,7 @@ production settings and `SshRunner`, never the standalone CLIs that read
   provisioning code is imported or called.
 - **Result:** `fck_rkn.orchestration.production_environment` validates all
   required Phase 2B settings before creating an `SshRunner` targeted at
-  `RU_SERVER_ADDRESS` with the shared SSH credentials. No GCP or IAP code is
+  `RU_SERVER_ADDRESS` with its dedicated SSH credentials (`RU_SSH_USER`, etc). No GCP or IAP code is
   used. Unit tests verify failure when RU settings are incomplete, runner
   construction, and exclusion of test/GCP tooling.
 
@@ -2248,6 +2245,12 @@ remain absent from RU deployment:
   checks: it depends on the excluded test-only scenarios and adds no
   production operation beyond the reviewed RU policy and updater checks in
   tasks 316–317.
+
+### 329. [x] Support separate SSH connection settings for ru-server
+
+- **Source step:** New requirement to ensure separate SSH connection settings (`RU_SSH_USER`, `RU_SSH_KEY_PATH`, `RU_SSH_PORT`) can be used to connect to `ru-server`.
+- **Change:** Add these variables to `config/prod.env.example` and `EuProductionSettings` model. Use them to instantiate the `SshRunner` for `ru-server` instead of sharing `eu-server` credentials.
+- **Verify:** The interactive configuration prompts for them and correctly builds the env file. `prod-env-host` parses them and constructs the correct `ru-runner`.
 
 ## Decisions that block dependent tasks
 

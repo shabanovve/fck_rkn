@@ -64,6 +64,7 @@ Required Phase 2B settings (optional for Phase 2A):
 | Variable | Value |
 | --- | --- |
 | `RU_SERVER_ADDRESS` | IPv4 or IPv6 address used for RU SSH and service/firewall configuration. |
+| `RU_SSH_USER`, `RU_SSH_KEY_PATH`, `RU_SSH_PORT` | SSH connection settings for the RU server. |
 | `RU_METADATA_ADDRESS`, `RU_DHCP_SERVER_ADDRESS` | IPv4 or IPv6 addresses of RU's metadata and DHCP services. |
 | `RU_DNS_ADDRESSES`, `RU_NTP_ADDRESSES` | Non-empty JSON arrays of RU DNS and NTP service addresses. |
 | `RU_LOCAL_NETWORKS` | Non-empty JSON array of RU local networks in strict CIDR notation. |
@@ -73,8 +74,7 @@ Server addresses are validated as IP addresses. `EU_SERVER_ADDRESS` must be
 the SSH-reachable address assigned to `eu-server`; DNS names are not accepted.
 RU values are optional for Phase 2A. Phase 2B requires the RU server address,
 host service values and provider network ranges described in task 301. The
-same `RU_SERVER_ADDRESS` is used for SSH and RU service/firewall configuration;
-do not add a separate RU SSH-host or private-address setting.
+same `RU_SERVER_ADDRESS` is used for SSH and RU service/firewall configuration.
 
 Lists must be written as JSON directly in the dotenv file, for example:
 
@@ -111,12 +111,13 @@ the loader checks the final file either way:
 
 1. The step prompts for the `eu-server` address, and for the SSH settings
    needed to connect (`SSH_USER`, `SSH_KEY_PATH`, `SSH_PORT`), which cannot be
-   discovered before a connection exists.
+   discovered before a connection exists. It also prompts for `RU_SERVER_ADDRESS`
+   and its distinct SSH settings (`RU_SSH_USER`, `RU_SSH_KEY_PATH`, `RU_SSH_PORT`).
 2. After the SSH connection is established, it automatically determines every
    other setting that can be read from `eu-server` (for example, local
    networks, DNS resolvers, DHCP server, NTP servers and the metadata
    endpoint, probed where the provider offers one).
-3. It connects to `ru-server` using the entered `RU_SERVER_ADDRESS` and shared
+3. It connects to `ru-server` using the entered `RU_SERVER_ADDRESS` and its dedicated
    SSH credentials, discovering read-only RU host settings (`RU_METADATA_ADDRESS`,
    `RU_DNS_ADDRESSES`, `RU_DHCP_SERVER_ADDRESS`, `RU_NTP_ADDRESSES`,
    `RU_LOCAL_NETWORKS`). Settings that cannot be determined automatically or whose

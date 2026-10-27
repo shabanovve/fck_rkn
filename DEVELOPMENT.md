@@ -56,7 +56,7 @@
   `DEVELOPMENT_PLAN.md` (tasks 88, 200 and 201). Keep it current when production
   requirements change. Record how test and production responsibilities
   differ; identify and justify every setting in `config/prod.env` and
-  `config/prod.env.example`; and decide how
+  `config/prod.env.example` (ensuring separate SSH connection settings for `eu-server` and `ru-server`, including potentially different usernames and private keys); and decide how
   `prod_env_host` will invoke and sequence `ru-server-agent`,
   `ru-server-test-agent`, `eu-server-agent`, and `eu-server-test-agent`.
   Include each agent's configuration, runner, side effects, exit status, and
@@ -160,7 +160,10 @@
   (`fck_rkn/gcp/runner.py`). Direct agent CLI invocations load `SshRunner`
   settings from `config/agents.env` (the server addresses, SSH user, key path
   and SSH port). The EU address is used for both SSH and EU service
-  configuration. Copy
+  configuration. For production, `eu-server` and `ru-server` must have
+  separate SSH connection settings. The username and private keys for
+  `eu-server` and `ru-server` do not have to match and different keys can be
+  used. Copy
   `config/agents.env.example` to the ignored `config/agents.env` and fill it
   in locally. The planned
   `prod_env_host` instead loads production-only settings from

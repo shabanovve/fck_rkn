@@ -31,6 +31,9 @@ JSON_LIST_FIELDS = {
 }
 OPTIONAL_RU_FIELDS = (
     "RU_SERVER_ADDRESS",
+    "RU_SSH_USER",
+    "RU_SSH_KEY_PATH",
+    "RU_SSH_PORT",
     "RU_METADATA_ADDRESS",
     "RU_DNS_ADDRESSES",
     "RU_DHCP_SERVER_ADDRESS",
@@ -81,6 +84,9 @@ class EuProductionSettings(BaseSettings):
     SSH_USER: str = Field(min_length=1)
     SSH_KEY_PATH: Path
     SSH_PORT: int = Field(default=22, ge=1, le=65535)
+    RU_SSH_USER: str | None = None
+    RU_SSH_KEY_PATH: Path | None = None
+    RU_SSH_PORT: int | None = None
     EU_METADATA_ADDRESS: str = Field(min_length=1)
     EU_DNS_ADDRESSES: list[str]
     EU_DHCP_SERVER_ADDRESS: str = Field(min_length=1)
@@ -97,6 +103,7 @@ class EuProductionSettings(BaseSettings):
         "EU_SERVER_ADDRESS",
         "RU_SERVER_ADDRESS",
         "SSH_USER",
+        "RU_SSH_USER",
         "EU_METADATA_ADDRESS",
         "EU_DHCP_SERVER_ADDRESS",
         "RU_METADATA_ADDRESS",
@@ -128,16 +135,20 @@ class EuProductionSettings(BaseSettings):
         except ValueError as error:
             raise ValueError("must be an IPv4 or IPv6 address") from error
 
-    @field_validator("SSH_USER")
+    @field_validator("SSH_USER", "RU_SSH_USER")
     @classmethod
-    def validate_ssh_user(cls, value: str) -> str:
+    def validate_ssh_user(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*\$?", value):
             raise ValueError("must be a valid SSH account name")
         return value
 
-    @field_validator("SSH_KEY_PATH")
+    @field_validator("SSH_KEY_PATH", "RU_SSH_KEY_PATH")
     @classmethod
-    def validate_ssh_key_path(cls, value: Path) -> Path:
+    def validate_ssh_key_path(cls, value: Path | None) -> Path | None:
+        if value is None:
+            return None
         if not value.is_absolute():
             raise ValueError("must be an absolute path on the controller")
         if any(marker in str(value).upper() for marker in PLACEHOLDER_MARKERS):

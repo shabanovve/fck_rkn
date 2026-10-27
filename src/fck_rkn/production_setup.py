@@ -187,7 +187,7 @@ def _format(value: object) -> str:
 def _parse(name: str, raw: str) -> object:
     """Validate one operator-entered value with the loader's field rules."""
     raw = raw.strip()
-    if name == "SSH_PORT":
+    if name in ("SSH_PORT", "RU_SSH_PORT"):
         if not raw.isdecimal() or not 1 <= int(raw) <= 65535:
             raise ValueError("must be a TCP port from 1 through 65535")
         return int(raw)
@@ -204,9 +204,9 @@ def _parse(name: str, raw: str) -> object:
         if name in ("EU_LOCAL_NETWORKS", "RU_LOCAL_NETWORKS", "RU_PROVIDER_NETWORKS"):
             return EuProductionSettings.validate_local_networks(items)
         return EuProductionSettings.validate_address_lists(items)
-    if name == "SSH_USER":
+    if name in ("SSH_USER", "RU_SSH_USER"):
         return EuProductionSettings.validate_ssh_user(raw)
-    if name == "SSH_KEY_PATH":
+    if name in ("SSH_KEY_PATH", "RU_SSH_KEY_PATH"):
         return str(EuProductionSettings.validate_ssh_key_path(Path(raw)))
     return EuProductionSettings.validate_ip_address(raw)
 
@@ -217,6 +217,9 @@ HINTS = {
     "SSH_KEY_PATH": "absolute path to the SSH private key on this machine",
     "SSH_PORT": "SSH TCP port",
     "RU_SERVER_ADDRESS": "IPv4 or IPv6 address of ru-server (cannot be detected)",
+    "RU_SSH_USER": "SSH account on ru-server",
+    "RU_SSH_KEY_PATH": "absolute path to the RU SSH private key on this machine",
+    "RU_SSH_PORT": "RU SSH TCP port",
     "EU_METADATA_ADDRESS": "IPv4 or IPv6 address of the provider metadata service",
     "EU_DNS_ADDRESSES": "IPv4/IPv6 resolver addresses, comma-separated",
     "EU_DHCP_SERVER_ADDRESS": "IPv4 address of the DHCP server",
@@ -340,7 +343,14 @@ def configure_interactively(
 
     output("Connected. Detecting settings on eu-server (read-only)...")
     detected = discover_eu_settings(runner)
-    values["RU_SERVER_ADDRESS"] = _ask("RU_SERVER_ADDRESS", prompt, output)
+    for name, default in (
+        ("RU_SERVER_ADDRESS", None),
+        ("RU_SSH_USER", str(values["SSH_USER"])),
+        ("RU_SSH_KEY_PATH", str(values["SSH_KEY_PATH"])),
+        ("RU_SSH_PORT", str(values["SSH_PORT"])),
+    ):
+        values[name] = _ask(name, prompt, output, default=default)
+
     for name in (
         "EU_METADATA_ADDRESS",
         "EU_DNS_ADDRESSES",
@@ -352,9 +362,9 @@ def configure_interactively(
 
     ru_runner = runner_factory(
         str(values["RU_SERVER_ADDRESS"]),
-        str(values["SSH_USER"]),
-        Path(str(values["SSH_KEY_PATH"])),
-        int(values["SSH_PORT"]),  # type: ignore[call-overload]
+        str(values["RU_SSH_USER"]),
+        Path(str(values["RU_SSH_KEY_PATH"])),
+        int(values["RU_SSH_PORT"]),  # type: ignore[call-overload]
     )
     exit_code, _ = _query(ru_runner, "true")
     if exit_code != 0:
