@@ -12,6 +12,7 @@ from fck_rkn.agents.firewall_common import (
     parse_minimal_vm_services,
     rkn_sets_block,
 )
+from fck_rkn.agents.outline import OUTLINE_ACCESS_KEY_PORT
 
 
 TABLE_NAME = "fck_rkn_eu"
@@ -48,7 +49,7 @@ def build_eu_firewall_rules(config_json: str) -> str:
         f"ip saddr @rkn_ipv4 {_log('input crawler-v4')} drop",
         f"ip6 saddr @rkn_ipv6 {_log('input crawler-v6')} drop",
         f"tcp dport {ssh_port} accept",
-        f"{address_match('saddr', ru_server)} accept",
+        f"{address_match('saddr', ru_server)} meta l4proto {{ tcp, udp }} th dport {OUTLINE_ACCESS_KEY_PORT} accept",
         f"{_log('input denied')} drop",
     ]
     forward_rules = [
