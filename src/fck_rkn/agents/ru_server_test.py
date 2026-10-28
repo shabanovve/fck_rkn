@@ -21,6 +21,7 @@ from fck_rkn.agents.firewall_common import (
 from fck_rkn.agents.firewall_test_common import check_rkn_blacklist_updater
 from fck_rkn.agents.outline import (
     OUTLINE_ACCESS_KEY_PORT,
+    OUTLINE_API_PORT,
     OUTLINE_HEALTH_CHECK_COMMAND,
 )
 from fck_rkn.agents.ru_server import (
@@ -183,6 +184,7 @@ def build_firewall_check_command() -> str:
     return render(
         "ru_firewall_check.sh",
         vpn_port=OUTLINE_ACCESS_KEY_PORT,
+        api_port=OUTLINE_API_PORT,
         proxy_ports=f"{FORWARD_LOCAL_PORT} {MTPROXY_FORWARD_LOCAL_PORT}",
     )
 
@@ -267,7 +269,7 @@ def check_ru_firewall_readonly(runner: RemoteRunner, config_json: str) -> int:
     logger.info("Verifying the active RU firewall policy on ru-server (read-only)")
     return execute(
         runner,
-        render("ru_firewall_readonly_check.sh", vpn_port=OUTLINE_ACCESS_KEY_PORT),
+        render("ru_firewall_readonly_check.sh", vpn_port=OUTLINE_ACCESS_KEY_PORT, api_port=OUTLINE_API_PORT),
         "RU firewall read-only verification",
         timeout=10,
         stdin=json.dumps(

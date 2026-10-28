@@ -2329,7 +2329,7 @@ remain absent from RU deployment:
 
 ### 337 Extract Outline Manager access credentials and open API port
 
-**Status:** Not Started
+**Status:** Done
 
 **Description:** As clarified, the desktop Outline Manager app needs the `apiUrl` and `certSha256` to connect to the deployed Outline Server, and the Management API port needs to be accessible. Instead of running the installation script again, the deployment process must extract these credentials from the already deployed Outline Server's state (`access.txt`). This JSON must be logged and saved locally. Additionally, the Outline Management API port on `ru-server` must be opened to all IPs.
 

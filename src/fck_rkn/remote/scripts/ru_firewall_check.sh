@@ -283,6 +283,12 @@ fi
 [ "$(host_probe "$outline_server" "$outline_port")" = open ] ||
   fail "The VPN transport to eu-server is unreachable"
 report "The VPN transport to eu-server is allowed"
+
+[ "$(host_probe "127.0.0.1" "@API_PORT@")" = open ] ||
+  fail "The Outline API port @API_PORT@ is locally unreachable"
+[ "$(ns_probe "$outside" "$host_address" "@API_PORT@")" = open ] ||
+  fail "The Outline API port @API_PORT@ is externally unreachable"
+report "The Outline API port @API_PORT@ is allowed"
 for port in "${proxy_ports[@]}"; do
   [ "$(host_probe "$eu_server" "$port")" = timeout ] ||
     fail "Direct connection to eu-server TCP/$port was not denied"

@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from pydantic_settings.exceptions import SettingsError
 
 from fck_rkn.agents.eu_server import MTPROXY_PORT, SQUID_PORT
-from fck_rkn.agents.outline import deploy_outline_on
+from fck_rkn.agents.outline import deploy_outline_on, OUTLINE_STATE_DIRECTORY
 from fck_rkn.agent_config import load_agent_settings, ru_server_runner
 from fck_rkn.agents.firewall_common import (
     firewall_apply_command,
@@ -360,6 +360,23 @@ def stop_mtproxy_forward(runner: RemoteRunner) -> int:
         "Simulating tunnel loss by stopping the MTProxy forward",
     )
 
+
+def get_outline_manager_credentials(runner: RemoteRunner, public_address: str) -> str | None:
+    """Extract Outline Manager credentials and replace the host with the public address."""
+    remote_command = render(
+        "get_outline_manager_credentials.sh",
+        state_directory=OUTLINE_STATE_DIRECTORY,
+        public_address=public_address,
+    )
+    result = runner.run(remote_command, None, timeout=10)
+    if result.exit_code != 0:
+        logger.error(
+            "Failed to read Outline Manager credentials from ru-server; stdout: %s; stderr: %s",
+            result.stdout,
+            result.stderr,
+        )
+        return None
+    return result.stdout.strip()
 
 def deploy_outline_server(runner: RemoteRunner, private_address: str) -> int:
     """Run the approved Outline Server container on ru-server (private address).

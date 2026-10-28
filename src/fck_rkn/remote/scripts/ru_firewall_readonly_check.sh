@@ -44,6 +44,7 @@ printf '%s\n' "$forward_chain" | grep -q 'hook forward .*policy drop' || fail "R
 
 printf '%s\n' "$input_chain" | grep -Fq "tcp dport $ssh_port accept" || fail "RU firewall does not allow SSH on port $ssh_port"
 printf '%s\n' "$input_chain" | grep -Eq "meta l4proto \{ tcp, udp \} th dport $vpn_port accept" || fail "RU firewall does not allow the VPN port"
+printf '%s\n' "$input_chain" | grep -Fq "tcp dport @API_PORT@ accept" || fail "RU firewall does not allow the Outline API port @API_PORT@"
 
 for family in v4 v6; do
   printf '%s\n' "$input_chain" | grep -q "crawler-$family" || fail "RU firewall is missing the $family crawler drop rule"

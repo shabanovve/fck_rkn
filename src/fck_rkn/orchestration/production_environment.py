@@ -19,6 +19,7 @@ from fck_rkn.agents.ru_server import (
     apply_ru_firewall,
     deploy_mtproxy_forward,
     deploy_outline_client,
+    get_outline_manager_credentials,
     deploy_outline_server,
     deploy_squid_forward,
 )
@@ -189,9 +190,28 @@ def ru_outline_deploy_steps(runner: RemoteRunner, ru_address: str) -> list[Step]
     return [("RU Outline deployment", lambda: deploy_outline_server(runner, ru_address))]
 
 
+def extract_outline_manager_credentials(runner: RemoteRunner, public_address: str) -> int:
+    credentials = get_outline_manager_credentials(runner, public_address)
+    if credentials is None:
+        return 1
+    
+    import os
+    secrets_dir = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "fck_rkn" / "secrets"
+    secrets_dir.mkdir(parents=True, exist_ok=True)
+    out_file = secrets_dir / "outline_manager_ru.json"
+    
+    out_file.write_text(credentials, encoding="utf-8")
+    os.chmod(out_file, 0o600)
+    
+    logger.info("Outline Manager credentials for ru-server extracted:")
+    logger.info("  %s", credentials)
+    logger.info("  Saved to: %s", out_file)
+    return 0
+
 def ru_outline_steps(runner: RemoteRunner, ru_address: str) -> list[Step]:
     return [
         ("RU Outline deployment", lambda: deploy_outline_server(runner, ru_address)),
+        ("RU Outline Manager credentials extraction", lambda: extract_outline_manager_credentials(runner, ru_address)),
         ("RU Outline health check", lambda: check_ru_outline_health(runner)),
     ]
 
@@ -455,7 +475,7 @@ def deploy_ru_stage(eu_runner: RemoteRunner, settings: EuProductionSettings) -> 
         squid_steps(eu_runner)[1:]
         + [outline_steps(eu_runner, settings.EU_SERVER_ADDRESS)[1]]
         + [mtproxy_steps(eu_runner)[1]]
-        + [ru_outline_steps(ru_runner, settings.RU_SERVER_ADDRESS)[1]]
+        + [ru_outline_steps(ru_runner, settings.RU_SERVER_ADDRESS)[2]]
         + [ru_outline_client_steps(ru_runner, access_url)[1]]
         + [ru_squid_forward_steps(ru_runner, access_url)[1]]
         + [ru_mtproxy_forward_steps(ru_runner, access_url)[1]]

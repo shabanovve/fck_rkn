@@ -51,6 +51,7 @@ from fck_rkn.agents.ru_server import (
     deploy_outline_client,
     deploy_mtproxy_forward,
     deploy_outline_server,
+    get_outline_manager_credentials,
     deploy_squid_forward,
     recover_mtproxy_forward,
     recover_tunnel,
@@ -352,6 +353,26 @@ def _provision_server(
         print(f"{name} provisioning failed: {error}", file=sys.stderr)
         return None, failure_code
 
+
+
+def extract_outline_manager_credentials(runner, public_address: str) -> int:
+    credentials = get_outline_manager_credentials(runner, public_address)
+    if credentials is None:
+        return 1
+    
+    import os
+    from pathlib import Path
+    secrets_dir = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "fck_rkn" / "secrets"
+    secrets_dir.mkdir(parents=True, exist_ok=True)
+    out_file = secrets_dir / "outline_manager_ru.json"
+    
+    out_file.write_text(credentials, encoding="utf-8")
+    os.chmod(out_file, 0o600)
+    
+    logger.info("Outline Manager credentials for ru-server extracted:")
+    logger.info("  %s", credentials)
+    logger.info("  Saved to: %s", out_file)
+    return 0
 
 def main() -> int:
     if sys.argv[1:2] == ["configure"]:
@@ -700,7 +721,15 @@ def _run(image_directory: Path) -> int:
         )
         return 24
 
+
+    logger.info("Invoking ru-server Outline Manager credentials extraction")
+    if extract_outline_manager_credentials(ru_runner, ru_private_address) != 0:
+        logger.error("Failed to extract ru-server Outline Manager credentials")
+        print("Failed to extract ru-server Outline Manager credentials.", file=sys.stderr)
+        return 34
+
     logger.info("Invoking ru-server-test-agent Outline health check")
+
     ru_outline_health_exit_code = check_ru_outline_health(ru_runner)
     if ru_outline_health_exit_code != 0:
         logger.error(

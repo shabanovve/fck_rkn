@@ -23,6 +23,10 @@ if ! fetch_keys \
   echo "Outline Server authorized management endpoint is unhealthy" >&2
   exit 1
 fi
+if ! timeout 5 bash -c 'echo > /dev/tcp/127.0.0.1/10000'; then
+  echo "Outline Server Management API TCP endpoint is unavailable locally" >&2
+  exit 1
+fi
 if ! timeout 5 bash -c 'echo > /dev/tcp/127.0.0.1/@KEYS_PORT@'; then
   echo "Outline Server access-key TCP endpoint is unavailable" >&2
   exit 1

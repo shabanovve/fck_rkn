@@ -21,6 +21,7 @@ from fck_rkn.agents.firewall_common import (
 
 TABLE_NAME = "fck_rkn_ru"
 RU_OUTLINE_ACCESS_PORT = 10001
+RU_OUTLINE_API_PORT = 10000
 EU_SERVICE_PORTS = (3128, 8443)
 DEFAULT_EU_SSH_PORT = 22
 SERVER_TO_GITHUB_PORTS = (80, 443)
@@ -113,6 +114,7 @@ def build_ru_firewall_rules(config_json: str) -> str:
         "ip6 saddr @rkn_ipv6 drop",
         f"tcp dport {ssh_port} accept",
         f"meta l4proto {{ tcp, udp }} th dport {RU_OUTLINE_ACCESS_PORT} accept",
+        f"tcp dport {RU_OUTLINE_API_PORT} accept",
         _log("input denied"),
         "drop",
     ]
