@@ -2327,24 +2327,21 @@ remain absent from RU deployment:
   by plan item 10.
 
 
-### 337 Install Outline Manager before firewall application
+### 337 Extract Outline Manager access credentials and open API port
 
 **Status:** Not Started
 
-**Description:** As per the updated requirements, Outline Manager must be installed after the Outline Server is deployed and running, but strictly before the firewall rules are applied.
+**Description:** As clarified, the desktop Outline Manager app needs the `apiUrl` and `certSha256` to connect to the deployed Outline Server, and the Management API port needs to be accessible. Instead of running the installation script again, the deployment process must extract these credentials from the already deployed Outline Server's state (`access.txt`). This JSON must be logged and saved locally. Additionally, the Outline Management API port on `ru-server` must be opened to all IPs.
 
 **Implementation Steps:**
-1. For the installation, run: `sudo bash -c "$(wget -qO- https://raw.githubusercontent.com/OutlineFoundation/outline-apps/master/server_manager/install_scripts/install_server.sh)"`
-2. Extract the output of this installation script, log it, and save it to a file. The expected output format is:
-   ```json
-   {"apiUrl":"https://xxx.xxx.xxx.xxx:xxxxx/xxxxxxx","certSha256":"xxxxx"}
-   ```
-3. Create the corresponding remote scripts and agent functions to perform this.
-4. Update `src/fck_rkn/orchestration/test_environment.py` to insert the Outline Manager installation step after Outline Server deployment and before the firewall rules are applied.
-5. Update `src/fck_rkn/orchestration/production_environment.py` to include the Outline Manager installation step in the EU and RU deployment phases, ensuring it runs before `apply_eu_firewall` and `apply_ru_firewall`.
-6. Add a check agent function to verify that the Outline Manager was successfully installed.
+1. Create a remote script or agent function (e.g., `get_outline_manager_credentials`) to read `apiUrl` and `certSha256` from `/opt/fck-rkn-outline/access.txt`.
+2. Format the output exactly as requested: `{"apiUrl":"https://xxx.xxx.xxx.xxx:xxxxx/xxxxxxx","certSha256":"xxxxx"}`.
+3. Output this JSON string to the orchestrator logs and save it to a local file on the controller (e.g., in `$XDG_CONFIG_HOME/fck_rkn/secrets/outline_manager_ru.json`). Log the exact path to this file so the operator can easily read it again.
+4. Update `src/fck_rkn/agents/ru_firewall.py` to allow incoming TCP traffic on the Outline Management API port (`OUTLINE_API_PORT`, TCP 10000) from all IPs.
+5. Update relevant test agents (`ru_server_test.py`, `ru_firewall_readonly_check.sh`, `ru_firewall_check.sh`) to expect the management API port to be open.
+6. Integrate this extraction step into both `test_environment.py` and `production_environment.py` after the Outline Server deployment.
 
 **Acceptance criteria:**
-- Outline Manager is installed correctly as part of the orchestration sequence.
-- The installation happens strictly after Outline Server deployment and before firewall application.
-- The orchestrator fails closed if the manager installation fails.
+- The JSON string with `apiUrl` and `certSha256` is logged and saved to a clearly specified local file.
+- The Management API port (TCP 10000) on `ru-server` is accessible from anywhere.
+- Tests pass with the new firewall rule.

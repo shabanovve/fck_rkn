@@ -211,7 +211,7 @@ Use the following fail-fast order across the two rollout increments:
    client and the Squid/MTProxy forwards using the protected EU key. Run the
    corresponding read-only RU service health and forwarding checks before
    continuing.
-6. Install Outline Manager after Outline Server deployments and before applying the guest firewalls.
+6. Extract Outline Manager access credentials and save them locally after Outline Server deployments.
 7. Only after both server stages pass their pre-firewall service checks, apply
    the EU and RU guest firewalls transactionally, without resetting existing
    rules. Then repeat the approved read-only service/forwarding checks and
