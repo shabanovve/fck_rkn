@@ -2326,3 +2326,21 @@ remain absent from RU deployment:
 - Firewall restrictions for monitoring access and other traffic not covered
   by plan item 10.
 
+
+### 337 Install Outline Manager before firewall application
+
+**Status:** Not Started
+
+**Description:** As per the updated requirements, Outline Manager must be installed after the Outline Server is deployed and running, but strictly before the firewall rules are applied.
+
+**Implementation Steps:**
+1. Define the specific Outline Manager artifact/distribution to be installed (e.g., AppImage on the controller, or a specific containerized web manager on the servers).
+2. Create the corresponding remote scripts and agent functions (e.g., `deploy_outline_manager`) to perform the installation.
+3. Update `src/fck_rkn/orchestration/test_environment.py` to insert the Outline Manager installation step after Outline Server deployment and before the firewall rules are applied.
+4. Update `src/fck_rkn/orchestration/production_environment.py` to include the Outline Manager installation step in the EU and RU deployment phases, ensuring it runs before `apply_eu_firewall` and `apply_ru_firewall`.
+5. Add a check agent function to verify that the Outline Manager was successfully installed.
+
+**Acceptance criteria:**
+- Outline Manager is installed correctly as part of the orchestration sequence.
+- The installation happens strictly after Outline Server deployment and before firewall application.
+- The orchestrator fails closed if the manager installation fails.

@@ -128,6 +128,7 @@
 
 ## Infrastructure Build Order and Verification
 
+- Outline Manager must be installed after Outline Server is deployed and running, and strictly before applying the firewall rules.
 - The infrastructure is configured by `eu-server-agent` and
   `ru-server-agent`. Every change made by `ru-server-agent` is verified by
   `ru-server-test-agent`, and every change made by `eu-server-agent` by
