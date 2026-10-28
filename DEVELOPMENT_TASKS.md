@@ -2334,11 +2334,15 @@ remain absent from RU deployment:
 **Description:** As per the updated requirements, Outline Manager must be installed after the Outline Server is deployed and running, but strictly before the firewall rules are applied.
 
 **Implementation Steps:**
-1. Define the specific Outline Manager artifact/distribution to be installed (e.g., AppImage on the controller, or a specific containerized web manager on the servers).
-2. Create the corresponding remote scripts and agent functions (e.g., `deploy_outline_manager`) to perform the installation.
-3. Update `src/fck_rkn/orchestration/test_environment.py` to insert the Outline Manager installation step after Outline Server deployment and before the firewall rules are applied.
-4. Update `src/fck_rkn/orchestration/production_environment.py` to include the Outline Manager installation step in the EU and RU deployment phases, ensuring it runs before `apply_eu_firewall` and `apply_ru_firewall`.
-5. Add a check agent function to verify that the Outline Manager was successfully installed.
+1. For the installation, run: `sudo bash -c "$(wget -qO- https://raw.githubusercontent.com/OutlineFoundation/outline-apps/master/server_manager/install_scripts/install_server.sh)"`
+2. Extract the output of this installation script, log it, and save it to a file. The expected output format is:
+   ```json
+   {"apiUrl":"https://xxx.xxx.xxx.xxx:xxxxx/xxxxxxx","certSha256":"xxxxx"}
+   ```
+3. Create the corresponding remote scripts and agent functions to perform this.
+4. Update `src/fck_rkn/orchestration/test_environment.py` to insert the Outline Manager installation step after Outline Server deployment and before the firewall rules are applied.
+5. Update `src/fck_rkn/orchestration/production_environment.py` to include the Outline Manager installation step in the EU and RU deployment phases, ensuring it runs before `apply_eu_firewall` and `apply_ru_firewall`.
+6. Add a check agent function to verify that the Outline Manager was successfully installed.
 
 **Acceptance criteria:**
 - Outline Manager is installed correctly as part of the orchestration sequence.
