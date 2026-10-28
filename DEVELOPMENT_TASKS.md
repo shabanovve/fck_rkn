@@ -2294,6 +2294,18 @@ remain absent from RU deployment:
 - **Change:** Modify `src/fck_rkn/agents/eu_firewall.py` to allow all incoming traffic (`ip saddr <RU_SERVER_ADDRESS> accept`) from `ru-server`.
 - **Verify:** Generating and applying the EU firewall allows all packets from `RU_SERVER_ADDRESS`. Tests pass and remote connections from `ru-server` are not dropped.
 
+### 336 Remove test-only parameters from production check scripts
+
+**Status:** Not Started
+
+**Description:** `other_host_address` is a parameter used for negative testing (verifying that the firewall drops traffic to random external addresses). It is not needed and causes issues in the production deployment phase (as seen during RU firewall validation where it fails due to the missing parameter). This task involves removing the `other_host_address` usage from production validation scripts and ensuring that production checks do not rely on it, while tests may still utilize negative testing where appropriate.
+
+**Acceptance criteria:**
+- The `other_host_address` parameter is completely removed from the production script flow.
+- `prod-env-host` runs the RU firewall validation without failing on `other_host_address`.
+- `DEVELOPMENT.md` and `DEVELOPMENT_PLAN.md` rules are respected regarding no test fields in production.
+
+
 ## Decisions that block dependent tasks
 
 - GCP project ID, billing/account, region/zone, Ubuntu image, VM size/cost,
@@ -2313,3 +2325,4 @@ remain absent from RU deployment:
 
 - Firewall restrictions for monitoring access and other traffic not covered
   by plan item 10.
+

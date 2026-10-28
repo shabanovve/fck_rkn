@@ -182,6 +182,7 @@ requirement where the firewall depends on them. Add a detailed comment above
 every variable in the eventual template explaining its purpose, allowed
 values, and source. Do not add GCP project/zone/NAT values, `TEST_CLIENT_HOST`,
 the test-only `other_host_address`, crawler probe values, or test credentials.
+Also, ensure that any test-only testing dependencies such as `other_host_address` are removed from the shared production/test firewall validation scripts, as `other_host_address` is used for negative testing which is unnecessary and problematic in a production environment.
 RKN, GitHub, and Canonical ranges remain live-validated inputs rather than
 static secrets or values copied into this template; their shared fetch code
 must be made usable outside `fck_rkn.gcp` before the production firewall

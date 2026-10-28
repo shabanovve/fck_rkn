@@ -114,6 +114,7 @@
   future `config/prod.env`), generated files (including `config/last_run/`),
   credentials, and any other files under `config/` must not be added to the
   repository.
+- Do not include test-only configuration parameters in production deployment files (e.g. `other_host_address`, crawler probe values). Production scripts and templates (`config/prod.env.example`) must not contain or use such fields. Test variables should only exist in the test environment configuration.
 - Keep real environment values out of the example; use placeholders there.
 
 ## VPN User Provisioning
