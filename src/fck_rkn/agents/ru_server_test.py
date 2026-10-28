@@ -252,6 +252,37 @@ def build_firewall_check_input(config_json: str) -> str:
     )
 
 
+
+def check_ru_firewall_readonly(runner: RemoteRunner, config_json: str) -> int:
+    try:
+        config = load_config(config_json)
+        for key in ("eu_server_address", "eu_outline_address"):
+            config[key] = _validated_address(config.get(key), key)
+        port = config.get("eu_outline_port")
+        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+            raise ValueError("eu_outline_port must be between 1 and 65535")
+    except (TypeError, ValueError, KeyError) as error:
+        logger.error("Invalid RU firewall test configuration: %s", error)
+        return 1
+    logger.info("Verifying the active RU firewall policy on ru-server (read-only)")
+    return execute(
+        runner,
+        render("ru_firewall_readonly_check.sh", vpn_port=OUTLINE_ACCESS_KEY_PORT),
+        "RU firewall read-only verification",
+        timeout=10,
+        stdin=json.dumps(
+            {
+                "eu_server_address": config["eu_server_address"],
+                "eu_outline_address": config["eu_outline_address"],
+                "eu_outline_port": port,
+                "ssh_port": config.get("ssh_port", 22),
+            }
+        ),
+        print_output=True,
+        print_stderr=True,
+    )
+
+
 def check_firewall_policy_rules(runner: RemoteRunner, config_json: str) -> int:
     """Verify default deny, logging and the allowed paths of the RU firewall."""
     try:

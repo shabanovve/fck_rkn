@@ -2296,7 +2296,7 @@ remain absent from RU deployment:
 
 ### 336 Remove test-only parameters from production check scripts
 
-**Status:** Not Started
+**Status:** Done
 
 **Description:** `other_host_address` is a parameter used for negative testing (verifying that the firewall drops traffic to random external addresses). It is not needed and causes issues in the production deployment phase (as seen during RU firewall validation where it fails due to the missing parameter). This task involves removing the `other_host_address` usage from production validation scripts and ensuring that production checks do not rely on it, while tests may still utilize negative testing where appropriate.
 
