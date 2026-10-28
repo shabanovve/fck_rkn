@@ -203,7 +203,7 @@ def build_client_config(method: str, password: str, host: str, port: int) -> str
             "server_port": port,
             "method": method,
             "password": password,
-            "local_address": "127.0.0.1",
+            "local_address": "0.0.0.0",
             "local_port": CLIENT_LOCAL_PORT,
         }
     )
@@ -217,7 +217,7 @@ def build_forward_config(method: str, password: str, host: str, port: int) -> st
             "server_port": port,
             "method": method,
             "password": password,
-            "local_address": "127.0.0.1",
+            "local_address": "0.0.0.0",
             "local_port": FORWARD_LOCAL_PORT,
             "tunnel_address": f"127.0.0.1:{SQUID_PORT}",
         }
@@ -234,7 +234,7 @@ def build_mtproxy_forward_config(
             "server_port": port,
             "method": method,
             "password": password,
-            "local_address": "127.0.0.1",
+            "local_address": "0.0.0.0",
             "local_port": MTPROXY_FORWARD_LOCAL_PORT,
             "tunnel_address": f"127.0.0.1:{MTPROXY_PORT}",
         }
