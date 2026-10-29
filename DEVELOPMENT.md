@@ -593,6 +593,26 @@ repository.
   firewall rules conflict with the approved configuration.
 - Do not install project dependencies into the system Python environment.
 
+## Client Routing Constraints
+
+- VPN clients on mobile platforms (e.g., Outline on Android) enforce routing
+  policies that prevent access to the VPN server's private IP addresses (such
+  as the Docker bridge IP `172.17.0.1` or the loopback `127.0.0.1`).
+- Traffic to these private addresses is bypassed to the local network or dropped
+  by OS-level VPN routing rules, failing to route through the tunnel.
+- To bypass this limitation, a "dummy" public IP (e.g., `192.0.2.1`) is bound
+  to the loopback interface on `ru-server`. Clients use this dummy IP.
+- The dummy IP must not overlap with any subnet defined in `config/prod.env`.
+- The dummy IP variable must be defined in `config/prod.env.example` and
+  assigned automatically in `config/prod.env` when it is generated.
+- `ANDROID_GUIDE.md` must be a generated file ignored by git. It is created
+  from `ANDROID_GUIDE.md.template`, which is tracked in the repository and
+  contains a placeholder for the dummy IP.
+- The `prod-env-host` script must inject the dummy IP from the configuration
+  into the template to generate `ANDROID_GUIDE.md`.
+- On successful deployment, `prod-env-host` must log the absolute path to the
+  generated `ANDROID_GUIDE.md` so the operator can easily share it.
+
 ## Changes
 
 - Keep changes focused on the requested behavior and avoid unrelated edits.

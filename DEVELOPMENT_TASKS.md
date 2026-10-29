@@ -2345,3 +2345,36 @@ remain absent from RU deployment:
 - The JSON string with `apiUrl` and `certSha256` is logged and saved to a clearly specified local file.
 - The Management API port (TCP 10000) on `ru-server` is accessible from anywhere.
 - Tests pass with the new firewall rule.
+
+### 338 Implement Dummy IP Routing for Android Clients
+
+**Status:** Not Started
+
+**Description:** Android VPN clients bypass the VPN tunnel for private IP
+addresses. To allow clients to connect to the internal proxy services on
+`ru-server` (MTProxy, Squid) over the VPN, we must assign a dummy public IP
+address (e.g., `192.0.2.1` or `198.18.0.1`) to the loopback interface on
+`ru-server`.
+
+**Implementation Steps:**
+1. Choose a dummy IP address from a non-routable range (e.g., TEST-NET-1
+   `192.0.2.1`).
+2. Add this dummy IP to `config/prod.env.example` and ensure it is generated
+   automatically in `config/prod.env` without overlapping with existing subnets.
+3. Add a step in `ru_server.py` (or similar network config step) to assign
+   this dummy IP to the `lo` interface.
+4. Ensure this configuration is persistent across reboots (e.g., via a systemd
+   unit or networkd configuration).
+5. Rename `ANDROID_GUIDE.md` to `ANDROID_GUIDE.md.template`, replacing the
+   hardcoded proxy IP with a template placeholder. Add `ANDROID_GUIDE.md` to
+   the repository's `.gitignore`.
+6. Update `prod-env-host` to read `ANDROID_GUIDE.md.template`, substitute the
+   dummy IP, generate `ANDROID_GUIDE.md`, and log its absolute path on success.
+7. Update relevant test agents to verify the dummy IP is assigned and reachable
+   internally.
+
+**Acceptance criteria:**
+- The dummy IP is assigned to `lo` on `ru-server` and survives a reboot.
+- `ANDROID_GUIDE.md.template` exists with placeholders, and `ANDROID_GUIDE.md`
+  is git-ignored and generated correctly.
+- `prod-env-host` logs the absolute path to `ANDROID_GUIDE.md`.

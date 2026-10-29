@@ -1,0 +1,47 @@
+# Android Proxy Guide (Outline)
+
+This guide explains how to connect to the `ru-server` VPN and access the
+internal proxy services (Squid and MTProxy) using the official **Outline** app
+on Android.
+
+## Step 1: Install Outline
+
+1. Open the **Google Play Store**.
+2. Search for **Outline** (by Jigsaw Operations LLC).
+3. Install and open the application.
+
+## Step 2: Add the Server
+
+1. Copy your Outline access key (which starts with `ss://...`) to your
+   Android clipboard.
+2. Open the **Outline** app. It should automatically detect the key.
+3. Tap **Add Server**.
+
+## Step 3: Connect
+
+1. Tap the **Connect** button next to your new server.
+2. Accept the Android system prompt to allow the VPN connection.
+
+## Step 4: Connect to the Internal Proxies
+
+Now that you are connected to the VPN, you can access the internal proxy
+services using a special dedicated IP address.
+
+### Telegram (MTProxy)
+1. Open **Telegram**.
+2. Go to **Settings** > **Data and Storage** > **Proxy Settings**.
+3. Tap **Add Proxy** and select **MTProto Proxy**.
+4. Enter the following details:
+   - **Server:** `{{DUMMY_IP}}`
+   - **Port:** `8443`
+   - **Secret:** (Enter the MTProxy secret provided by your administrator)
+5. Save and enable the proxy.
+
+### Web Browser (Squid HTTP Proxy)
+To route web traffic through the internal proxy:
+1. In browsers that support custom proxy settings (like Firefox for Android),
+   configure the proxy as:
+   - **Host:** `{{DUMMY_IP}}`
+   - **Port:** `3128`
+   - **Type:** HTTP
+2. Your browser will now tunnel its traffic through Outline to the proxy.

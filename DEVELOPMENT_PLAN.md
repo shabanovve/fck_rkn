@@ -520,6 +520,31 @@ proxies beyond `ru-server`; both servers drop RKN crawler traffic; `eu-server`
 has no outgoing restrictions; failed updates preserve the previous saved and
 active rules and report an error.
 
+### 11. Android VPN Routing Bypass (Dummy IP)
+
+Android VPN clients (like Outline) often refuse to route traffic to
+private IP addresses (e.g. `172.17.0.1` or `127.0.0.1`) into the VPN tunnel.
+They bypass the tunnel for these addresses, assuming they belong to the local
+network.
+
+To trick the client into sending proxy traffic through the tunnel:
+- A non-routable "dummy" IP address (such as TEST-NET-1 `192.0.2.1` or
+  `198.18.0.1`) must be assigned to the `lo` (loopback) interface on
+  `ru-server`.
+- This dummy IP must not overlap with any subnet defined in `config/prod.env`.
+- The dummy IP parameter must be present in `config/prod.env.example` and
+  assigned automatically during `config/prod.env` generation.
+- The proxy services on `ru-server` must listen on `0.0.0.0` so they are
+  accessible via this dummy IP.
+- Clients will configure this dummy IP as their proxy server. The client's OS
+  will treat it as a public address and route it into the tunnel, where
+  `ru-server` will receive it and route it locally.
+- `ANDROID_GUIDE.md.template` must be tracked in git. `prod-env-host` must
+  read it, substitute the dummy IP to generate an ignored `ANDROID_GUIDE.md`,
+  and log its absolute path upon successful deployment.
+- A task must be added to automate assigning this dummy IP on `ru-server`
+  persistently.
+
 ## Cross-cutting implementation requirements
 
 - When functionality is added to both servers, avoid code duplication. Put
