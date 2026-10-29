@@ -58,6 +58,7 @@ from fck_rkn.agents.ru_server import (
     stop_mtproxy_forward,
     stop_tunnel,
     parse_access_url,
+    deploy_dummy_ip,
 )
 from fck_rkn.agents.test_client import (
     check_mtproxy_tunnel,
@@ -80,6 +81,7 @@ from fck_rkn.agents.ru_server_test import (
     check_mtproxy_forward_blocked,
     check_squid_forward,
     check_tunnel_blocked,
+    check_dummy_ip,
 )
 from fck_rkn.orchestration.configure import (
     TEMPLATE_FILE,
@@ -784,6 +786,41 @@ def _run(image_directory: Path) -> int:
 
     logger.info("RU Outline client verified")
 
+    if settings.DUMMY_PROXY_IP:
+        logger.info("Invoking ru-server-agent dummy IP deployment")
+        dummy_ip_deploy_exit_code = deploy_dummy_ip(
+            ru_runner, settings.DUMMY_PROXY_IP
+        )
+        if dummy_ip_deploy_exit_code != 0:
+            logger.error(
+                "ru-server-agent dummy IP deployment failed with exit "
+                "status %d",
+                dummy_ip_deploy_exit_code,
+            )
+            print(
+                "ru-server-agent dummy IP deployment failed with exit "
+                f"status {dummy_ip_deploy_exit_code}.",
+                file=sys.stderr,
+            )
+            return 91
+        
+        logger.info("Invoking ru-server-test-agent dummy IP check")
+        dummy_ip_check_exit_code = check_dummy_ip(
+            ru_runner, settings.DUMMY_PROXY_IP
+        )
+        if dummy_ip_check_exit_code != 0:
+            logger.error(
+                "ru-server-test-agent dummy IP check failed with exit "
+                "status %d",
+                dummy_ip_check_exit_code,
+            )
+            print(
+                "ru-server-test-agent dummy IP check failed with exit "
+                f"status {dummy_ip_check_exit_code}.",
+                file=sys.stderr,
+            )
+            return 92
+
     logger.info("Invoking ru-server-agent EU Squid forward deployment")
     forward_deploy_exit_code = deploy_squid_forward(ru_runner, access_url)
     if forward_deploy_exit_code != 0:
@@ -1160,4 +1197,16 @@ def _run(image_directory: Path) -> int:
         f"{settings.GCP_PROJECT_ID}, zone {settings.GCP_ZONE}."
     )
     logger.info("Test environment preflight and provisioning completed")
+
+    dummy_ip = settings.DUMMY_PROXY_IP
+    if dummy_ip:
+        template_path = Path(__file__).resolve().parents[3] / "ANDROID_GUIDE.md.template"
+        out_path = Path(__file__).resolve().parents[3] / "ANDROID_GUIDE.md"
+        if template_path.exists():
+            text = template_path.read_text(
+                encoding="utf-8"
+            ).replace("{{DUMMY_IP}}", dummy_ip)
+            out_path.write_text(text, encoding="utf-8")
+            logger.info("Wrote Android guide to %s", out_path.absolute())
+
     return 0

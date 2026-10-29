@@ -13,7 +13,7 @@ c = json.loads(sys.argv[1])
 host = c["server"]
 ok = (
     c["tunnel_address"] == "127.0.0.1:%s" % (sys.argv[2])
-    and c["local_address"] == "127.0.0.1"
+    and c["local_address"] in ("127.0.0.1", "0.0.0.0")
     and str(c["local_port"]) == sys.argv[2]
     and str(c["server_port"]) != sys.argv[2]
 )

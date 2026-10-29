@@ -22,6 +22,7 @@ from fck_rkn.agents.ru_server import (
     get_outline_manager_credentials,
     deploy_outline_server,
     deploy_squid_forward,
+    deploy_dummy_ip,
 )
 from fck_rkn.agents.ru_server_test import (
     check_ru_firewall_readonly,
@@ -29,6 +30,7 @@ from fck_rkn.agents.ru_server_test import (
     check_outline_client as check_ru_outline_client,
     check_outline_health as check_ru_outline_health,
     check_squid_forward as check_ru_squid_forward,
+    check_dummy_ip as check_ru_dummy_ip,
 )
 from fck_rkn.agents.outline import load_outline_image
 from fck_rkn.agents.eu_server_test import (
@@ -242,6 +244,21 @@ def ru_outline_client_steps(
     ]
 
 
+def ru_dummy_ip_steps(runner: RemoteRunner, dummy_ip: str | None) -> list[Step]:
+    if not dummy_ip:
+        return []
+    return [
+        (
+            "RU dummy proxy IP deployment",
+            lambda: deploy_dummy_ip(runner, dummy_ip),
+        ),
+        (
+            "RU dummy proxy IP health check",
+            lambda: check_ru_dummy_ip(runner, dummy_ip),
+        ),
+    ]
+
+
 def ru_squid_forward_deploy_steps(
     runner: RemoteRunner, access_url: str
 ) -> list[Step]:
@@ -447,6 +464,7 @@ def deploy_ru_stage(eu_runner: RemoteRunner, settings: EuProductionSettings) -> 
         ru_outline_image_steps(ru_runner)
         + ru_outline_steps(ru_runner, settings.RU_SERVER_ADDRESS)
         + ru_outline_client_steps(ru_runner, access_url)
+        + ru_dummy_ip_steps(ru_runner, settings.DUMMY_PROXY_IP)
         + ru_squid_forward_steps(ru_runner, access_url)
         + ru_mtproxy_forward_steps(ru_runner, access_url)
     )
@@ -477,16 +495,32 @@ def deploy_ru_stage(eu_runner: RemoteRunner, settings: EuProductionSettings) -> 
         + [mtproxy_steps(eu_runner)[1]]
         + [ru_outline_steps(ru_runner, settings.RU_SERVER_ADDRESS)[2]]
         + [ru_outline_client_steps(ru_runner, access_url)[1]]
+        + (
+            [ru_dummy_ip_steps(ru_runner, settings.DUMMY_PROXY_IP)[1]]
+            if settings.DUMMY_PROXY_IP else []
+        )
         + [ru_squid_forward_steps(ru_runner, access_url)[1]]
         + [ru_mtproxy_forward_steps(ru_runner, access_url)[1]]
     )
 
-    return run_steps(
+    result = run_steps(
         post_firewall_checks,
         f"Post-firewall service checks completed on both servers: "
         f"all {len(post_firewall_checks)} steps and checks passed. "
         f"Production deployment is complete.",
     )
+
+    if result == 0 and settings.DUMMY_PROXY_IP:
+        template_path = Path(__file__).resolve().parents[3] / "ANDROID_GUIDE.md.template"
+        out_path = Path(__file__).resolve().parents[3] / "ANDROID_GUIDE.md"
+        if template_path.exists():
+            text = template_path.read_text(
+                encoding="utf-8"
+            ).replace("{{DUMMY_IP}}", settings.DUMMY_PROXY_IP)
+            out_path.write_text(text, encoding="utf-8")
+            logger.info("Wrote Android guide to %s", out_path.absolute())
+    
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
